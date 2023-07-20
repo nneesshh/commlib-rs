@@ -1,0 +1,24 @@
+[package]
+name = "hello-cxx"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+#build = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cxx = "1"
+prost = "0.11"
+tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
+tonic = "0.9"
+serde_json = { path="../json-1.0.96" }
+roxmltree = { path="../roxmltree-0.18.0" }
+mysql = { path="../rust-mysql-simple-24.0.0" }
+redis = { path="../redis-rs-redis-0.23.0/redis" }
+clokwerk = "0.4"
+
+[build-dependencies]
+cxx-build = "1"
+miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
+tonic-build = "0.9"

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package voting;
+
+message VotingRequest {
+  string url = 1;
+  enum Vote {
+    UP = 0;
+    DOWN = 1;
+  }
+
+  Vote vote = 2;
+}
+
+message VotingResponse { string confirmation = 1; }
