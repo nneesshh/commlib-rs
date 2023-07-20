@@ -1,0 +1,19 @@
+[package]
+name = "commlib-sys-test"
+version = "1.0.0"
+authors = ["nneesshh <neckshotk@gmail.com>"]
+description = "Common library test suite for Rust projects"
+edition = "2021"
+readme = "README.md"
+build = "build.rs"
+
+[dependencies]
+commlib-sys = { path="../commlib-sys" }
+
+#[dev-dependencies]
+
+
+[build-dependencies]
+dunce = "1"
+miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
+
