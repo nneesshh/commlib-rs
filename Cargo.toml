@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "commlib-sys",
+    "commlib-sys-test",
+]
