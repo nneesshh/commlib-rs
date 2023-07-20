@@ -48,9 +48,9 @@ thiserror = "1.0"
 paste = "1.0"
 log = "0.4"
 chrono = "0.4"
-hashbrown = { path="../../hashbrown-0.14.0" }
-roxmltree = { path="../../roxmltree-0.18.0" }
-spdlog-rs = { path="../../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
+hashbrown = { path="../hashbrown" }
+roxmltree = { path="../roxmltree" }
+spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
 
 [build-dependencies]
 cxx-build = "1"

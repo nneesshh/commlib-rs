@@ -1,0 +1,9 @@
+[submodule "roxmltree"]
+	path = roxmltree
+	url = https://github.com/nneesshh/roxmltree.git
+[submodule "hashbrown"]
+	path = hashbrown
+	url = https://github.com/nneesshh/hashbrown.git
+[submodule "spdlog-rs"]
+	path = spdlog-rs
+	url = https://github.com/nneesshh/spdlog-rs.git
