@@ -1,13 +1,10 @@
 #[cxx::bridge]
 pub mod ffi_net {
 
-    extern "Rust" {
-        type UserService;
-        unsafe fn on_connection(srv: *mut UserService);
-    }
-
     unsafe extern "C++" {
         include!("net_bindings.h");
+
+        type UserService = crate::UserService;
 
         #[namespace = "commlib"]
         type ServiceNet = crate::ServiceNetCxx;
@@ -34,9 +31,3 @@ unsafe impl cxx::ExternType for ServiceNetCxx {
     type Id = cxx::type_id!("commlib::ServiceNet");
     type Kind = cxx::kind::Trivial;
 }
-
-pub struct UserService {
-    srv: Box<dyn crate::ServiceRs>,
-}
-
-pub fn on_connection(srv: *mut UserService) {}

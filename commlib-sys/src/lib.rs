@@ -1,5 +1,6 @@
 //! Commlib: event, log, service, ...
 
+include!("../ffi/common.rs");
 include!("../ffi/signal.rs");
 include!("../ffi/net.rs");
 
