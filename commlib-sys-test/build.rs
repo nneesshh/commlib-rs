@@ -31,7 +31,7 @@ fn main() -> miette::Result<()> {
         println!(
             "cargo:rustc-link-search=native={}",
             manifest_path
-                .join("../../../cpplibs/libs/win/Release")
+                .join("../cpplibs/libs/win/Release")
                 .as_path()
                 .display()
         );

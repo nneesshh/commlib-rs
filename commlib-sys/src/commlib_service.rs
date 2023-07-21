@@ -82,7 +82,10 @@ impl ServiceHandle {
 }
 
 /// Service start a new single thread, and run callback in it.
-pub trait Service {
+pub trait ServiceRs {
+    ///
+    fn init(&mut self);
+
     ///
     fn start(&mut self);
 

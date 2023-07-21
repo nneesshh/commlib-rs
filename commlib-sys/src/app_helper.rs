@@ -1,10 +1,10 @@
-use crate::commlib_service::Service;
+use crate::commlib_service::ServiceRs;
 
 /// App: 应用框架
 pub struct App {
     mtx: std::sync::Mutex<()>,
-    services: Vec<Box<dyn Service>>,
-    creators: hashbrown::HashMap<u64, fn(dyn Service)>,
+    services: Vec<Box<dyn ServiceRs>>,
+    creators: hashbrown::HashMap<u64, fn(dyn ServiceRs)>,
 }
 
 impl App {

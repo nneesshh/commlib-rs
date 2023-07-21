@@ -29,14 +29,19 @@ fn main() -> miette::Result<()> {
     // Define path to resolve #include relative position
     let include_paths = vec![
         manifest_path.join("../../rust"),
-        manifest_path.join("../../../cpplibs/src/commlib"),
+        manifest_path.join("../cpplibs/src/commlib"),
     ];
 
     // Include headers path
-    println!("cargo:include={}", dunce::canonicalize("../../../cpplibs/src/commlib").unwrap().display());
+    println!(
+        "cargo:include={}",
+        dunce::canonicalize("../cpplibs/src/commlib")
+            .unwrap()
+            .display()
+    );
 
     // Bridge -- cxx
-    let ffi_files = vec!["src/ffi_signal.rs", "src/ffi_service_net.rs"];
+    let ffi_files = vec!["src/ffi/signal.rs", "src/ffi/net.rs"];
     for file in &ffi_files {
         println!("cargo:rerun-if-changed={}", file);
     }

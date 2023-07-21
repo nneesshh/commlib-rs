@@ -4,20 +4,42 @@
 
 use super::commlib_service::*;
 
-pub struct ServiceSignal {
+pub struct ServiceSignalRs {
     pub handle: ServiceHandle,
 }
 
-impl ServiceSignal {
+impl ServiceSignalRs {
     ///
-    pub fn new(id: u64, state: State) -> ServiceSignal {
+    pub fn new(id: u64, state: State) -> ServiceSignalRs {
         Self {
             handle: ServiceHandle::new(id, state),
         }
     }
 }
 
-impl Service for ServiceSignal {
+impl ServiceRs for ServiceSignalRs {
+    ///
+    fn init(&mut self) {
+        let x = 123;
+        extern "C" fn on_signal_int(sig: i32) {
+            println!("Welcome back in Rust! Value={}", sig);
+        }
+
+        extern "C" fn on_signal_usr1(sig: i32) {
+            println!("Welcome back in Rust! Value={}", sig);
+        }
+
+        extern "C" fn on_signal_usr2(sig: i32) {
+            println!("Welcome back in Rust! Value={}", sig);
+        }
+
+        let cb1 = crate::SignalCallback(on_signal_int);
+        let cb2 = crate::SignalCallback(on_signal_usr1);
+        let cb3 = crate::SignalCallback(on_signal_usr2);
+
+        crate::ffi_sig::init_signal_handlers(cb1, cb2, cb3);
+    }
+
     ///
     fn start(&mut self) {
         let rx = self.handle.rx.clone();
