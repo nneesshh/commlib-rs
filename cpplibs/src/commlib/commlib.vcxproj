@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\include\commlib-sys\src\ffi\net.rs.h">
+    <ClInclude Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\include\commlib-sys\ffi\common.rs.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
@@ -19,12 +19,20 @@
     <ClInclude Include="net_proxy.h" />
     <ClInclude Include="packet.h" />
     <ClInclude Include="rust\cxx.h" />
-    <ClInclude Include="rust\net.rs.h" />
+    <ClInclude Include="rust\common.rs.h" />
     <ClInclude Include="service_net.h" />
     <ClInclude Include="signal_bindings.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\src\ffi\net.rs.cc">
+    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\common.rs.cc">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\net.rs.cc">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\signal.rs.cc">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>

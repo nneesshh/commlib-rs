@@ -4,7 +4,7 @@ pub mod ffi_net {
     unsafe extern "C++" {
         include!("net_bindings.h");
 
-        type UserService = crate::UserService;
+        type ServiceWrapper = crate::ServiceWrapper;
 
         #[namespace = "commlib"]
         type ServiceNet = crate::ServiceNetCxx;
@@ -13,7 +13,7 @@ pub mod ffi_net {
         type Service;
 
         #[namespace = "commlib"]
-        unsafe fn OnConnection(self: &mut ServiceNet, srv: *mut UserService);
+        unsafe fn OnConnection(self: &mut ServiceNet, srv: *mut ServiceWrapper);
 
         #[namespace = "commlib"]
         fn service_net_new(n: i32) -> UniquePtr<ServiceNet>;

@@ -3,10 +3,10 @@
 
 #include <memory>
 #include "rust/cxx.h"
-#include "rust/net.rs.h"
+#include "rust/common.rs.h"
 #include "service_net.h"
 
-struct UserService;
+struct ServiceWrapper;
 
 namespace commlib
 {

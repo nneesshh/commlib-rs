@@ -2,18 +2,18 @@
 pub mod ffi_common {
 
     extern "Rust" {
-        pub type UserService;
-        unsafe fn on_connection(srv: *mut UserService);
+        pub type ServiceWrapper;
+        unsafe fn on_connection(srv: *mut ServiceWrapper);
     }
 }
 
-pub struct UserService {
+pub struct ServiceWrapper {
     srv: Box<dyn crate::ServiceRs>,
 }
 
-unsafe impl ExternType for UserService {
-    type Id = type_id!("UserService");
+unsafe impl ExternType for ServiceWrapper {
+    type Id = type_id!("ServiceWrapper");
     type Kind = cxx::kind::Trivial;
 }
 
-pub fn on_connection(srv: *mut UserService) {}
+pub fn on_connection(srv: *mut ServiceWrapper) {}

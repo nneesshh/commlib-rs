@@ -4,7 +4,7 @@
 #include "rust/cxx.h"
 #include "packet.h"
 
-struct UserService;
+struct ServiceWrapper;
 
 namespace commlib
 {
@@ -23,9 +23,9 @@ namespace commlib
             
         }
 
-        void OnConnection(struct UserService* srv) {}
+        void OnConnection(struct ServiceWrapper* srv) {}
 
-        void Init(struct UserService* srv) {}
+        void Init(struct ServiceWrapper* srv) {}
 
     public:
         int64_t num;

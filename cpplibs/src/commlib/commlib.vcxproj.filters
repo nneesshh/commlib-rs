@@ -33,14 +33,14 @@
     <ClInclude Include="net_bindings.h">
       <Filter>源文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\include\commlib-sys\src\ffi\net.rs.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="rust\net.rs.h">
+    <ClInclude Include="rust\common.rs.h">
       <Filter>rust</Filter>
     </ClInclude>
     <ClInclude Include="rust\cxx.h">
       <Filter>rust</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\include\commlib-sys\ffi\common.rs.h">
+      <Filter>源文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -59,7 +59,13 @@
     <ClCompile Include="net_bindings.cc">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\src\ffi\net.rs.cc">
+    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\net.rs.cc">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\signal.rs.cc">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\commlib-sys-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\common.rs.cc">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

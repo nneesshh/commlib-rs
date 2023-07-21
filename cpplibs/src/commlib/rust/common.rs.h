@@ -1,8 +1,5 @@
 #pragma once
-#include "net_bindings.h"
 #include <cstddef>
-#include <cstdint>
-#include <memory>
 #include <type_traits>
 
 namespace rust {
@@ -89,12 +86,12 @@ namespace rust {
     } // namespace cxxbridge1
 } // namespace rust
 
-struct UserService;
+struct ServiceWrapper;
 
-#ifndef CXXBRIDGE1_STRUCT_UserService
-#define CXXBRIDGE1_STRUCT_UserService
-struct UserService final : public ::rust::Opaque {
-    ~UserService() = delete;
+#ifndef CXXBRIDGE1_STRUCT_ServiceWrapper
+#define CXXBRIDGE1_STRUCT_ServiceWrapper
+struct ServiceWrapper final : public ::rust::Opaque {
+    ~ServiceWrapper() = delete;
 
 private:
     friend ::rust::layout;
@@ -103,6 +100,6 @@ private:
         static ::std::size_t align() noexcept;
     };
 };
-#endif // CXXBRIDGE1_STRUCT_UserService
+#endif // CXXBRIDGE1_STRUCT_ServiceWrapper
 
-void on_connection(::UserService* srv) noexcept;
+void on_connection(::ServiceWrapper* srv) noexcept;
