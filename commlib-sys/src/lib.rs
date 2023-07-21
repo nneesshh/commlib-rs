@@ -1,7 +1,7 @@
 //! Commlib: event, log, service, ...
 
-include!("ffi/signal.rs");
-include!("ffi/net.rs");
+include!("../ffi/signal.rs");
+include!("../ffi/net.rs");
 
 ///
 pub mod app_helper;

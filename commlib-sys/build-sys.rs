@@ -41,7 +41,7 @@ fn main() -> miette::Result<()> {
     );
 
     // Bridge -- cxx
-    let ffi_files = vec!["src/ffi/signal.rs", "src/ffi/net.rs"];
+    let ffi_files = vec!["ffi/signal.rs", "ffi/net.rs"];
     for file in &ffi_files {
         println!("cargo:rerun-if-changed={}", file);
     }

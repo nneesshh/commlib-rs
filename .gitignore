@@ -14,3 +14,11 @@ Cargo.lock
 
 # idea
 .idea/
+
+*.stackdump
+
+cpplibs/.vs/
+
+cpplibs/obj/
+
+cpplibs/libs/win/Release/

@@ -3,6 +3,8 @@ extern crate commlib_sys;
 
 fn main() {
 
+  let x : std::ffi::c_int = 0;
+
   let srv_net = commlib_sys::ffi_net::service_net_new(0);
   //srv_net.OnConnection(srv)
 
