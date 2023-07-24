@@ -12,11 +12,8 @@ cxx = "1"
 prost = "0.11"
 tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
 tonic = "0.9"
-serde_json = { path="../json-1.0.96" }
-roxmltree = { path="../roxmltree-0.18.0" }
-mysql = { path="../rust-mysql-simple-24.0.0" }
-redis = { path="../redis-rs-redis-0.23.0/redis" }
-clokwerk = "0.4"
+serde_json = { path="../json" }
+roxmltree = { path="../roxmltree" }
 
 [build-dependencies]
 cxx-build = "1"
