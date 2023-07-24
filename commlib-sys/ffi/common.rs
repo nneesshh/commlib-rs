@@ -8,7 +8,7 @@ pub mod ffi_common {
 }
 
 pub struct ServiceWrapper {
-    srv: Box<dyn crate::ServiceRs>,
+    srv: std::sync::Arc<dyn crate::ServiceRs>,
 }
 
 unsafe impl ExternType for ServiceWrapper {

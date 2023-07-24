@@ -37,7 +37,7 @@ impl Clock {
     /// 循环定时器，立即执行一次
     pub fn set_timer<F>(&mut self, interval: u64, mut action: TimerAction<F>)
     where
-        F: FnMut() + Send + 'static,
+        F: FnMut() + Send + Sync + 'static,
     {
         let id = uuid::Uuid::new_v4();
         let delay = std::time::Duration::from_millis(0);
@@ -52,7 +52,7 @@ impl Clock {
     /// 循环定时器，延时一段时间之后开始执行
     fn set_timer_delay<F>(&mut self, delay: u64, interval: u64, mut action: TimerAction<F>)
     where
-        F: FnMut() + Send + 'static,
+        F: FnMut() + Send + Sync + 'static,
     {
         let id = uuid::Uuid::new_v4();
         let delay = std::time::Duration::from_millis(delay);
@@ -67,7 +67,7 @@ impl Clock {
     /// One-shot 一次性超时
     fn set_timeout<F>(&mut self, delay: u64, mut action: TimerAction<F>)
     where
-        F: FnMut() + Send + 'static,
+        F: FnMut() + Send + Sync + 'static,
     {
         let id = uuid::Uuid::new_v4();
         let delay = std::time::Duration::from_millis(delay);

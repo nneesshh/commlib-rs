@@ -42,16 +42,15 @@ use super::*;
 use std::{
     fmt::Debug,
     hash::Hash,
-    rc::Rc,
     time::{Duration, SystemTime},
 };
 
 // Almost the same as `TimerEntry`, but not storing unnecessary things
 impl<I, O, P> timers::TimerEntry<I, O, P>
 where
-    I: Hash + Clone + Eq + Debug,
-    O: OneshotState<Id = I> + Debug,
-    P: PeriodicState<Id = I> + Debug,
+    I: Hash + Clone + Eq + Debug + Send + Sync,
+    O: OneshotState<Id = I> + Debug + Send + Sync,
+    P: PeriodicState<Id = I> + Debug + Send + Sync,
 {
     fn execute(self) -> Option<(Self, Duration)> {
         match self {
@@ -77,20 +76,20 @@ where
         }
     }
 
-    fn execute_unique_ref(unique_ref: Rc<Self>) -> Option<(Rc<Self>, Duration)> {
-        let unique = Rc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
+    fn execute_unique_ref(unique_ref: std::sync::Arc<Self>) -> Option<(std::sync::Arc<Self>, Duration)> {
+        let unique = std::sync::Arc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
         unique.execute().map(|t| {
             let (new_unique, delay) = t;
-            (Rc::new(new_unique), delay)
+            (std::sync::Arc::new(new_unique), delay)
         })
     }
 }
 
 impl<I, O, P> CancellableTimerEntry for TimerEntry<I, O, P>
 where
-    I: Hash + Clone + Eq + Debug,
-    O: OneshotState<Id = I> + Debug,
-    P: PeriodicState<Id = I> + Debug,
+    I: Hash + Clone + Eq + Debug + Send + Sync,
+    O: OneshotState<Id = I> + Debug + Send + Sync,
+    P: PeriodicState<Id = I> + Debug + Send + Sync,
 {
     type Id = I;
 
@@ -105,9 +104,9 @@ where
 /// A timer implementation that used timing-wheel
 pub struct WheelTimer<I, O, P>
 where
-    I: Hash + Clone + Eq + Debug,
-    O: OneshotState<Id = I> + Debug,
-    P: PeriodicState<Id = I> + Debug,
+    I: Hash + Clone + Eq + Debug + Send + Sync,
+    O: OneshotState<Id = I> + Debug + Send + Sync,
+    P: PeriodicState<Id = I> + Debug + Send + Sync,
 {
     time: u128,
     timer: QuadWheelWithOverflow<TimerEntry<I, O, P>>,
@@ -115,9 +114,9 @@ where
 
 impl<I, O, P> WheelTimer<I, O, P>
 where
-    I: Hash + Clone + Eq + Debug,
-    O: OneshotState<Id = I> + Debug,
-    P: PeriodicState<Id = I> + Debug,
+    I: Hash + Clone + Eq + Debug + Send + Sync,
+    O: OneshotState<Id = I> + Debug + Send + Sync,
+    P: PeriodicState<Id = I> + Debug + Send + Sync,
 {
     /// Create a new simulation timer starting at `0`
     pub fn new() -> Self {
@@ -214,7 +213,7 @@ where
         }
     }
 
-    fn trigger_entry(&mut self, e: Rc<TimerEntry<I, O, P>>) {
+    fn trigger_entry(&mut self, e: std::sync::Arc<TimerEntry<I, O, P>>) {
         if let Some((new_e, delay)) = TimerEntry::execute_unique_ref(e) {
             match self.timer.insert_ref_with_delay(new_e, delay) {
                 Ok(_) => (), // ok
@@ -230,9 +229,9 @@ where
 
 impl<I, O, P> Default for WheelTimer<I, O, P>
 where
-    I: Hash + Clone + Eq + Debug,
-    O: OneshotState<Id = I> + Debug,
-    P: PeriodicState<Id = I> + Debug,
+    I: Hash + Clone + Eq + Debug + Send + Sync,
+    O: OneshotState<Id = I> + Debug + Send + Sync,
+    P: PeriodicState<Id = I> + Debug + Send + Sync,
 {
     fn default() -> Self {
         Self::new()
@@ -241,7 +240,7 @@ where
 
 impl<I> WheelTimer<I, OneShotClosureState<I>, PeriodicClosureState<I>>
 where
-    I: Hash + Clone + Eq + Debug,
+    I: Hash + Clone + Eq + Debug + Send + Sync,
 {
     /// Shorthand for creating a simulation timer using closure state
     pub fn for_closures() -> Self {
@@ -271,9 +270,9 @@ pub enum WheelTimerSimStep {
 
 impl<I, O, P> Timer for WheelTimer<I, O, P>
 where
-    I: Hash + Clone + Eq + Debug,
-    O: OneshotState<Id = I> + Debug,
-    P: PeriodicState<Id = I> + Debug,
+    I: Hash + Clone + Eq + Debug + Send + Sync,
+    O: OneshotState<Id = I> + Debug + Send + Sync,
+    P: PeriodicState<Id = I> + Debug + Send + Sync,
 {
     type Id = I;
     type OneshotState = O;
@@ -281,7 +280,7 @@ where
 
     fn schedule_once(&mut self, timeout: Duration, state: Self::OneshotState) {
         let e = TimerEntry::OneShot { timeout, state };
-        match self.timer.insert_ref_with_delay(Rc::new(e), timeout) {
+        match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), timeout) {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if TimerEntry::execute_unique_ref(e).is_none() {
@@ -301,7 +300,7 @@ where
             period,
             state,
         };
-        match self.timer.insert_ref_with_delay(Rc::new(e), delay) {
+        match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), delay) {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if let Some((new_e, delay)) = TimerEntry::execute_unique_ref(e) {

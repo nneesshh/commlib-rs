@@ -9,6 +9,7 @@ build = "build.rs"
 
 [dependencies]
 commlib-sys = { path="../commlib-sys" }
+hashbrown = { path="../hashbrown" }
 
 #[dev-dependencies]
 

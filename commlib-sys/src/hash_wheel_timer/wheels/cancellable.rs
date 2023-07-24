@@ -56,10 +56,10 @@ pub trait CancellableTimerEntry: Debug {
     fn id(&self) -> &Self::Id;
 }
 
-/// A pruner implementation for [Weak](std::rc::Weak) references
+/// A pruner implementation for [Weak](std::sync::Weak) references
 ///
 /// Keeps values that can still be upgraded.
-pub fn rc_prune<E>(e: &Weak<E>) -> PruneDecision {
+pub fn rc_prune<E>(e: &std::sync::Weak<E>) -> PruneDecision {
     if e.strong_count() > 0 {
         PruneDecision::Keep
     } else {
@@ -76,21 +76,21 @@ pub fn rc_prune<E>(e: &Weak<E>) -> PruneDecision {
 /// everything else goes into the overflow `Vec`.
 pub struct QuadWheelWithOverflow<EntryType>
 where
-    EntryType: CancellableTimerEntry,
+    EntryType: CancellableTimerEntry + Send + Sync,
 {
-    wheel: BasicQuadWheelWithOverflow<Weak<EntryType>>,
-    timers: hashbrown::HashMap<EntryType::Id, Rc<EntryType>>,
+    wheel: BasicQuadWheelWithOverflow<std::sync::Weak<EntryType>>,
+    timers: hashbrown::HashMap<EntryType::Id, std::sync::Arc<EntryType>>,
 }
 
 impl<EntryType> QuadWheelWithOverflow<EntryType>
 where
-    EntryType: TimerEntryWithDelay + CancellableTimerEntry,
+    EntryType: TimerEntryWithDelay + CancellableTimerEntry + Send + Sync,
 {
     /// Insert a new timeout into the wheel
     pub fn insert(&mut self, e: EntryType) -> Result<(), TimerError<EntryType>> {
-        self.insert_ref(Rc::new(e)).map_err(|err| match err {
+        self.insert_ref(std::sync::Arc::new(e)).map_err(|err| match err {
             TimerError::Expired(rc_e) => {
-                let e = Rc::try_unwrap(rc_e).unwrap(); // No one except us should have references as this point, so this should be safe
+                let e = std::sync::Arc::try_unwrap(rc_e).unwrap(); // No one except us should have references as this point, so this should be safe
                 TimerError::Expired(e)
             }
             TimerError::NotFound => TimerError::NotFound,
@@ -98,7 +98,7 @@ where
     }
 
     /// Insert a new timeout into the wheel
-    pub fn insert_ref(&mut self, e: Rc<EntryType>) -> Result<(), TimerError<Rc<EntryType>>> {
+    pub fn insert_ref(&mut self, e: std::sync::Arc<EntryType>) -> Result<(), TimerError<std::sync::Arc<EntryType>>> {
         let delay = e.delay();
         self.insert_ref_with_delay(e, delay)
     }
@@ -106,7 +106,7 @@ where
 
 impl<EntryType> QuadWheelWithOverflow<EntryType>
 where
-    EntryType: CancellableTimerEntry,
+    EntryType: CancellableTimerEntry + Send + Sync,
 {
     /// Create a new wheel
     pub fn new() -> Self {
@@ -119,10 +119,10 @@ where
     /// Insert a new timeout into the wheel to be returned after `delay` ticks
     pub fn insert_ref_with_delay(
         &mut self,
-        e: Rc<EntryType>,
+        e: std::sync::Arc<EntryType>,
         delay: Duration,
-    ) -> Result<(), TimerError<Rc<EntryType>>> {
-        let weak_e = Rc::downgrade(&e);
+    ) -> Result<(), TimerError<std::sync::Arc<EntryType>>> {
+        let weak_e = std::sync::Arc::downgrade(&e);
 
         match self.wheel.insert_with_delay(weak_e, delay) {
             Ok(_) => {
@@ -148,14 +148,14 @@ where
         }
     }
 
-    fn take_timer(&mut self, weak_e: Weak<EntryType>) -> Option<Rc<EntryType>> {
+    fn take_timer(&mut self, weak_e: std::sync::Weak<EntryType>) -> Option<std::sync::Arc<EntryType>> {
         match weak_e.upgrade() {
             Some(rc_e) => {
                 match self.timers.remove_entry(rc_e.id()) {
                     Some(rc_e2) => drop(rc_e2), // ok
                     None => {
                         // Perhaps it was removed via cancel(), and the underlying
-                        // Rc is still alive through some other reference
+                        // Arc is still alive through some other reference
                         return None;
                     }
                 }
@@ -168,7 +168,7 @@ where
     /// Move the wheel forward by a single unit (ms)
     ///
     /// Returns a list of all timers that expire during this tick.
-    pub fn tick(&mut self) -> Vec<Rc<EntryType>> {
+    pub fn tick(&mut self) -> Vec<std::sync::Arc<EntryType>> {
         let res = self.wheel.tick();
         res.into_iter()
             .flat_map(|weak_e| self.take_timer(weak_e))
@@ -192,7 +192,7 @@ where
 
 impl<EntryType> Default for QuadWheelWithOverflow<EntryType>
 where
-    EntryType: CancellableTimerEntry,
+    EntryType: CancellableTimerEntry + Send + Sync,
 {
     fn default() -> Self {
         Self::new()
@@ -440,27 +440,27 @@ mod u64_tests {
     fn cancel_and_drain() {
         let mut timer = QuadWheelWithOverflow::new();
 
-        let item1 = Rc::new(IdOnlyTimerEntry {
+        let item1 = std::sync::Arc::new(IdOnlyTimerEntry {
             id: 1,
             delay: Duration::from_millis(1),
         });
-        let item2 = Rc::new(IdOnlyTimerEntry {
+        let item2 = std::sync::Arc::new(IdOnlyTimerEntry {
             id: 2,
             delay: Duration::from_millis(10),
         });
-        let item3 = Rc::new(IdOnlyTimerEntry {
+        let item3 = std::sync::Arc::new(IdOnlyTimerEntry {
             id: 3,
             delay: Duration::from_millis(5),
         });
 
         timer
-            .insert_ref(Rc::clone(&item1))
+            .insert_ref(std::sync::Arc::clone(&item1))
             .expect("Could not insert timer entry!");
         timer
-            .insert_ref(Rc::clone(&item2))
+            .insert_ref(std::sync::Arc::clone(&item2))
             .expect("Could not insert timer entry!");
         timer
-            .insert_ref(Rc::clone(&item3))
+            .insert_ref(std::sync::Arc::clone(&item3))
             .expect("Could not insert timer entry!");
 
         timer.cancel(&2).expect("Entry could not be cancelled!");

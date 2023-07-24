@@ -76,9 +76,8 @@ where
     }
 }
 
-#[macro_export]
-
 /// Impl Event trait for struct
+#[macro_export]
 macro_rules! impl_event_for {
     ($t:ident) => {
         paste::paste! {

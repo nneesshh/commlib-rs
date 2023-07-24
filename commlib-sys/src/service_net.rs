@@ -18,7 +18,12 @@ impl ServiceNetRs {
 }
 
 impl ServiceRs for ServiceNetRs {
-    ///
+    /// 获取 service 句柄
+    fn get_handle(&self)->&ServiceHandle {
+        &self.handle
+    }
+
+    /// 初始化 service
     fn init(&mut self) {
         let x = 123;
         extern "C" fn on_signal_int(sig: i32) {
@@ -40,7 +45,7 @@ impl ServiceRs for ServiceNetRs {
         crate::ffi_sig::init_signal_handlers(cb1, cb2, cb3);
     }
 
-    ///
+    /// 启动 service 线程
     fn start(&mut self) {
         let rx = self.handle.rx.clone();
 
@@ -64,16 +69,16 @@ impl ServiceRs for ServiceNetRs {
         self.handle.tid = Some(c.thread().id());
     }
 
-    ///
-    fn run_in_service(&mut self, cb: fn()) {
+    /// 在 service 线程中执行回调任务
+    fn run_in_service(&mut self, cb: Box<dyn FnOnce() + Send + Sync>) {
         if self.is_in_service_thread() {
             cb();
         } else {
-            self.handle.tx.send(Box::new(cb)).unwrap();
+            self.handle.tx.send(cb).unwrap();
         }
     }
 
-    ///
+    /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool {
         std::thread::current().id() == self.handle.tid.unwrap()
     }

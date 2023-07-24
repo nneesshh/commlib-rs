@@ -1,9 +1,11 @@
-
-extern crate commlib_sys;
+use hashbrown::HashMap;
 
 fn main() {
 
-  let x : std::ffi::c_int = 0;
+  let mut app = commlib_sys::app_helper::App::new();
+  app.init();
+
+
 
   let srv_net = commlib_sys::ffi_net::service_net_new(0);
   //srv_net.OnConnection(srv)

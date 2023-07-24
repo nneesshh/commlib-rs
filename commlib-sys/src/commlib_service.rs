@@ -18,7 +18,7 @@ pub enum State {
     NodeLost,  // 节点丢失（world 管理节点用）
 }
 
-pub type ServiceFuncType = dyn FnOnce() + Send + 'static;
+pub type ServiceFuncType = dyn FnOnce() + Send + Sync + 'static;
 
 /// Service handle
 pub struct ServiceHandle {
@@ -83,15 +83,18 @@ impl ServiceHandle {
 
 /// Service start a new single thread, and run callback in it.
 pub trait ServiceRs {
-    ///
+    /// 获取 service 句柄
+    fn get_handle(&self)->&ServiceHandle;
+
+    /// 初始化 service
     fn init(&mut self);
 
-    ///
+    /// 启动 service 线程
     fn start(&mut self);
 
-    ///
-    fn run_in_service(&mut self, cb: fn());
+    /// 在 service 线程中执行回调任务
+    fn run_in_service(&mut self, cb: Box<dyn FnOnce() + Send + Sync>);
 
-    ///
+    /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool;
 }

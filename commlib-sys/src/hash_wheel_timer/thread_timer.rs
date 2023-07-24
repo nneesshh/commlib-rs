@@ -46,14 +46,14 @@ use super::*;
 use super::wheels::{cancellable::*, *};
 use channel::select;
 use crossbeam_channel as channel;
-use std::{cmp::Ordering, fmt, io, rc::Rc, thread, time::Instant};
+use std::{cmp::Ordering, fmt, io, thread, time::Instant};
 
 #[derive(Debug)]
 enum TimerMsg<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     Schedule(TimerEntry<I, O, P>),
     Cancel(I),
@@ -68,18 +68,18 @@ where
 #[derive(Clone)]
 pub struct TimerRef<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     work_queue: channel::Sender<TimerMsg<I, O, P>>,
 }
 
 impl<I, O, P> Timer for TimerRef<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     type Id = I;
     type OneshotState = O;
@@ -115,9 +115,9 @@ where
 /// This struct acts as a main handle for the timer and its thread.
 pub struct TimerWithThread<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     timer_thread: thread::JoinHandle<()>,
     work_queue: channel::Sender<TimerMsg<I, O, P>>,
@@ -125,9 +125,9 @@ where
 
 impl<I, O, P> TimerWithThread<I, O, P>
 where
-    I: Hash + Clone + Eq + fmt::Debug + Send + 'static,
-    O: OneshotState<Id = I> + fmt::Debug + Send + 'static,
-    P: PeriodicState<Id = I> + fmt::Debug + Send + 'static,
+    I: Hash + Clone + Eq + fmt::Debug + Send + Sync + 'static,
+    O: OneshotState<Id = I> + fmt::Debug + Send + Sync + 'static,
+    P: PeriodicState<Id = I> + fmt::Debug + Send + Sync + 'static,
 {
     /// Create a new timer with its own thread.
     ///
@@ -185,9 +185,9 @@ where
 
 impl<I, O, P> fmt::Debug for TimerWithThread<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<TimerWithThread>")
@@ -208,9 +208,9 @@ impl
 #[derive(Debug)]
 pub enum ThreadTimerError<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     /// Sending of the `Stop` message failed
     CouldNotSendStopAsync,
@@ -226,9 +226,9 @@ where
 #[derive(Debug)]
 enum ThreadTimerEntry<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     OneShot { state: O },
     Periodic { period: Duration, state: P },
@@ -236,9 +236,9 @@ where
 
 impl<I, O, P> ThreadTimerEntry<I, O, P>
 where
-    I: Hash + Clone + Eq + fmt::Debug,
-    O: OneshotState<Id = I> + fmt::Debug,
-    P: PeriodicState<Id = I> + fmt::Debug,
+    I: Hash + Clone + Eq + fmt::Debug + Send + Sync,
+    O: OneshotState<Id = I> + fmt::Debug + Send + Sync,
+    P: PeriodicState<Id = I> + fmt::Debug + Send + Sync,
 {
     fn from(e: TimerEntry<I, O, P>) -> (Self, Duration) {
         match e {
@@ -276,20 +276,20 @@ where
         }
     }
 
-    fn execute_unique_ref(unique_ref: Rc<Self>) -> Option<(Rc<Self>, Duration)> {
-        let unique = Rc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
+    fn execute_unique_ref(unique_ref: std::sync::Arc<Self>) -> Option<(std::sync::Arc<Self>, Duration)> {
+        let unique = std::sync::Arc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
         unique.execute().map(|t| {
             let (new_unique, delay) = t;
-            (Rc::new(new_unique), delay)
+            (std::sync::Arc::new(new_unique), delay)
         })
     }
 }
 
 impl<I, O, P> CancellableTimerEntry for ThreadTimerEntry<I, O, P>
 where
-    I: Hash + Clone + Eq + fmt::Debug,
-    O: OneshotState<Id = I> + fmt::Debug,
-    P: PeriodicState<Id = I> + fmt::Debug,
+    I: Hash + Clone + Eq + fmt::Debug + Send + Sync,
+    O: OneshotState<Id = I> + fmt::Debug + Send + Sync,
+    P: PeriodicState<Id = I> + fmt::Debug + Send + Sync,
 {
     type Id = I;
 
@@ -303,9 +303,9 @@ where
 
 struct TimerThread<I, O, P>
 where
-    I: Hash + Clone + Eq + fmt::Debug,
-    O: OneshotState<Id = I> + fmt::Debug,
-    P: PeriodicState<Id = I> + fmt::Debug,
+    I: Hash + Clone + Eq + fmt::Debug + Send + Sync,
+    O: OneshotState<Id = I> + fmt::Debug + Send + Sync,
+    P: PeriodicState<Id = I> + fmt::Debug + Send + Sync,
 {
     timer: QuadWheelWithOverflow<ThreadTimerEntry<I, O, P>>,
     work_queue: channel::Receiver<TimerMsg<I, O, P>>,
@@ -316,9 +316,9 @@ where
 
 impl<I, O, P> TimerThread<I, O, P>
 where
-    I: Hash + Clone + Eq + fmt::Debug,
-    O: OneshotState<Id = I> + fmt::Debug,
-    P: PeriodicState<Id = I> + fmt::Debug,
+    I: Hash + Clone + Eq + fmt::Debug + Send + Sync,
+    O: OneshotState<Id = I> + fmt::Debug + Send + Sync,
+    P: PeriodicState<Id = I> + fmt::Debug + Send + Sync,
 {
     fn new(work_queue: channel::Receiver<TimerMsg<I, O, P>>) -> TimerThread<I, O, P> {
         TimerThread {
@@ -432,7 +432,7 @@ where
             TimerMsg::Stop => self.running = false,
             TimerMsg::Schedule(entry) => {
                 let (e, delay) = ThreadTimerEntry::from(entry);
-                match self.timer.insert_ref_with_delay(Rc::new(e), delay) {
+                match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), delay) {
                     Ok(_) => (), // ok
                     Err(TimerError::Expired(e)) => {
                         self.trigger_entry(e);
@@ -448,7 +448,7 @@ where
         }
     }
 
-    fn trigger_entry(&mut self, e: Rc<ThreadTimerEntry<I, O, P>>) {
+    fn trigger_entry(&mut self, e: std::sync::Arc<ThreadTimerEntry<I, O, P>>) {
         if let Some((new_e, delay)) = ThreadTimerEntry::execute_unique_ref(e) {
             match self.timer.insert_ref_with_delay(new_e, delay) {
                 Ok(_) => (), // ok

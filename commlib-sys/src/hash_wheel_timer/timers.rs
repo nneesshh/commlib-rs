@@ -80,9 +80,9 @@ pub trait PeriodicState {
 #[derive(Debug)]
 pub enum TimerEntry<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     /// A one-off timer
     OneShot {
@@ -104,9 +104,9 @@ where
 
 impl<I, O, P> TimerEntry<I, O, P>
 where
-    I: Hash + Clone + Eq,
-    O: OneshotState<Id = I>,
-    P: PeriodicState<Id = I>,
+    I: Hash + Clone + Eq + Send + Sync,
+    O: OneshotState<Id = I> + Send + Sync,
+    P: PeriodicState<Id = I> + Send + Sync,
 {
     /// A reference to the id associated with this entry
     ///
@@ -175,7 +175,7 @@ pub struct OneShotClosureState<I> {
     /// The id of the timeout state
     id: I,
     /// The action to invoke when the timeout expires
-    action: Box<dyn FnOnce(I) + Send + 'static>,
+    action: Box<dyn FnOnce(I) + Send + Sync + 'static>,
 }
 
 impl<I> OneShotClosureState<I> {
@@ -184,7 +184,7 @@ impl<I> OneShotClosureState<I> {
     /// when it expires.
     pub fn new<F>(id: I, action: F) -> Self
     where
-        F: FnOnce(I) + Send + 'static,
+        F: FnOnce(I) + Send + Sync + 'static,
     {
         OneShotClosureState {
             id,
@@ -202,7 +202,7 @@ impl OneShotClosureState<uuid::Uuid> {
     /// Uses `Uuid::new_v4()` internally.
     pub fn with_random_id<F>(action: F) -> Self
     where
-        F: FnOnce(uuid::Uuid) + Send + 'static,
+        F: FnOnce(uuid::Uuid) + Send + Sync + 'static,
     {
         Self::new(uuid::Uuid::new_v4(), action)
     }
@@ -210,7 +210,7 @@ impl OneShotClosureState<uuid::Uuid> {
 
 impl<I> OneshotState for OneShotClosureState<I>
 where
-    I: Hash + Clone + Eq,
+    I: Hash + Clone + Eq + Send + Sync,
 {
     type Id = I;
 
@@ -225,7 +225,7 @@ where
 
 impl<I> fmt::Debug for OneShotClosureState<I>
 where
-    I: Hash + Clone + Eq + fmt::Debug,
+    I: Hash + Clone + Eq + fmt::Debug + Send + Sync,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -241,7 +241,7 @@ pub struct PeriodicClosureState<I> {
     /// The id of the timeout state
     id: I,
     /// The action to invoke when the timeout expires
-    action: Box<dyn FnMut(I) -> TimerReturn<()> + Send + 'static>,
+    action: Box<dyn FnMut(I) -> TimerReturn<()> + Send + Sync + 'static>,
 }
 
 impl<I> PeriodicClosureState<I> {
@@ -250,7 +250,7 @@ impl<I> PeriodicClosureState<I> {
     /// every time it expires.
     pub fn new<F>(id: I, action: F) -> Self
     where
-        F: FnMut(I) -> TimerReturn<()> + Send + 'static,
+        F: FnMut(I) -> TimerReturn<()> + Send + Sync + 'static,
     {
         PeriodicClosureState {
             id,
@@ -268,7 +268,7 @@ impl PeriodicClosureState<uuid::Uuid> {
     /// Uses `Uuid::new_v4()` internally.
     pub fn with_random_id<F>(action: F) -> Self
     where
-        F: FnMut(uuid::Uuid) -> TimerReturn<()> + Send + 'static,
+        F: FnMut(uuid::Uuid) -> TimerReturn<()> + Send + Sync + 'static,
     {
         Self::new(uuid::Uuid::new_v4(), action)
     }
@@ -276,7 +276,7 @@ impl PeriodicClosureState<uuid::Uuid> {
 
 impl<I> PeriodicState for PeriodicClosureState<I>
 where
-    I: Hash + Clone + Eq,
+    I: Hash + Clone + Eq + Send + Sync,
 {
     type Id = I;
 
@@ -295,7 +295,7 @@ where
 
 impl<I> fmt::Debug for PeriodicClosureState<I>
 where
-    I: Hash + Clone + Eq + fmt::Debug,
+    I: Hash + Clone + Eq + fmt::Debug + Send + Sync,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -320,7 +320,7 @@ pub trait ClosureTimer: Timer {
     /// the `timeout` expires, but no bounds on the lag are given.
     fn schedule_action_once<F>(&mut self, id: Self::Id, timeout: Duration, action: F)
     where
-        F: FnOnce(Self::Id) + Send + 'static;
+        F: FnOnce(Self::Id) + Send + Sync + 'static;
 
     /// Schedule the `action` to be run every `timeout` time units
     ///
@@ -341,12 +341,12 @@ pub trait ClosureTimer: Timer {
         period: Duration,
         action: F,
     ) where
-        F: FnMut(Self::Id) -> TimerReturn<()> + Send + 'static;
+        F: FnMut(Self::Id) -> TimerReturn<()> + Send + Sync + 'static;
 }
 
 impl<I, T> ClosureTimer for T
 where
-    I: Hash + Clone + Eq,
+    I: Hash + Clone + Eq + Send + Sync,
     T: Timer<
         Id = I,
         OneshotState = OneShotClosureState<I>,
@@ -355,7 +355,7 @@ where
 {
     fn schedule_action_once<F>(&mut self, id: Self::Id, timeout: Duration, action: F)
     where
-        F: FnOnce(Self::Id) + Send + 'static,
+        F: FnOnce(Self::Id) + Send + Sync + 'static,
     {
         self.schedule_once(timeout, OneShotClosureState::new(id, action))
     }
@@ -367,7 +367,7 @@ where
         period: Duration,
         action: F,
     ) where
-        F: FnMut(Self::Id) -> TimerReturn<()> + Send + 'static,
+        F: FnMut(Self::Id) -> TimerReturn<()> + Send + Sync + 'static,
     {
         self.schedule_periodic(delay, period, PeriodicClosureState::new(id, action))
     }

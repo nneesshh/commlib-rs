@@ -42,14 +42,14 @@ use std::{fmt::Debug, time::Duration};
 
 struct OverflowEntry<EntryType>
 where
-    EntryType: Debug,
+    EntryType: Debug + Send + Sync,
 {
     entry: EntryType,
     remaining_delay: Duration,
 }
 impl<EntryType> OverflowEntry<EntryType>
 where
-    EntryType: Debug,
+    EntryType: Debug + Send + Sync,
 {
     fn new(entry: EntryType, remaining_delay: Duration) -> Self {
         OverflowEntry {
@@ -101,7 +101,7 @@ pub fn no_prune<E>(_e: &E) -> PruneDecision {
 /// everything else goes into the overflow `Vec`.
 pub struct QuadWheelWithOverflow<EntryType>
 where
-    EntryType: Debug,
+    EntryType: Debug + Send + Sync,
 {
     primary: Box<ByteWheel<EntryType, [u8; 0]>>,
     secondary: Box<ByteWheel<EntryType, [u8; 1]>>,
@@ -119,7 +119,7 @@ const TERTIARY_LENGTH: u32 = 1 << 24; // 2^24
 
 impl<EntryType> Default for QuadWheelWithOverflow<EntryType>
 where
-    EntryType: Debug,
+    EntryType: Debug + Send + Sync,
 {
     fn default() -> Self {
         QuadWheelWithOverflow::new(no_prune::<EntryType>)
@@ -128,7 +128,7 @@ where
 
 impl<EntryType> QuadWheelWithOverflow<EntryType>
 where
-    EntryType: TimerEntryWithDelay,
+    EntryType: TimerEntryWithDelay + Send + Sync,
 {
     /// Insert a new timeout into the wheel
     pub fn insert(&mut self, e: EntryType) -> Result<(), TimerError<EntryType>> {
@@ -139,7 +139,7 @@ where
 
 impl<EntryType> QuadWheelWithOverflow<EntryType>
 where
-    EntryType: Debug,
+    EntryType: Debug + Send + Sync,
 {
     /// Create a new wheel
     pub fn new(pruner: fn(&EntryType) -> PruneDecision) -> Self {

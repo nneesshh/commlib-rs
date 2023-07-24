@@ -36,11 +36,6 @@ pub use service_signal::ServiceSignalRs;
 pub mod service_net;
 pub use service_net::ServiceNetRs;
 
-/// Lock for init
-use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
-
-#[allow(dead_code)]
-static INIT: AtomicBool = AtomicBool::new(false);
-#[allow(dead_code)]
-static INIT_LOCK: Mutex<()> = Mutex::new(());
+///
+pub mod globals;
+pub use globals::*;
