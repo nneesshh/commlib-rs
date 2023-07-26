@@ -6,10 +6,10 @@
 
 /// Trait to signal that this is an event type.
 pub trait Event {
-    fn add_callback<F>(&self, f: F)
+    fn add_callback<F>(f: F)
     where
-        F: Fn(&Self) + Send + 'static;
-    fn trigger(&self);
+        F: FnMut(&Self) + 'static;
+    fn trigger(&mut self);
 }
 
 /// Handler of event
@@ -17,7 +17,7 @@ pub struct EventHandler<E>
 where
     E: Event,
 {
-    pub func: Box<dyn Fn(&E) + Send + 'static>,
+    pub func: Box<dyn FnMut(&E) + 'static>,
     _phantom: std::marker::PhantomData<E>,
 }
 
@@ -29,7 +29,7 @@ where
     // Construct
     pub fn new<F>(f: F) -> Self
     where
-        F: Fn(&E) + Send + 'static,
+        F: FnMut(&E) + 'static,
     {
         Self {
             func: Box::new(f),
@@ -38,7 +38,7 @@ where
     }
 
     /// Call
-    pub fn handle(&self, e: &E) {
+    pub fn handle(&mut self, e: &E) {
         let repeat = "*".repeat(20);
         println!("{} Begin {}", repeat, repeat);
         (self.func)(e);
@@ -69,8 +69,8 @@ where
         self.handlers.push(h);
     }
 
-    pub fn call(&self, e: &E) {
-        for h in &self.handlers {
+    pub fn call(&mut self, e: &E) {
+        for h in &mut self.handlers {
             h.handle(e);
         }
     }
@@ -82,15 +82,15 @@ macro_rules! impl_event_for {
     ($t:ident) => {
         paste::paste! {
             impl Event for $t {
-                fn add_callback<F>(&self, f: F)
+                fn add_callback<F>(f: F)
                 where
-                    F: Fn(&Self) + Send + 'static,
+                    F: FnMut(&Self) + 'static,
                 {
                     let h = EventHandler::<Self>::new(f);
                     [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().listen_event(h));
                 }
-                fn trigger(&self) {
-                    [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow().call(self));
+                fn trigger(&mut self) {
+                    [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().call(self));
                 }
             }
             thread_local! {

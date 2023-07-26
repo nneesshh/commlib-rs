@@ -2,6 +2,9 @@
 //! Common Library: service-signal
 //!
 
+use spdlog::get_current_tid;
+use std::sync::{Arc, Condvar, Mutex};
+
 use super::commlib_service::*;
 
 pub struct ServiceNetRs {
@@ -10,67 +13,68 @@ pub struct ServiceNetRs {
 
 impl ServiceNetRs {
     ///
-    pub fn new(id: u64, state: State) -> ServiceNetRs {
+    pub fn new(id: u64) -> ServiceNetRs {
         Self {
-            handle: ServiceHandle::new(id, state),
+            handle: ServiceHandle::new(id, State::Idle),
         }
     }
 }
 
 impl ServiceRs for ServiceNetRs {
     /// 获取 service 句柄
-    fn get_handle(&self)->&ServiceHandle {
-        &self.handle
+    fn get_handle(&mut self) -> &mut ServiceHandle {
+        &mut self.handle
     }
 
-    /// 初始化 service
-    fn init(&mut self) {
-        let x = 123;
-        extern "C" fn on_signal_int(sig: i32) {
-            println!("Welcome back in Rust! Value={}", sig);
-        }
-
-        extern "C" fn on_signal_usr1(sig: i32) {
-            println!("Welcome back in Rust! Value={}", sig);
-        }
-
-        extern "C" fn on_signal_usr2(sig: i32) {
-            println!("Welcome back in Rust! Value={}", sig);
-        }
-
-        let cb1 = crate::SignalCallback(on_signal_int);
-        let cb2 = crate::SignalCallback(on_signal_usr1);
-        let cb3 = crate::SignalCallback(on_signal_usr2);
-
-        crate::ffi_sig::init_signal_handlers(cb1, cb2, cb3);
-    }
+    /// 配置 service
+    fn conf(&mut self) {}
 
     /// 启动 service 线程
     fn start(&mut self) {
         let rx = self.handle.rx.clone();
 
-        if self.handle.tid.is_some() {
-            log::error!("service already started!!! tid={:?}", self.handle.tid);
+        if self.handle.tid > 0u64 {
+            log::error!("service already started!!! tid={}", self.handle.tid);
             return;
         }
 
-        //start thread
-        let c = std::thread::Builder::new()
-            .name("consumer".to_string())
-            .spawn(move || {
-                // dispatch cb
-                while let Ok(cb) = rx.recv() {
-                    //log::info!("Dequeued item");
-                    cb();
-                }
-            })
-            .unwrap();
+        //
+        let tname = "service_net".to_owned();
+        let tid_cv = Arc::new((Mutex::new(0u64), Condvar::new()));
+        let tid_ready = Arc::clone(&tid_cv);
+        self.handle.join_handle = Some(
+            std::thread::Builder::new()
+                .name(tname)
+                .spawn(move || {
+                    // notify ready
+                    let tid = get_current_tid();
+                    let (lock, cvar) = &*tid_ready;
+                    {
+                        // release guard after value ok
+                        let mut guard = lock.lock().unwrap();
+                        *guard = tid;
+                    }
+                    cvar.notify_all();
 
-        self.handle.tid = Some(c.thread().id());
+                    // dispatch cb
+                    while let Ok(mut cb) = rx.recv() {
+                        //log::info!("Dequeued item");
+                        cb();
+                    }
+                })
+                .unwrap(),
+        );
+
+        //tid (ThreadId.as_u64() is not stable yet)
+        // wait ready
+        let (lock, cvar) = &*tid_cv;
+        let guard = lock.lock().unwrap();
+        let tid = cvar.wait(guard).unwrap();
+        self.handle.tid = *tid;
     }
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&mut self, cb: Box<dyn FnOnce() + Send + Sync>) {
+    fn run_in_service(&self, mut cb: Box<dyn FnMut() + Send + Sync + 'static>) {
         if self.is_in_service_thread() {
             cb();
         } else {
@@ -80,6 +84,14 @@ impl ServiceRs for ServiceNetRs {
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool {
-        std::thread::current().id() == self.handle.tid.unwrap()
+        let tid = get_current_tid();
+        tid == self.handle.tid
+    }
+
+    /// 等待线程结束
+    fn join(&mut self) {
+        if let Some(join_handle) = self.handle.join_handle.take() {
+            join_handle.join().unwrap();
+        }
     }
 }

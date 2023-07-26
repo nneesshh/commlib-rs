@@ -18,7 +18,7 @@ pub enum State {
     NodeLost,  // 节点丢失（world 管理节点用）
 }
 
-pub type ServiceFuncType = dyn FnOnce() + Send + Sync + 'static;
+pub type ServiceFuncType = dyn FnMut() + Send + Sync + 'static;
 
 /// Service handle
 pub struct ServiceHandle {
@@ -28,7 +28,8 @@ pub struct ServiceHandle {
     pub(crate) tx: std::sync::Arc<channel::Sender<Box<ServiceFuncType>>>,
     pub(crate) rx: std::sync::Arc<channel::Receiver<Box<ServiceFuncType>>>,
 
-    pub(crate) tid: Option<std::thread::ThreadId>,
+    pub(crate) join_handle: Option<std::thread::JoinHandle<()>>,
+    pub(crate) tid: u64,
 
     pub(crate) clock: crate::Clock,
     pub(crate) xml_config: crate::XmlReader,
@@ -44,7 +45,8 @@ impl ServiceHandle {
             state,
             tx: std::sync::Arc::new(tx),
             rx: std::sync::Arc::new(rx),
-            tid: None,
+            join_handle: None,
+            tid: 0u64,
             clock: crate::Clock::new(),
             xml_config: crate::XmlReader::new(),
         }
@@ -84,17 +86,20 @@ impl ServiceHandle {
 /// Service start a new single thread, and run callback in it.
 pub trait ServiceRs {
     /// 获取 service 句柄
-    fn get_handle(&self)->&ServiceHandle;
+    fn get_handle(&mut self) -> &mut ServiceHandle;
 
-    /// 初始化 service
-    fn init(&mut self);
+    /// 配置 service
+    fn conf(&mut self);
 
     /// 启动 service 线程
     fn start(&mut self);
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&mut self, cb: Box<dyn FnOnce() + Send + Sync>);
+    fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>);
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool;
+
+    /// 等待线程结束
+    fn join(&mut self);
 }

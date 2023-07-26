@@ -1,14 +1,15 @@
 use hashbrown::{HashMap, HashSet};
-use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
+use std::sync::{atomic::AtomicBool, Arc, Condvar, Mutex};
 
 #[allow(dead_code)]
 static INIT: AtomicBool = AtomicBool::new(false);
 #[allow(dead_code)]
 static INIT_LOCK: Mutex<()> = Mutex::new(());
 
-#[allow(dead_code)]
-const SERVICE_ID_SIG: u32 = 1001_u32;
+/// Service ID
+pub const SERVICE_ID_SIG: u64 = 1001_u64;
+pub const SERVICE_ID_NET: u64 = 1002_u64;
+pub const SERVICE_ID_HTTP: u64 = 1003_u64;
 
 lazy_static::lazy_static! {
     pub static ref MAP_EMPTY: HashMap<char, u32> = HashMap::new();
@@ -18,7 +19,8 @@ lazy_static::lazy_static! {
 }
 
 lazy_static::lazy_static! {
-    pub static ref G_SRV_SIGNAL: std::sync::RwLock<crate::ServiceSignalRs> =  std::sync::RwLock::new(crate::ServiceSignalRs::new(0));
-    pub static ref G_EXIT: std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)> = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
-}
+    pub static ref G_SERVICE_SIGNAL: Arc<Mutex<crate::ServiceSignalRs>> =  Arc::new(Mutex::new(crate::ServiceSignalRs::new(SERVICE_ID_SIG)));
+    pub static ref G_SERVICE_NET: Arc<Mutex<crate::ServiceNetRs>> =  Arc::new(Mutex::new(crate::ServiceNetRs::new(SERVICE_ID_NET)));
 
+    pub static ref G_EXIT_CV: Arc<(Mutex<bool>, Condvar)> = Arc::new((Mutex::new(false), Condvar::new()));
+}
