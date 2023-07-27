@@ -3,7 +3,10 @@
 //!
 
 use spdlog::get_current_tid;
-use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::{
+    borrow::BorrowMut,
+    sync::{Arc, Condvar, Mutex, RwLock},
+};
 
 use super::commlib_service::*;
 use crate::commlib_event::*;
@@ -12,36 +15,7 @@ use crate::commlib_event::*;
 pub struct EventSignalInt {
     code: u32,
 }
-//crate::impl_event_for!(ServiceSignalRs, EventSignalInt);
-impl EventHost for ServiceSignalRs {
-    /// 注册事件 callback
-    fn listen_event<E>(&mut self, h: crate::EventHandler<E>) where E: crate::Event {
-
-    }
-
-    /// 执行事件 callback
-    fn call<E>(&self, e: &E) where E: crate::Event{
-        
-    }
-}
-impl Event for EventSignalInt {
-    type Host = ServiceSignalRs;
-    //
-    fn add_callback<'a, F>(host: &'a mut Self::Host, f: F)
-    where
-        F: FnMut(&Self) + 'static,
-    {
-        let h = EventHandler::<Self>::new(f);
-        host.listen_event(h);
-    }
-
-    //
-    fn trigger<'a>(&mut self, host: &'a Self::Host) 
-    {
-        host.call(self);
-    }
-}
-
+crate::impl_event_for!(ServiceSignalRs, EventSignalInt);
 
 pub struct EventSignalUsr1 {
     code: u32,
@@ -88,21 +62,27 @@ impl ServiceSignalRs {
     }
 
     /// Listen signal: sig_int
-    pub fn listen_sig_int<F, S>(&mut self, f: F, srv: Arc<RwLock<S>>)
+    pub fn listen_sig_int<F, S>(&mut self, f: F, srv: &'static Arc<RwLock<S>>)
     where
         F: FnMut() + Send + Sync + 'static,
-        S: ServiceRs + 'static,
+        S: ServiceRs + Send + Sync + 'static,
     {
-        //let mut f = Some(f);
-
         let mut f = Some(f);
-        EventSignalInt::add_callback(self, move |e| {
+
+        self.run_in_service(Box::new(move || {
             let mut f = f.take();
-            srv.read().unwrap().run_in_service(Box::new(move || {
-                let mut f = f.take().unwrap();
-                f();
-            }));
-        });
+
+            // 在 Service thread 中注册事件回调
+            EventSignalInt::add_callback(move |e| {
+                let mut f = f.take();
+
+                // 事件触发时，将 f post 到工作线程执行
+                srv.read().unwrap().run_in_service(Box::new(move || {
+                    let mut f = f.take().unwrap();
+                    f();
+                }));
+            });
+        }));
     }
 }
 
@@ -113,7 +93,7 @@ impl ServiceRs for ServiceSignalRs {
     }
 
     /// 获取 mut service 句柄
-    fn get_handle_mut(&mut self) -> &mut ServiceHandle{
+    fn get_handle_mut(&mut self) -> &mut ServiceHandle {
         &mut self.handle
     }
 
@@ -218,5 +198,4 @@ impl ServiceRs for ServiceSignalRs {
             join_handle.join().unwrap();
         }
     }
-
 }

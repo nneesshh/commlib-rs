@@ -6,14 +6,13 @@
 
 /// Trait to signal that this is an event type.
 pub trait Event {
-    type Host;
     /// Add callback for event
-    fn add_callback<'a, F>(host: &'a mut Self::Host, f: F)
+    fn add_callback<'a, F>(f: F)
     where
         F: FnMut(&Self) + 'static;
 
     /// Trigger event callback
-    fn trigger<'a>(&mut self, host: &'a Self::Host);
+    fn trigger<'a>(&mut self);
 }
 
 /// Handler of event
@@ -51,21 +50,25 @@ where
 }
 
 /// Listener of event
-pub struct EventListener<E>
+pub struct EventListener<S, E>
 where
+    S: crate::ServiceRs,
     E: Event,
 {
     handlers: Vec<EventHandler<E>>,
+    _phantom: std::marker::PhantomData<S>,
 }
 
 /// Impl EventListener
-impl<E> EventListener<E>
+impl<S, E> EventListener<S, E>
 where
+    S: crate::ServiceRs,
     E: Event,
 {
-    pub fn new() -> EventListener<E> {
-        EventListener::<E> {
+    pub fn new() -> EventListener<S, E> {
+        EventListener::<S, E> {
             handlers: Vec::new(),
+            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -81,35 +84,27 @@ where
 }
 
 /// Impl Event trait for struct
-// #[macro_export]
-// macro_rules! impl_event_for {
-//     ($t:ident) => {
-//         paste::paste! {
-//             impl Event for $t {
-//                 fn add_callback<F>(f: F)
-//                 where
-//                     F: FnMut(&Self) + 'static,
-//                 {
-//                     let h = EventHandler::<Self>::new(f);
-//                     [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().listen_event(h));
-//                 }
-//                 fn trigger(&mut self) {
-//                     [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().call(self));
-//                 }
-//             }
-//             thread_local! {
-//                 static [<G_EVENT_LISTENER_ $t:upper>]: std::cell::RefCell<EventListener<$t>> = std::cell::RefCell::new(EventListener::<$t>::new());
-//             }
-//         }
-//     };
-// }
-
-pub trait EventHost {
-    /// 注册事件 callback
-    fn listen_event<E>(&mut self, h: crate::EventHandler<E>) where E: crate::Event;
-
-    /// 执行事件 callback
-    fn call<E>(&self, e: &E) where E: crate::Event;
+#[macro_export]
+macro_rules! impl_event_for {
+    ($s:ident, $t:ident) => {
+        paste::paste! {
+            impl Event for $t {
+                fn add_callback<F>(f: F)
+                where
+                    F: FnMut(&Self) + 'static,
+                {
+                    let h = EventHandler::<Self>::new(f);
+                    [<G_EVENT_LISTENER_ $s:upper _ $t:upper>].with(|g| g.borrow_mut().listen_event(h));
+                }
+                fn trigger(&mut self) {
+                    [<G_EVENT_LISTENER_ $s:upper _ $t:upper>].with(|g| g.borrow_mut().call(self));
+                }
+            }
+            thread_local! {
+                static [<G_EVENT_LISTENER_ $s:upper _ $t:upper>]: std::cell::RefCell<EventListener<$s, $t>> = std::cell::RefCell::new(EventListener::<$s, $t>::new());
+            }
+        }
+    };
 }
 
 #[cfg(test)]
