@@ -22,7 +22,12 @@ impl ServiceNetRs {
 
 impl ServiceRs for ServiceNetRs {
     /// 获取 service 句柄
-    fn get_handle(&mut self) -> &mut ServiceHandle {
+    fn get_handle(&self) -> &ServiceHandle {
+        &self.handle
+    }
+
+    /// 获取 mut service 句柄
+    fn get_handle_mut(&mut self) -> &mut ServiceHandle{
         &mut self.handle
     }
 
@@ -94,4 +99,5 @@ impl ServiceRs for ServiceNetRs {
             join_handle.join().unwrap();
         }
     }
+
 }

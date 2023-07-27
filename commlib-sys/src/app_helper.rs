@@ -1,18 +1,20 @@
 use crate::commlib_service::ServiceRs;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
-/// App: 应用框架
+/// App: 应用框架RwLock<
 pub struct App {
-    mtx: Mutex<()>,
+
     services: Vec<crate::ServiceWrapper>,
+    // Entry service: the last attached service
+    pub entry: Option<Arc<RwLock<dyn ServiceRs>>>
 }
 
 impl App {
     /// Constructor
     pub fn new() -> Self {
         let mut app = Self {
-            mtx: Mutex::default(),
             services: Vec::default(),
+            entry: None,
         };
         app.init();
         app
@@ -31,18 +33,19 @@ impl App {
 
     fn add_service<S>(
         services: &mut Vec<crate::ServiceWrapper>,
-        srv: Arc<Mutex<dyn ServiceRs>>,
-    ) -> bool {
+        srv: Arc<RwLock<dyn ServiceRs>>,
+    ) -> Option<Arc<RwLock<dyn ServiceRs>>> {
         for w in &*services {
-            let id = srv.lock().unwrap().get_handle().id();
-            if w.srv.lock().unwrap().get_handle().id() == id {
+            let id = srv.read().unwrap().get_handle().id();
+            if w.srv.read().unwrap().get_handle().id() == id {
                 log::error!("App::add_service() failed!!! ID={}", id);
-                return false;
+                return None;
             }
         }
 
+        let ret = Some(srv.clone());
         services.push(crate::ServiceWrapper { srv });
-        true
+        ret
     }
 
     /// 添加 service
@@ -52,22 +55,24 @@ impl App {
         C: FnMut() -> S,
     {
         let s = creator();
-        let srv = Arc::new(Mutex::new(s));
-        srv.lock().unwrap().conf();
-        srv.lock().unwrap().start();
-        Self::add_service::<S>(&mut self.services, srv);
+        let srv = Arc::new(RwLock::new(s));
+        srv.write().unwrap().conf();
+        srv.write().unwrap().start();
+
+        // Update entry service
+        self.entry = Self::add_service::<S>(&mut self.services, srv);
     }
 
     /// 启动 App
     pub fn start(&mut self) {
         // 配置 servie
         for w in &mut self.services {
-            w.srv.lock().unwrap().conf();
+            w.srv.write().unwrap().conf();
         }
 
         // 启动 servie
         for w in &mut self.services {
-            w.srv.lock().unwrap().start();
+            w.srv.write().unwrap().start();
         }
     }
 
@@ -82,7 +87,7 @@ impl App {
 
             let mut exitflag = true;
             for w in &self.services {
-                let mut srv = w.srv.lock().unwrap();
+                let mut srv = w.srv.read().unwrap();
 
                 log::info!(
                     "App:run() wait close .. ID={} state={:?}",
@@ -97,7 +102,7 @@ impl App {
 
             if exitflag {
                 for w in &self.services {
-                    let mut srv = w.srv.lock().unwrap();
+                    let mut srv = w.srv.write().unwrap();
                     srv.join()
                 }
                 break;

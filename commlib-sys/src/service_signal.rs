@@ -3,7 +3,7 @@
 //!
 
 use spdlog::get_current_tid;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 
 use super::commlib_service::*;
 use crate::commlib_event::*;
@@ -12,17 +12,46 @@ use crate::commlib_event::*;
 pub struct EventSignalInt {
     code: u32,
 }
-crate::impl_event_for!(EventSignalInt);
+//crate::impl_event_for!(ServiceSignalRs, EventSignalInt);
+impl EventHost for ServiceSignalRs {
+    /// 注册事件 callback
+    fn listen_event<E>(&mut self, h: crate::EventHandler<E>) where E: crate::Event {
+
+    }
+
+    /// 执行事件 callback
+    fn call<E>(&self, e: &E) where E: crate::Event{
+        
+    }
+}
+impl Event for EventSignalInt {
+    type Host = ServiceSignalRs;
+    //
+    fn add_callback<'a, F>(host: &'a mut Self::Host, f: F)
+    where
+        F: FnMut(&Self) + 'static,
+    {
+        let h = EventHandler::<Self>::new(f);
+        host.listen_event(h);
+    }
+
+    //
+    fn trigger<'a>(&mut self, host: &'a Self::Host) 
+    {
+        host.call(self);
+    }
+}
+
 
 pub struct EventSignalUsr1 {
     code: u32,
 }
-crate::impl_event_for!(EventSignalUsr1);
+//crate::impl_event_for!(EventSignalUsr1);
 
 pub struct EventSignalUsr2 {
     code: u32,
 }
-crate::impl_event_for!(EventSignalUsr2);
+//crate::impl_event_for!(EventSignalUsr2);
 
 /// ServiceSignal
 pub struct ServiceSignalRs {
@@ -41,35 +70,35 @@ impl ServiceSignalRs {
     pub fn on_sig_int(&mut self) {
         // Trigger event
         let mut e = EventSignalInt { code: 0 };
-        e.trigger();
+        //e.trigger();
     }
 
     /// Event: sig_usr1
     pub fn on_sig_usr1(&mut self) {
         // Trigger event
         let mut e = EventSignalUsr1 { code: 0 };
-        e.trigger();
+        //e.trigger();
     }
 
     /// Event: sig_usr2
     pub fn on_sig_usr2(&mut self) {
         // Trigger event
         let mut e = EventSignalUsr2 { code: 0 };
-        e.trigger();
+        //e.trigger();
     }
 
     /// Listen signal: sig_int
-    pub fn listen_sig_int<'a, F, S>(&mut self, f: F, srv: &'static S)
+    pub fn listen_sig_int<F, S>(&mut self, f: F, srv: Arc<RwLock<S>>)
     where
         F: FnMut() + Send + Sync + 'static,
-        S: ServiceRs,
+        S: ServiceRs + 'static,
     {
         //let mut f = Some(f);
 
         let mut f = Some(f);
-        EventSignalUsr2::add_callback(move |e| {
+        EventSignalInt::add_callback(self, move |e| {
             let mut f = f.take();
-            srv.run_in_service(Box::new(move || {
+            srv.read().unwrap().run_in_service(Box::new(move || {
                 let mut f = f.take().unwrap();
                 f();
             }));
@@ -79,20 +108,24 @@ impl ServiceSignalRs {
 
 impl ServiceRs for ServiceSignalRs {
     /// 获取 service 句柄
-    fn get_handle(&mut self) -> &mut ServiceHandle {
+    fn get_handle(&self) -> &ServiceHandle {
+        &self.handle
+    }
+
+    /// 获取 mut service 句柄
+    fn get_handle_mut(&mut self) -> &mut ServiceHandle{
         &mut self.handle
     }
 
     /// 配置 service
     fn conf(&mut self) {
-        let x = 123;
         extern "C" fn on_signal_int(sig: i32) {
             println!("Recive int signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_int
             let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.lock().unwrap().on_sig_int());
-            srv.lock().unwrap().run_in_service(cb);
+            let cb = Box::new(|| srv.write().unwrap().on_sig_int());
+            srv.read().unwrap().run_in_service(cb);
         }
 
         extern "C" fn on_signal_usr1(sig: i32) {
@@ -100,8 +133,8 @@ impl ServiceRs for ServiceSignalRs {
 
             // Post event callback to service thread: sig_usr1
             let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.lock().unwrap().on_sig_usr1());
-            srv.lock().unwrap().run_in_service(cb);
+            let cb = Box::new(|| srv.write().unwrap().on_sig_usr1());
+            srv.read().unwrap().run_in_service(cb);
         }
 
         extern "C" fn on_signal_usr2(sig: i32) {
@@ -109,8 +142,8 @@ impl ServiceRs for ServiceSignalRs {
 
             // Post event callback to service thread: sig_usr2
             let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.lock().unwrap().on_sig_usr2());
-            srv.lock().unwrap().run_in_service(cb);
+            let cb = Box::new(|| srv.write().unwrap().on_sig_usr2());
+            srv.read().unwrap().run_in_service(cb);
         }
 
         let cb1 = crate::SignalCallback(on_signal_int);
@@ -185,4 +218,5 @@ impl ServiceRs for ServiceSignalRs {
             join_handle.join().unwrap();
         }
     }
+
 }

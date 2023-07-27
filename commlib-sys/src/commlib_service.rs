@@ -86,7 +86,10 @@ impl ServiceHandle {
 /// Service start a new single thread, and run callback in it.
 pub trait ServiceRs {
     /// 获取 service 句柄
-    fn get_handle(&mut self) -> &mut ServiceHandle;
+    fn get_handle(&self) -> &ServiceHandle;
+
+    /// 获取 mut service 句柄
+    fn get_handle_mut(&mut self) -> &mut ServiceHandle;
 
     /// 配置 service
     fn conf(&mut self);
@@ -102,4 +105,5 @@ pub trait ServiceRs {
 
     /// 等待线程结束
     fn join(&mut self);
+    
 }

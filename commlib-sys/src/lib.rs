@@ -9,13 +9,14 @@ pub mod app_helper;
 
 ///
 pub mod commlib_event;
+pub use commlib_event::*;
 
 ///
 pub mod commlib_log;
 
 ///
 pub mod commlib_service;
-pub use commlib_service::{ServiceRs, State};
+pub use commlib_service::*;
 
 ///
 pub mod clock;

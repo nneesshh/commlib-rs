@@ -7,10 +7,10 @@ pub mod ffi_common {
     }
 }
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub struct ServiceWrapper {
-    srv: Arc<Mutex<dyn crate::ServiceRs>>,
+    srv: Arc<RwLock<dyn crate::ServiceRs>>,
 }
 
 unsafe impl ExternType for ServiceWrapper {

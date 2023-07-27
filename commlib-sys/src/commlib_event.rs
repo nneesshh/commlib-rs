@@ -6,10 +6,14 @@
 
 /// Trait to signal that this is an event type.
 pub trait Event {
-    fn add_callback<F>(f: F)
+    type Host;
+    /// Add callback for event
+    fn add_callback<'a, F>(host: &'a mut Self::Host, f: F)
     where
         F: FnMut(&Self) + 'static;
-    fn trigger(&mut self);
+
+    /// Trigger event callback
+    fn trigger<'a>(&mut self, host: &'a Self::Host);
 }
 
 /// Handler of event
@@ -77,27 +81,35 @@ where
 }
 
 /// Impl Event trait for struct
-#[macro_export]
-macro_rules! impl_event_for {
-    ($t:ident) => {
-        paste::paste! {
-            impl Event for $t {
-                fn add_callback<F>(f: F)
-                where
-                    F: FnMut(&Self) + 'static,
-                {
-                    let h = EventHandler::<Self>::new(f);
-                    [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().listen_event(h));
-                }
-                fn trigger(&mut self) {
-                    [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().call(self));
-                }
-            }
-            thread_local! {
-                static [<G_EVENT_LISTENER_ $t:upper>]: std::cell::RefCell<EventListener<$t>> = std::cell::RefCell::new(EventListener::<$t>::new());
-            }
-        }
-    };
+// #[macro_export]
+// macro_rules! impl_event_for {
+//     ($t:ident) => {
+//         paste::paste! {
+//             impl Event for $t {
+//                 fn add_callback<F>(f: F)
+//                 where
+//                     F: FnMut(&Self) + 'static,
+//                 {
+//                     let h = EventHandler::<Self>::new(f);
+//                     [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().listen_event(h));
+//                 }
+//                 fn trigger(&mut self) {
+//                     [<G_EVENT_LISTENER_ $t:upper>].with(|g| g.borrow_mut().call(self));
+//                 }
+//             }
+//             thread_local! {
+//                 static [<G_EVENT_LISTENER_ $t:upper>]: std::cell::RefCell<EventListener<$t>> = std::cell::RefCell::new(EventListener::<$t>::new());
+//             }
+//         }
+//     };
+// }
+
+pub trait EventHost {
+    /// 注册事件 callback
+    fn listen_event<E>(&mut self, h: crate::EventHandler<E>) where E: crate::Event;
+
+    /// 执行事件 callback
+    fn call<E>(&self, e: &E) where E: crate::Event;
 }
 
 #[cfg(test)]
