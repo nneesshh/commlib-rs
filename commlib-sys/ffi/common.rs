@@ -7,7 +7,8 @@ pub mod ffi_common {
     }
 }
 
-use std::sync::{Arc, Mutex, RwLock};
+use parking_lot::{Condvar, Mutex, RwLock};
+use std::sync::Arc;
 
 pub struct ServiceWrapper {
     srv: Arc<dyn crate::ServiceRs>,

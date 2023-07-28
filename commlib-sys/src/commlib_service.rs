@@ -3,8 +3,9 @@
 //!
 
 use crossbeam::channel;
+use parking_lot::{Condvar, Mutex, RwLock};
 use spdlog::get_current_tid;
-use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::sync::Arc;
 
 use crate::G_EXIT_CV;
 
@@ -140,7 +141,7 @@ pub fn start_service(
     let srv1 = srv.clone();
     let srv2 = srv.clone();
 
-    let mut handle1_mut = srv1.get_handle().write().unwrap();
+    let mut handle1_mut = srv1.get_handle().write();
     if handle1_mut.tid > 0u64 {
         log::error!("service already started!!! tid={}", handle1_mut.tid);
         return false;
@@ -161,7 +162,7 @@ pub fn start_service(
                 let (lock, cvar) = &*tid_ready;
                 {
                     // release guard after value ok
-                    let mut guard = lock.lock().unwrap();
+                    let mut guard = lock.lock();
                     *guard = tid;
                 }
                 cvar.notify_all();
@@ -171,7 +172,7 @@ pub fn start_service(
 
                 // exit
                 {
-                    let mut handle2_mut = srv2.get_handle().write().unwrap();
+                    let mut handle2_mut = srv2.get_handle().write();
 
                     // mark closed
                     handle2_mut.state = State::Closed;
@@ -191,21 +192,21 @@ pub fn start_service(
     //tid (ThreadId.as_u64() is not stable yet)
     // wait ready
     let (lock, cvar) = &*tid_cv;
-    let guard = lock.lock().unwrap();
-    let tid = cvar.wait(guard).unwrap();
-    handle1_mut.tid = *tid;
+    let mut guard = lock.lock();
+    cvar.wait(&mut guard);
+    handle1_mut.tid = *guard;
     true
 }
 
 ///
 pub fn run_service(srv: &Arc<dyn ServiceRs + Send + Sync + 'static>, service_name: String) {
-    let handle = srv.get_handle().read().unwrap();
+    let handle = srv.get_handle().read();
     log::info!("[{}] start ... ID={}", service_name, handle.id);
 
     while (State::Closed as u32) != (handle.state as u32) {
         if (State::Closing as u32) == (handle.state as u32) {
             if handle.rx.is_empty() {
-                let mut handle_mut = srv.get_handle().write().unwrap();
+                let mut handle_mut = srv.get_handle().write();
                 handle_mut.quit_service();
             }
         }
@@ -216,8 +217,8 @@ pub fn run_service(srv: &Arc<dyn ServiceRs + Send + Sync + 'static>, service_nam
 
         // mut handle
         {
-            let mut handle_mut = srv.get_handle().write().unwrap();
-            
+            let mut handle_mut = srv.get_handle().write();
+
             // update clock
             handle_mut.clock.update();
         }
@@ -240,7 +241,12 @@ pub fn run_service(srv: &Arc<dyn ServiceRs + Send + Sync + 'static>, service_nam
         //
         let cost = sw.elapsed();
         if cost > 100_u128 {
-            log::error!("[{}] ID={} timeout cost: {}ms", service_name, handle.id, cost);
+            log::error!(
+                "[{}] ID={} timeout cost: {}ms",
+                service_name,
+                handle.id,
+                cost
+            );
         }
     }
 }

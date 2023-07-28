@@ -1,12 +1,12 @@
 use crate::{commlib_service::ServiceRs, start_service};
-use std::sync::{Arc, Mutex, RwLock};
+use parking_lot::{Mutex, RwLock};
+use std::sync::Arc;
 
 /// App: 应用框架RwLock<
 pub struct App {
-
     services: Vec<crate::ServiceWrapper>,
     // Entry service: the last attached service
-    pub entry: Option<Arc<dyn ServiceRs>>
+    pub entry: Option<Arc<dyn ServiceRs>>,
 }
 
 impl App {
@@ -37,8 +37,8 @@ impl App {
     ) -> Option<Arc<dyn ServiceRs>> {
         // 是否已经存在相同 id 的 service ?
         for w in &*services {
-            let id = srv.get_handle().read().unwrap().id();
-            let w_srv_handle = w.srv.get_handle().read().unwrap();
+            let id = srv.get_handle().read().id();
+            let w_srv_handle = w.srv.get_handle().read();
             if w_srv_handle.id() == id {
                 log::error!("App::add_service() failed!!! ID={}", id);
                 return None;
@@ -84,12 +84,12 @@ impl App {
         let &(ref lock, ref cvar) = &*cv;
         loop {
             // wait quit signal
-            let mut quit = lock.lock().unwrap();
-            quit = cvar.wait(quit).unwrap();
+            let mut quit = lock.lock();
+            cvar.wait(&mut quit);
 
             let mut exitflag = true;
             for w in &self.services {
-                let w_srv_handle = w.srv.get_handle().read().unwrap();
+                let w_srv_handle = w.srv.get_handle().read();
                 log::info!(
                     "App:run() wait close .. ID={} state={:?}",
                     w_srv_handle.id(),

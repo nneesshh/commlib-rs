@@ -10,6 +10,7 @@ impl StopWatch {
             start: std::time::Instant::now(),
         }
     }
+
     ///
     pub fn reset(&mut self) {
         self.start = std::time::Instant::now();

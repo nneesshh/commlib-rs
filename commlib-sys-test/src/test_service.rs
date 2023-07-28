@@ -2,8 +2,7 @@
 //! Common Library: service-signal
 //!
 
-use spdlog::get_current_tid;
-use std::sync::{Arc, Condvar, Mutex, RwLock};
+use parking_lot::RwLock;
 
 use commlib_sys::*;
 
@@ -31,19 +30,19 @@ impl ServiceRs for TestService {
 
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {
-        let handle = self.get_handle().read().unwrap();
+        let handle = self.get_handle().read();
         handle.run_in_service(cb);
     }
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool {
-        let handle = self.get_handle().read().unwrap();
+        let handle = self.get_handle().read();
         handle.is_in_service_thread()
     }
 
     /// 等待线程结束
     fn join(&self) {
-        let mut handle_mut = self.get_handle().write().unwrap();
+        let mut handle_mut = self.get_handle().write();
         handle_mut.join_service();
     }
 

@@ -76,8 +76,11 @@ where
         }
     }
 
-    fn execute_unique_ref(unique_ref: std::sync::Arc<Self>) -> Option<(std::sync::Arc<Self>, Duration)> {
-        let unique = std::sync::Arc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
+    fn execute_unique_ref(
+        unique_ref: std::sync::Arc<Self>,
+    ) -> Option<(std::sync::Arc<Self>, Duration)> {
+        let unique = std::sync::Arc::try_unwrap(unique_ref)
+            .expect("shouldn't hold on to these refs anywhere");
         unique.execute().map(|t| {
             let (new_unique, delay) = t;
             (std::sync::Arc::new(new_unique), delay)
@@ -183,8 +186,8 @@ where
             match self.timer.can_skip() {
                 Skip::Empty => {
                     // Wheel is empty, do nothing
-                    break
-                },
+                    break;
+                }
                 Skip::None => {
                     // tick 1 ms
                     delta -= 1u32;
@@ -199,11 +202,7 @@ where
                 }
                 Skip::Millis(ms) => {
                     // skip n ms
-                    let n = if ms < delta {
-                        delta - ms
-                    } else {
-                        delta
-                    };
+                    let n = if ms < delta { delta - ms } else { delta };
                     delta -= n;
 
                     self.timer.skip(n);
@@ -280,7 +279,10 @@ where
 
     fn schedule_once(&mut self, timeout: Duration, state: Self::OneshotState) {
         let e = TimerEntry::OneShot { timeout, state };
-        match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), timeout) {
+        match self
+            .timer
+            .insert_ref_with_delay(std::sync::Arc::new(e), timeout)
+        {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if TimerEntry::execute_unique_ref(e).is_none() {
@@ -300,7 +302,10 @@ where
             period,
             state,
         };
-        match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), delay) {
+        match self
+            .timer
+            .insert_ref_with_delay(std::sync::Arc::new(e), delay)
+        {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if let Some((new_e, delay)) = TimerEntry::execute_unique_ref(e) {
@@ -331,7 +336,8 @@ where
 mod tests {
     use crate::hash_wheel_timer::test_helpers::*;
     use crate::hash_wheel_timer::wheel_timer::*;
-    use std::sync::{Arc, Mutex};
+    use parking_lot::{Condvar, Mutex, RwLock};
+    use std::sync::Arc;
     use uuid::Uuid;
 
     #[test]

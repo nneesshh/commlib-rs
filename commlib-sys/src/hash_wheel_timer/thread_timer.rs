@@ -276,8 +276,11 @@ where
         }
     }
 
-    fn execute_unique_ref(unique_ref: std::sync::Arc<Self>) -> Option<(std::sync::Arc<Self>, Duration)> {
-        let unique = std::sync::Arc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
+    fn execute_unique_ref(
+        unique_ref: std::sync::Arc<Self>,
+    ) -> Option<(std::sync::Arc<Self>, Duration)> {
+        let unique = std::sync::Arc::try_unwrap(unique_ref)
+            .expect("shouldn't hold on to these refs anywhere");
         unique.execute().map(|t| {
             let (new_unique, delay) = t;
             (std::sync::Arc::new(new_unique), delay)
@@ -432,7 +435,10 @@ where
             TimerMsg::Stop => self.running = false,
             TimerMsg::Schedule(entry) => {
                 let (e, delay) = ThreadTimerEntry::from(entry);
-                match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), delay) {
+                match self
+                    .timer
+                    .insert_ref_with_delay(std::sync::Arc::new(e), delay)
+                {
                     Ok(_) => (), // ok
                     Err(TimerError::Expired(e)) => {
                         self.trigger_entry(e);
@@ -475,7 +481,8 @@ where
 mod tests {
     use crate::hash_wheel_timer::test_helpers::*;
     use crate::hash_wheel_timer::thread_timer::*;
-    use std::sync::{Arc, Mutex};
+    use parking_lot::{Condvar, Mutex, RwLock};
+    use std::sync::Arc;
     use uuid::Uuid;
 
     #[test]

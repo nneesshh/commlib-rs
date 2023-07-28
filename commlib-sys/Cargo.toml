@@ -49,6 +49,7 @@ paste = "1.0"
 log = "0.4"
 chrono = "0.4"
 hashbrown = { path="../hashbrown" }
+parking_lot = { path="../parking_lot" }
 roxmltree = { path="../roxmltree" }
 spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
 

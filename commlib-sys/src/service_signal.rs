@@ -1,12 +1,9 @@
 //!
 //! Common Library: service-signal
 //!
-
+use parking_lot::{Condvar, Mutex, RwLock};
 use spdlog::get_current_tid;
-use std::{
-    borrow::BorrowMut,
-    sync::{Arc, Condvar, Mutex, RwLock},
-};
+use std::{borrow::BorrowMut, sync::Arc};
 
 use super::commlib_service::*;
 use crate::commlib_event::*;
@@ -20,12 +17,12 @@ crate::impl_event_for!(ServiceSignalRs, EventSignalInt);
 pub struct EventSignalUsr1 {
     code: u32,
 }
-//crate::impl_event_for!(EventSignalUsr1);
+crate::impl_event_for!(ServiceSignalRs, EventSignalUsr1);
 
 pub struct EventSignalUsr2 {
     code: u32,
 }
-//crate::impl_event_for!(EventSignalUsr2);
+crate::impl_event_for!(ServiceSignalRs, EventSignalUsr2);
 
 /// ServiceSignal
 pub struct ServiceSignalRs {
@@ -51,14 +48,14 @@ impl ServiceSignalRs {
     pub fn on_sig_usr1(&self) {
         // Trigger event
         let mut e = EventSignalUsr1 { code: 0 };
-        //e.trigger();
+        e.trigger();
     }
 
     /// Event: sig_usr2
     pub fn on_sig_usr2(&self) {
         // Trigger event
         let mut e = EventSignalUsr2 { code: 0 };
-        //e.trigger();
+        e.trigger();
     }
 
     /// Listen signal: sig_int
@@ -77,7 +74,7 @@ impl ServiceSignalRs {
                 let mut f = f.take();
 
                 // 事件触发时，将 f post 到工作线程执行
-                srv.read().unwrap().run_in_service(Box::new(move || {
+                srv.read().run_in_service(Box::new(move || {
                     let mut f = f.take().unwrap();
                     f();
                 }));
@@ -130,18 +127,18 @@ impl ServiceRs for ServiceSignalRs {
 
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {
-        let handle = self.get_handle().read().unwrap();
+        let handle = self.get_handle().read();
         handle.run_in_service(cb);
     }
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool {
-        let handle = self.get_handle().read().unwrap();
+        let handle = self.get_handle().read();
         handle.is_in_service_thread()
     }
 
     fn join(&self) {
-        let mut handle_mut = self.get_handle().write().unwrap();
+        let mut handle_mut = self.get_handle().write();
         handle_mut.join_service();
     }
 }

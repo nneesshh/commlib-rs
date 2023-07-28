@@ -9,7 +9,8 @@
 //!
 //! # Example
 //! ```
-//! # use std::sync::{Arc, Mutex};
+//! # use std::sync::Arc;
+//! # use parking_lot::{Condvar, Mutex, RwLock};
 //! # use uuid::Uuid;
 //! # use std::time::Duration;
 //! use commlib::hash_wheel_timer::*;
@@ -83,8 +84,11 @@ where
         }
     }
 
-    fn execute_unique_ref(unique_ref: std::sync::Arc<Self>) -> Option<(std::sync::Arc<Self>, Duration)> {
-        let unique = std::sync::Arc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
+    fn execute_unique_ref(
+        unique_ref: std::sync::Arc<Self>,
+    ) -> Option<(std::sync::Arc<Self>, Duration)> {
+        let unique = std::sync::Arc::try_unwrap(unique_ref)
+            .expect("shouldn't hold on to these refs anywhere");
         unique.execute().map(|t| {
             let (new_unique, delay) = t;
             (std::sync::Arc::new(new_unique), delay)
@@ -253,7 +257,10 @@ where
 
     fn schedule_once(&mut self, timeout: Duration, state: Self::OneshotState) {
         let e = SimulationEntry::OneShot { state };
-        match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), timeout) {
+        match self
+            .timer
+            .insert_ref_with_delay(std::sync::Arc::new(e), timeout)
+        {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if SimulationEntry::execute_unique_ref(e).is_none() {
@@ -269,7 +276,10 @@ where
 
     fn schedule_periodic(&mut self, delay: Duration, period: Duration, state: Self::PeriodicState) {
         let e = SimulationEntry::Periodic { period, state };
-        match self.timer.insert_ref_with_delay(std::sync::Arc::new(e), delay) {
+        match self
+            .timer
+            .insert_ref_with_delay(std::sync::Arc::new(e), delay)
+        {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if let Some((new_e, delay)) = SimulationEntry::execute_unique_ref(e) {
@@ -300,7 +310,8 @@ where
 mod tests {
     use crate::hash_wheel_timer::simulation::*;
     use crate::hash_wheel_timer::test_helpers::*;
-    use std::sync::{Arc, Mutex};
+    use parking_lot::{Condvar, Mutex, RwLock};
+    use std::sync::Arc;
     use uuid::Uuid;
 
     #[test]

@@ -1,5 +1,6 @@
 use hashbrown::{HashMap, HashSet};
-use std::sync::{atomic::AtomicBool, Arc, Condvar, Mutex, RwLock};
+use parking_lot::{Condvar, Mutex, RwLock};
+use std::sync::{atomic::AtomicBool, Arc};
 
 #[allow(dead_code)]
 static INIT: AtomicBool = AtomicBool::new(false);
