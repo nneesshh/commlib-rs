@@ -29,40 +29,40 @@ pub struct EventSignalUsr2 {
 
 /// ServiceSignal
 pub struct ServiceSignalRs {
-    pub handle: ServiceHandle,
+    pub handle: RwLock<ServiceHandle>,
 }
 
 impl ServiceSignalRs {
     ///
     pub fn new(id: u64) -> ServiceSignalRs {
         Self {
-            handle: ServiceHandle::new(id, State::Idle),
+            handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
         }
     }
 
     /// Event: sig_int
-    pub fn on_sig_int(&mut self) {
+    pub fn on_sig_int(&self) {
         // Trigger event
         let mut e = EventSignalInt { code: 0 };
-        //e.trigger();
+        e.trigger();
     }
 
     /// Event: sig_usr1
-    pub fn on_sig_usr1(&mut self) {
+    pub fn on_sig_usr1(&self) {
         // Trigger event
         let mut e = EventSignalUsr1 { code: 0 };
         //e.trigger();
     }
 
     /// Event: sig_usr2
-    pub fn on_sig_usr2(&mut self) {
+    pub fn on_sig_usr2(&self) {
         // Trigger event
         let mut e = EventSignalUsr2 { code: 0 };
         //e.trigger();
     }
 
     /// Listen signal: sig_int
-    pub fn listen_sig_int<F, S>(&mut self, f: F, srv: &'static Arc<RwLock<S>>)
+    pub fn listen_sig_int<F, S>(&self, f: F, srv: &'static Arc<RwLock<S>>)
     where
         F: FnMut() + Send + Sync + 'static,
         S: ServiceRs + Send + Sync + 'static,
@@ -88,24 +88,19 @@ impl ServiceSignalRs {
 
 impl ServiceRs for ServiceSignalRs {
     /// 获取 service 句柄
-    fn get_handle(&self) -> &ServiceHandle {
+    fn get_handle(&self) -> &RwLock<ServiceHandle> {
         &self.handle
     }
 
-    /// 获取 mut service 句柄
-    fn get_handle_mut(&mut self) -> &mut ServiceHandle {
-        &mut self.handle
-    }
-
     /// 配置 service
-    fn conf(&mut self) {
+    fn conf(&self) {
         extern "C" fn on_signal_int(sig: i32) {
             println!("Recive int signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_int
             let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.write().unwrap().on_sig_int());
-            srv.read().unwrap().run_in_service(cb);
+            let cb = Box::new(|| srv.on_sig_int());
+            srv.run_in_service(cb);
         }
 
         extern "C" fn on_signal_usr1(sig: i32) {
@@ -113,8 +108,8 @@ impl ServiceRs for ServiceSignalRs {
 
             // Post event callback to service thread: sig_usr1
             let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.write().unwrap().on_sig_usr1());
-            srv.read().unwrap().run_in_service(cb);
+            let cb = Box::new(|| srv.on_sig_usr1());
+            srv.run_in_service(cb);
         }
 
         extern "C" fn on_signal_usr2(sig: i32) {
@@ -122,8 +117,8 @@ impl ServiceRs for ServiceSignalRs {
 
             // Post event callback to service thread: sig_usr2
             let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.write().unwrap().on_sig_usr2());
-            srv.read().unwrap().run_in_service(cb);
+            let cb = Box::new(|| srv.on_sig_usr2());
+            srv.run_in_service(cb);
         }
 
         let cb1 = crate::SignalCallback(on_signal_int);
@@ -133,69 +128,20 @@ impl ServiceRs for ServiceSignalRs {
         crate::ffi_sig::init_signal_handlers(cb1, cb2, cb3);
     }
 
-    /// 启动 service 线程
-    fn start(&mut self) {
-        let rx = self.handle.rx.clone();
-
-        if self.handle.tid > 0u64 {
-            log::error!("service already started!!! tid={}", self.handle.tid);
-            return;
-        }
-
-        //start thread
-        let tname = "service_signal".to_owned();
-        let tid_cv = Arc::new((Mutex::new(0u64), Condvar::new()));
-        let tid_ready = Arc::clone(&tid_cv);
-        self.handle.join_handle = Some(
-            std::thread::Builder::new()
-                .name(tname)
-                .spawn(move || {
-                    // notify ready
-                    let tid = get_current_tid();
-                    let (lock, cvar) = &*tid_ready;
-                    {
-                        // release guard after value ok
-                        let mut guard = lock.lock().unwrap();
-                        *guard = tid;
-                    }
-                    cvar.notify_all();
-
-                    // dispatch cb
-                    while let Ok(mut cb) = rx.recv() {
-                        //log::info!("Dequeued item");
-                        cb();
-                    }
-                })
-                .unwrap(),
-        );
-
-        //tid (ThreadId.as_u64() is not stable yet)
-        // wait ready
-        let (lock, cvar) = &*tid_cv;
-        let guard = lock.lock().unwrap();
-        let tid = cvar.wait(guard).unwrap();
-        self.handle.tid = *tid;
-    }
-
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, mut cb: Box<dyn FnMut() + Send + Sync + 'static>) {
-        if self.is_in_service_thread() {
-            cb();
-        } else {
-            self.handle.tx.send(cb).unwrap();
-        }
+    fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {
+        let handle = self.get_handle().read().unwrap();
+        handle.run_in_service(cb);
     }
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool {
-        let tid = get_current_tid();
-        tid == self.handle.tid
+        let handle = self.get_handle().read().unwrap();
+        handle.is_in_service_thread()
     }
 
-    /// 等待线程结束
-    fn join(&mut self) {
-        if let Some(join_handle) = self.handle.join_handle.take() {
-            join_handle.join().unwrap();
-        }
+    fn join(&self) {
+        let mut handle_mut = self.get_handle().write().unwrap();
+        handle_mut.join_service();
     }
 }

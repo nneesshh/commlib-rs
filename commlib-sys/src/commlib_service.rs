@@ -3,6 +3,10 @@
 //!
 
 use crossbeam::channel;
+use spdlog::get_current_tid;
+use std::sync::{Arc, Condvar, Mutex, RwLock};
+
+use crate::G_EXIT_CV;
 
 ///
 #[derive(Debug, Copy, Clone)]
@@ -25,14 +29,14 @@ pub struct ServiceHandle {
     pub id: u64,
     pub state: State,
 
-    pub(crate) tx: std::sync::Arc<channel::Sender<Box<ServiceFuncType>>>,
-    pub(crate) rx: std::sync::Arc<channel::Receiver<Box<ServiceFuncType>>>,
+    pub tx: channel::Sender<Box<ServiceFuncType>>,
+    pub rx: channel::Receiver<Box<ServiceFuncType>>,
 
-    pub(crate) join_handle: Option<std::thread::JoinHandle<()>>,
-    pub(crate) tid: u64,
+    pub join_handle: Option<std::thread::JoinHandle<()>>,
+    pub tid: u64,
 
-    pub(crate) clock: crate::Clock,
-    pub(crate) xml_config: crate::XmlReader,
+    pub clock: crate::Clock,
+    pub xml_config: crate::XmlReader,
 }
 
 impl ServiceHandle {
@@ -43,8 +47,8 @@ impl ServiceHandle {
         Self {
             id,
             state,
-            tx: std::sync::Arc::new(tx),
-            rx: std::sync::Arc::new(rx),
+            tx,
+            rx,
             join_handle: None,
             tid: 0u64,
             clock: crate::Clock::new(),
@@ -81,21 +85,42 @@ impl ServiceHandle {
     pub fn set_xml_config(&mut self, xml_config: crate::XmlReader) {
         self.xml_config = xml_config;
     }
+
+    ///
+    pub fn quit_service(&mut self) {
+        self.state = State::Closed;
+    }
+
+    /// 在 service 线程中执行回调任务
+    pub fn run_in_service(&self, mut cb: Box<dyn FnMut() + Send + Sync + 'static>) {
+        if self.is_in_service_thread() {
+            cb();
+        } else {
+            self.tx.send(cb).unwrap();
+        }
+    }
+
+    /// 当前代码是否运行于 service 线程中
+    pub fn is_in_service_thread(&self) -> bool {
+        let tid = get_current_tid();
+        tid == self.tid
+    }
+
+    /// 等待线程结束
+    pub fn join_service(&mut self) {
+        if let Some(join_handle) = self.join_handle.take() {
+            join_handle.join().unwrap();
+        }
+    }
 }
 
 /// Service start a new single thread, and run callback in it.
 pub trait ServiceRs {
     /// 获取 service 句柄
-    fn get_handle(&self) -> &ServiceHandle;
-
-    /// 获取 mut service 句柄
-    fn get_handle_mut(&mut self) -> &mut ServiceHandle;
+    fn get_handle(&self) -> &RwLock<ServiceHandle>;
 
     /// 配置 service
-    fn conf(&mut self);
-
-    /// 启动 service 线程
-    fn start(&mut self);
+    fn conf(&self);
 
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>);
@@ -104,6 +129,118 @@ pub trait ServiceRs {
     fn is_in_service_thread(&self) -> bool;
 
     /// 等待线程结束
-    fn join(&mut self);
-    
+    fn join(&self);
+}
+
+/// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move
+pub fn start_service(
+    srv: Arc<dyn ServiceRs + Send + Sync + 'static>,
+    name_of_thread: String,
+) -> bool {
+    let srv1 = srv.clone();
+    let srv2 = srv.clone();
+
+    let mut handle1_mut = srv1.get_handle().write().unwrap();
+    if handle1_mut.tid > 0u64 {
+        log::error!("service already started!!! tid={}", handle1_mut.tid);
+        return false;
+    }
+
+    //
+    let tid_cv = Arc::new((Mutex::new(0u64), Condvar::new()));
+    let tid_ready = Arc::clone(&tid_cv);
+
+    let exit_cv = Arc::clone(&crate::G_EXIT_CV);
+
+    handle1_mut.join_handle = Some(
+        std::thread::Builder::new()
+            .name(name_of_thread.clone())
+            .spawn(move || {
+                // notify ready
+                let tid = get_current_tid();
+                let (lock, cvar) = &*tid_ready;
+                {
+                    // release guard after value ok
+                    let mut guard = lock.lock().unwrap();
+                    *guard = tid;
+                }
+                cvar.notify_all();
+
+                // run
+                run_service(&srv2, name_of_thread);
+
+                // exit
+                {
+                    let mut handle2_mut = srv2.get_handle().write().unwrap();
+
+                    // mark closed
+                    handle2_mut.state = State::Closed;
+
+                    // notify exit
+                    (&*exit_cv).1.notify_all();
+                    log::info!(
+                        "service exit: ID={} state={:?}",
+                        handle2_mut.id,
+                        handle2_mut.state
+                    );
+                }
+            })
+            .unwrap(),
+    );
+
+    //tid (ThreadId.as_u64() is not stable yet)
+    // wait ready
+    let (lock, cvar) = &*tid_cv;
+    let guard = lock.lock().unwrap();
+    let tid = cvar.wait(guard).unwrap();
+    handle1_mut.tid = *tid;
+    true
+}
+
+///
+pub fn run_service(srv: &Arc<dyn ServiceRs + Send + Sync + 'static>, service_name: String) {
+    let handle = srv.get_handle().read().unwrap();
+    log::info!("[{}] start ... ID={}", service_name, handle.id);
+
+    while (State::Closed as u32) != (handle.state as u32) {
+        if (State::Closing as u32) == (handle.state as u32) {
+            if handle.rx.is_empty() {
+                let mut handle_mut = srv.get_handle().write().unwrap();
+                handle_mut.quit_service();
+            }
+        }
+    }
+
+    {
+        let sw = crate::StopWatch::new();
+
+        // mut handle
+        {
+            let mut handle_mut = srv.get_handle().write().unwrap();
+            
+            // update clock
+            handle_mut.clock.update();
+        }
+
+        // dispatch cb -- process async tasks
+        let mut count = 4096_i32;
+        while count > 0 && !handle.rx.is_empty() {
+            match handle.rx.try_recv() {
+                Ok(mut cb) => {
+                    //log::info!("Dequeued item");
+                    cb();
+                    count -= 1;
+                }
+                Err(err) => {
+                    log::error!("service receive cb error:: {:?}", err);
+                }
+            }
+        }
+
+        //
+        let cost = sw.elapsed();
+        if cost > 100_u128 {
+            log::error!("[{}] ID={} timeout cost: {}ms", service_name, handle.id, cost);
+        }
+    }
 }

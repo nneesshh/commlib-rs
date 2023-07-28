@@ -5,22 +5,22 @@
 use spdlog::get_current_tid;
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 
-use super::commlib_service::*;
+use commlib_sys::*;
 
-pub struct ServiceNetRs {
+pub struct TestService {
     pub handle: RwLock<ServiceHandle>,
 }
 
-impl ServiceNetRs {
+impl TestService {
     ///
-    pub fn new(id: u64) -> ServiceNetRs {
+    pub fn new(id: u64) -> TestService {
         Self {
             handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
         }
     }
 }
 
-impl ServiceRs for ServiceNetRs {
+impl ServiceRs for TestService {
     /// 获取 service 句柄
     fn get_handle(&self) -> &RwLock<ServiceHandle> {
         &self.handle
@@ -46,4 +46,5 @@ impl ServiceRs for ServiceNetRs {
         let mut handle_mut = self.get_handle().write().unwrap();
         handle_mut.join_service();
     }
+
 }

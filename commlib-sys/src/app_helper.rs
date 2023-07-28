@@ -1,4 +1,4 @@
-use crate::commlib_service::ServiceRs;
+use crate::{commlib_service::ServiceRs, start_service};
 use std::sync::{Arc, Mutex, RwLock};
 
 /// App: 应用框架RwLock<
@@ -6,7 +6,7 @@ pub struct App {
 
     services: Vec<crate::ServiceWrapper>,
     // Entry service: the last attached service
-    pub entry: Option<Arc<RwLock<dyn ServiceRs>>>
+    pub entry: Option<Arc<dyn ServiceRs>>
 }
 
 impl App {
@@ -33,11 +33,13 @@ impl App {
 
     fn add_service<S>(
         services: &mut Vec<crate::ServiceWrapper>,
-        srv: Arc<RwLock<dyn ServiceRs>>,
-    ) -> Option<Arc<RwLock<dyn ServiceRs>>> {
+        srv: Arc<dyn ServiceRs>,
+    ) -> Option<Arc<dyn ServiceRs>> {
+        // 是否已经存在相同 id 的 service ?
         for w in &*services {
-            let id = srv.read().unwrap().get_handle().id();
-            if w.srv.read().unwrap().get_handle().id() == id {
+            let id = srv.get_handle().read().unwrap().id();
+            let w_srv_handle = w.srv.get_handle().read().unwrap();
+            if w_srv_handle.id() == id {
                 log::error!("App::add_service() failed!!! ID={}", id);
                 return None;
             }
@@ -55,9 +57,9 @@ impl App {
         C: FnMut() -> S,
     {
         let s = creator();
-        let srv = Arc::new(RwLock::new(s));
-        srv.write().unwrap().conf();
-        srv.write().unwrap().start();
+        let srv = Arc::new(s);
+        srv.conf();
+        //start_service(w.srv, "");
 
         // Update entry service
         self.entry = Self::add_service::<S>(&mut self.services, srv);
@@ -67,12 +69,12 @@ impl App {
     pub fn start(&mut self) {
         // 配置 servie
         for w in &mut self.services {
-            w.srv.write().unwrap().conf();
+            w.srv.conf();
         }
 
         // 启动 servie
         for w in &mut self.services {
-            w.srv.write().unwrap().start();
+            //start_service(w.srv, "");
         }
     }
 
@@ -87,14 +89,13 @@ impl App {
 
             let mut exitflag = true;
             for w in &self.services {
-                let mut srv = w.srv.read().unwrap();
-
+                let w_srv_handle = w.srv.get_handle().read().unwrap();
                 log::info!(
                     "App:run() wait close .. ID={} state={:?}",
-                    srv.get_handle().id(),
-                    srv.get_handle().state()
+                    w_srv_handle.id(),
+                    w_srv_handle.state()
                 );
-                if crate::State::Closed as u32 != srv.get_handle().state() as u32 {
+                if crate::State::Closed as u32 != w_srv_handle.state() as u32 {
                     exitflag = false;
                     break;
                 }
@@ -102,8 +103,7 @@ impl App {
 
             if exitflag {
                 for w in &self.services {
-                    let mut srv = w.srv.write().unwrap();
-                    srv.join()
+                    w.srv.join();
                 }
                 break;
             }

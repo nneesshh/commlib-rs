@@ -50,7 +50,7 @@ impl Clock {
     }
 
     /// 循环定时器，延时一段时间之后开始执行
-    fn set_timer_delay<F>(&mut self, delay: u64, interval: u64, mut action: TimerAction<F>)
+    pub fn set_timer_delay<F>(&mut self, delay: u64, interval: u64, mut action: TimerAction<F>)
     where
         F: FnMut() + Send + Sync + 'static,
     {
@@ -65,7 +65,7 @@ impl Clock {
     }
 
     /// One-shot 一次性超时
-    fn set_timeout<F>(&mut self, delay: u64, mut action: TimerAction<F>)
+    pub fn set_timeout<F>(&mut self, delay: u64, mut action: TimerAction<F>)
     where
         F: FnMut() + Send + Sync + 'static,
     {
@@ -78,7 +78,7 @@ impl Clock {
     }
 
     /// 更新计时器 tick
-    fn update(&mut self) {
+    pub fn update(&mut self) {
         match self.last_time.elapsed(){
             Ok(d) => {
                 self.wheel_timer.update(d);
