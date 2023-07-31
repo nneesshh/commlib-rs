@@ -117,6 +117,14 @@ impl ServiceHandle {
 
 /// Service start a new single thread, and run callback in it.
 pub trait ServiceRs: Send + Sync {
+    /// 是否为 cxx 类型的 service
+    fn is_cxx(&self) -> bool {
+        false
+    }
+
+    /// 启动 cxx 类型 的 service
+    fn start_cxx_service(&self) {}
+
     /// 获取 service nmae
     fn name(&self) -> &str;
 
@@ -204,9 +212,11 @@ pub fn start_service(srv: &Arc<dyn ServiceRs>, name_of_thread: &str) -> bool {
 
 ///
 pub fn run_service(srv: &Arc<dyn ServiceRs>, service_name: &str) {
+    // init
     {
         let handle = srv.get_handle().read();
-        log::info!("[{}] start ... ID={}", service_name, handle.id);
+        log::info!("[{}] init ... ID={}", service_name, handle.id);
+        srv.init();
     }
 
     loop {
@@ -249,7 +259,8 @@ pub fn run_service(srv: &Arc<dyn ServiceRs>, service_name: &str) {
                 while count > 0 && !handle.rx.is_empty() {
                     match handle.rx.try_recv() {
                         Ok(mut cb) => {
-                            //log::info!("Dequeued item");
+                            log::info!("Dequeued item ID={}", handle.id);
+                            println!("Dequeued item ID={}", handle.id);
                             cb();
                             count -= 1;
                         }

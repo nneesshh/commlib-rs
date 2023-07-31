@@ -1,4 +1,4 @@
-use crate::{ServiceRs, start_service};
+use crate::{init_logger, start_service, ServiceRs};
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 
@@ -18,14 +18,13 @@ impl App {
     }
 
     fn init(&mut self) {
+        //init_logger();
+
         Self::add_service(&mut self.services, crate::globals::G_SERVICE_SIGNAL.clone());
         Self::add_service(&mut self.services, crate::globals::G_SERVICE_NET.clone());
     }
 
-    fn add_service(
-        services: &mut Vec<crate::ServiceWrapper>,
-        srv: Arc<dyn ServiceRs>,
-    ) {
+    fn add_service(services: &mut Vec<crate::ServiceWrapper>, srv: Arc<dyn ServiceRs>) {
         // 是否已经存在相同 id 的 service ?
         for w in &*services {
             let id = srv.get_handle().read().id();
@@ -36,7 +35,6 @@ impl App {
             }
         }
         services.push(crate::ServiceWrapper { srv });
-
     }
 
     /// 添加 service
@@ -61,7 +59,11 @@ impl App {
 
         // 启动 servie
         for w in &mut self.services {
-            start_service(&w.srv, w.srv.name());
+            if (w.srv.is_cxx()) {
+                w.srv.start_cxx_service();
+            } else {
+                start_service(&w.srv, w.srv.name());
+            }
         }
     }
 

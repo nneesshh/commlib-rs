@@ -21,6 +21,16 @@ impl ServiceNetRs {
 }
 
 impl ServiceRs for ServiceNetRs {
+    /// 是否为 cxx 类型的 service
+    fn is_cxx(&self) -> bool {
+        true
+    }
+
+    /// 启动 cxx 类型 的 service
+    fn start_cxx_service(&self) {
+        //std::unimplemented!()
+    }
+
     /// 获取 service nmae
     fn name(&self) -> &str {
         "service_net"

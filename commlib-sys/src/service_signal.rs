@@ -59,7 +59,7 @@ impl ServiceSignalRs {
     }
 
     /// Listen signal: sig_int
-    pub fn listen_sig_int<F>(&self, srv:&'static dyn ServiceRs, f: F)
+    pub fn listen_sig_int<F>(&self, srv: &'static dyn ServiceRs, f: F)
     where
         F: FnMut() + Send + Sync + 'static,
     {
@@ -96,7 +96,7 @@ impl ServiceRs for ServiceSignalRs {
     /// 配置 service
     fn conf(&self) {
         extern "C" fn on_signal_int(sig: i32) {
-            println!("Recive int signal in Rust! Value={}", sig);
+            log::info!("Recive int signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_int
             let srv = &crate::globals::G_SERVICE_SIGNAL;
@@ -105,7 +105,7 @@ impl ServiceRs for ServiceSignalRs {
         }
 
         extern "C" fn on_signal_usr1(sig: i32) {
-            println!("Recive usr1 signal in Rust! Value={}", sig);
+            log::info!("Recive usr1 signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_usr1
             let srv = &crate::globals::G_SERVICE_SIGNAL;
@@ -114,7 +114,7 @@ impl ServiceRs for ServiceSignalRs {
         }
 
         extern "C" fn on_signal_usr2(sig: i32) {
-            println!("Recive usr2 signal in Rust! Value={}", sig);
+            log::info!("Recive usr2 signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_usr2
             let srv = &crate::globals::G_SERVICE_SIGNAL;
