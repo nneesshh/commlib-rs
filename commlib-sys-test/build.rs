@@ -42,6 +42,7 @@ fn main() -> miette::Result<()> {
 
     // Re-run
     println!("cargo:rerun-if-changed=src/main.rs");
+    
 
     Ok(())
 }

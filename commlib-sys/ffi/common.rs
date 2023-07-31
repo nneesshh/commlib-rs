@@ -3,20 +3,18 @@ pub mod ffi_common {
 
     extern "Rust" {
         pub type ServiceWrapper;
-        unsafe fn on_connection(srv: *mut ServiceWrapper);
     }
 }
 
 use parking_lot::{Condvar, Mutex, RwLock};
 use std::sync::Arc;
 
+#[repr(transparent)]
 pub struct ServiceWrapper {
-    srv: Arc<dyn ServiceRs>,
+    srv: &'static dyn ServiceRs,
 }
 
-unsafe impl ExternType for ServiceWrapper {
-    type Id = type_id!("ServiceWrapper");
+unsafe impl cxx::ExternType for ServiceWrapper {
+    type Id = cxx::type_id!("ServiceWrapper");
     type Kind = cxx::kind::Trivial;
 }
-
-pub fn on_connection(srv: *mut ServiceWrapper) {}

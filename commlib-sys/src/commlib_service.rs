@@ -117,14 +117,6 @@ impl ServiceHandle {
 
 /// Service start a new single thread, and run callback in it.
 pub trait ServiceRs: Send + Sync {
-    /// 是否为 cxx 类型的 service
-    fn is_cxx(&self) -> bool {
-        false
-    }
-
-    /// 启动 cxx 类型 的 service
-    fn start_cxx_service(&self) {}
-
     /// 获取 service nmae
     fn name(&self) -> &str;
 
@@ -148,11 +140,8 @@ pub trait ServiceRs: Send + Sync {
 }
 
 /// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move
-pub fn start_service(srv: &Arc<dyn ServiceRs>, name_of_thread: &str) -> bool {
-    let srv1 = srv.clone();
-    let srv2 = srv.clone();
-
-    let mut handle1_mut = srv1.get_handle().write();
+pub fn start_service(srv: &'static dyn ServiceRs, name_of_thread: &str) -> bool {
+    let mut handle1_mut = srv.get_handle().write();
     if handle1_mut.tid > 0u64 {
         log::error!("service already started!!! tid={}", handle1_mut.tid);
         return false;
@@ -180,11 +169,11 @@ pub fn start_service(srv: &Arc<dyn ServiceRs>, name_of_thread: &str) -> bool {
                 cvar.notify_all();
 
                 // run
-                run_service(&srv2, tname.as_str());
+                run_service(srv, tname.as_str());
 
                 // exit
                 {
-                    let mut handle2_mut = srv2.get_handle().write();
+                    let mut handle2_mut = srv.get_handle().write();
 
                     // mark closed
                     handle2_mut.state = State::Closed;
@@ -211,7 +200,7 @@ pub fn start_service(srv: &Arc<dyn ServiceRs>, name_of_thread: &str) -> bool {
 }
 
 ///
-pub fn run_service(srv: &Arc<dyn ServiceRs>, service_name: &str) {
+pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
     // init
     {
         let handle = srv.get_handle().read();

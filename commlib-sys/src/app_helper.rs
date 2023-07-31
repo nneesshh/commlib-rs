@@ -20,11 +20,11 @@ impl App {
     fn init(&mut self) {
         //init_logger();
 
-        Self::add_service(&mut self.services, crate::globals::G_SERVICE_SIGNAL.clone());
-        Self::add_service(&mut self.services, crate::globals::G_SERVICE_NET.clone());
+        Self::add_service(&mut self.services, crate::globals::G_SERVICE_SIGNAL.as_ref());
+        Self::add_service(&mut self.services, crate::globals::G_SERVICE_NET.as_ref());
     }
 
-    fn add_service(services: &mut Vec<crate::ServiceWrapper>, srv: Arc<dyn ServiceRs>) {
+    fn add_service(services: &mut Vec<crate::ServiceWrapper>, srv: &'static dyn ServiceRs) {
         // 是否已经存在相同 id 的 service ?
         for w in &*services {
             let id = srv.get_handle().read().id();
@@ -40,11 +40,11 @@ impl App {
     /// 添加 service
     pub fn attach<C>(&mut self, mut creator: C)
     where
-        C: FnMut() -> Arc<dyn ServiceRs>,
+        C: FnMut() -> &'static dyn ServiceRs,
     {
         let srv = creator();
         srv.conf();
-        start_service(&srv, "");
+        start_service(srv, "");
 
         // add server to app
         Self::add_service(&mut self.services, srv);
@@ -59,11 +59,7 @@ impl App {
 
         // 启动 servie
         for w in &mut self.services {
-            if (w.srv.is_cxx()) {
-                w.srv.start_cxx_service();
-            } else {
-                start_service(&w.srv, w.srv.name());
-            }
+            start_service(w.srv, w.srv.name());
         }
     }
 
