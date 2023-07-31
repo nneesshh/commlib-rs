@@ -1,4 +1,4 @@
-use commlib_sys::app_helper::App;
+use app_helper::App;
 mod test_service;
 
 fn main() {

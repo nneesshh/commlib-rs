@@ -1,10 +1,8 @@
-use crate::{init_logger, start_service, ServiceRs};
-use parking_lot::{Mutex, RwLock};
-use std::sync::Arc;
+use commlib_sys::*;
 
 /// App: 应用框架RwLock<
 pub struct App {
-    services: Vec<crate::ServiceWrapper>,
+    services: Vec<ServiceWrapper>,
 }
 
 impl App {
@@ -21,11 +19,11 @@ impl App {
         let log_path = std::path::PathBuf::from("auto-legend");
         init_logger(&log_path, "testlog", spdlog::Level::Info as u32, true);
 
-        Self::add_service(&mut self.services, crate::globals::G_SERVICE_SIGNAL.as_ref());
-        Self::add_service(&mut self.services, crate::globals::G_SERVICE_NET.as_ref());
+        Self::add_service(&mut self.services, G_SERVICE_SIGNAL.as_ref());
+        Self::add_service(&mut self.services, G_SERVICE_NET.as_ref());
     }
 
-    fn add_service(services: &mut Vec<crate::ServiceWrapper>, srv: &'static dyn ServiceRs) {
+    fn add_service(services: &mut Vec<ServiceWrapper>, srv: &'static dyn ServiceRs) {
         // 是否已经存在相同 id 的 service ?
         for w in &*services {
             let id = srv.get_handle().read().id();
@@ -35,7 +33,7 @@ impl App {
                 return;
             }
         }
-        services.push(crate::ServiceWrapper { srv });
+        services.push(ServiceWrapper { srv });
     }
 
     /// 添加 service
@@ -66,7 +64,7 @@ impl App {
 
     /// App  等待直至服务关闭
     pub fn run(self) {
-        let cv = crate::G_EXIT_CV.clone();
+        let cv = G_EXIT_CV.clone();
         let &(ref lock, ref cvar) = &*cv;
         loop {
             // wait quit signal
@@ -81,7 +79,7 @@ impl App {
                     w_srv_handle.id(),
                     w_srv_handle.state()
                 );
-                if crate::State::Closed as u32 != w_srv_handle.state() as u32 {
+                if State::Closed as u32 != w_srv_handle.state() as u32 {
                     exitflag = false;
                     break;
                 }

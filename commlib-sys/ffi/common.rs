@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 #[repr(transparent)]
 pub struct ServiceWrapper {
-    srv: &'static dyn ServiceRs,
+    pub srv: &'static dyn ServiceRs,
 }
 
 unsafe impl cxx::ExternType for ServiceWrapper {

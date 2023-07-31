@@ -9,9 +9,6 @@ pub mod stop_watch;
 pub use stop_watch::*;
 
 ///
-pub mod app_helper;
-
-///
 pub mod commlib_event;
 pub use commlib_event::*;
 
