@@ -18,7 +18,8 @@ impl App {
     }
 
     fn init(&mut self) {
-        //init_logger();
+        let log_path = std::path::PathBuf::from("auto-legend");
+        init_logger(&log_path, "testlog", spdlog::Level::Info as u32, true);
 
         Self::add_service(&mut self.services, crate::globals::G_SERVICE_SIGNAL.as_ref());
         Self::add_service(&mut self.services, crate::globals::G_SERVICE_NET.as_ref());
@@ -44,7 +45,7 @@ impl App {
     {
         let srv = creator();
         srv.conf();
-        start_service(srv, "");
+        start_service(srv, srv.name());
 
         // add server to app
         Self::add_service(&mut self.services, srv);

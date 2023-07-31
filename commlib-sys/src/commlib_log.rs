@@ -168,8 +168,12 @@ mod tests {
     //use chrono::prelude::*;
 
     //use spdlog::*;
+    use crate::init_logger;
     use spdlog::{Level, EOL};
 
     #[test]
-    fn format() {}
+    fn format() {
+        let log_path = std::path::PathBuf::from("log");
+        init_logger(&log_path, "auto-dragon", Level::Info as u32, true);
+    }
 }
