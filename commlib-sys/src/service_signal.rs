@@ -59,7 +59,7 @@ impl ServiceSignalRs {
     }
 
     /// Listen signal: sig_int
-    pub fn listen_sig_int<F>(&self, srv: Arc<dyn ServiceRs>, f: F)
+    pub fn listen_sig_int<F>(&self, srv:&'static dyn ServiceRs, f: F)
     where
         F: FnMut() + Send + Sync + 'static,
     {
@@ -73,10 +73,10 @@ impl ServiceSignalRs {
                 let mut f = f.take();
 
                 // 事件触发时，将 f post 到工作线程执行
-                // srv.run_in_service(Box::new(move || {
-                //     let mut f = f.take().unwrap();
-                //     f();
-                // }));
+                srv.run_in_service(Box::new(move || {
+                    let mut f = f.take().unwrap();
+                    f();
+                }));
             });
         }));
     }

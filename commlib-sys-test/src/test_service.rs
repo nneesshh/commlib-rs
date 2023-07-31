@@ -41,7 +41,7 @@ impl ServiceRs for TestService {
 
     /// Init in-service
     fn init(&self) {
-        G_SERVICE_SIGNAL.listen_sig_int(G_TEST_SERVICE.clone(), || {
+        G_SERVICE_SIGNAL.listen_sig_int(G_TEST_SERVICE.as_ref(), || {
             println!("WTF!!!!");
         });
     }

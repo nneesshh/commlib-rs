@@ -1,12 +1,10 @@
-use crate::{commlib_service::ServiceRs, start_service};
+use crate::{ServiceRs, start_service};
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 
 /// App: 应用框架RwLock<
 pub struct App {
     services: Vec<crate::ServiceWrapper>,
-    // Entry service: the last attached service
-    pub entry: Option<Arc<dyn ServiceRs>>,
 }
 
 impl App {
@@ -14,7 +12,6 @@ impl App {
     pub fn new() -> Self {
         let mut app = Self {
             services: Vec::default(),
-            entry: None,
         };
         app.init();
         app
@@ -28,20 +25,18 @@ impl App {
     fn add_service(
         services: &mut Vec<crate::ServiceWrapper>,
         srv: Arc<dyn ServiceRs>,
-    ) -> Option<Arc<dyn ServiceRs>> {
+    ) {
         // 是否已经存在相同 id 的 service ?
         for w in &*services {
             let id = srv.get_handle().read().id();
             let w_srv_handle = w.srv.get_handle().read();
             if w_srv_handle.id() == id {
                 log::error!("App::add_service() failed!!! ID={}", id);
-                return None;
+                return;
             }
         }
-
-        let ret = Some(srv.clone());
         services.push(crate::ServiceWrapper { srv });
-        ret
+
     }
 
     /// 添加 service
@@ -53,8 +48,8 @@ impl App {
         srv.conf();
         start_service(&srv, "");
 
-        // Update entry service
-        self.entry = Self::add_service(&mut self.services, srv);
+        // add server to app
+        Self::add_service(&mut self.services, srv);
     }
 
     /// 启动 App
