@@ -23,6 +23,11 @@ impl TestService {
 }
 
 impl ServiceRs for TestService {
+    /// 获取 service nmae
+    fn name(&self) -> &str {
+        "test_service"
+    }
+
     /// 获取 service 句柄
     fn get_handle(&self) -> &RwLock<ServiceHandle> {
         &self.handle

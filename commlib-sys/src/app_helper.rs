@@ -66,7 +66,7 @@ impl App {
 
         // 启动 servie
         for w in &mut self.services {
-            start_service(&w.srv, "");
+            start_service(&w.srv, w.srv.name());
         }
     }
 

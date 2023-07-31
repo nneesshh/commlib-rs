@@ -84,6 +84,11 @@ impl ServiceSignalRs {
 }
 
 impl ServiceRs for ServiceSignalRs {
+    /// 获取 service nmae
+    fn name(&self) -> &str {
+        "service_signal"
+    }
+
     /// 获取 service 句柄
     fn get_handle(&self) -> &RwLock<ServiceHandle> {
         &self.handle

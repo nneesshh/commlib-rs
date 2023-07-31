@@ -21,6 +21,11 @@ impl ServiceNetRs {
 }
 
 impl ServiceRs for ServiceNetRs {
+    /// 获取 service nmae
+    fn name(&self) -> &str {
+        "service_net"
+    }
+
     /// 获取 service 句柄
     fn get_handle(&self) -> &RwLock<ServiceHandle> {
         &self.handle

@@ -117,6 +117,9 @@ impl ServiceHandle {
 
 /// Service start a new single thread, and run callback in it.
 pub trait ServiceRs: Send + Sync {
+    /// 获取 service nmae
+    fn name(&self) -> &str;
+
     /// 获取 service 句柄
     fn get_handle(&self) -> &RwLock<ServiceHandle>;
 
