@@ -13,3 +13,6 @@
 [submodule "parking_lot"]
 	path = parking_lot
 	url = https://github.com/nneesshh/parking_lot
+[submodule "curl-rust"]
+	path = curl-rust
+	url = https://github.com/nneesshh/curl-rust
