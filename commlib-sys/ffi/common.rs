@@ -11,7 +11,7 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use std::sync::Arc;
 
 pub struct ServiceWrapper {
-    srv: Arc<dyn crate::ServiceRs>,
+    srv: Arc<dyn ServiceRs>,
 }
 
 unsafe impl ExternType for ServiceWrapper {

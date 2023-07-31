@@ -34,6 +34,9 @@ impl ServiceRs for ServiceNetRs {
     /// 配置 service
     fn conf(&self) {}
 
+    /// Init in-service
+    fn init(&self) {}
+
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {
         let handle = self.get_handle().read();

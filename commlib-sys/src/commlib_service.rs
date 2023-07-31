@@ -126,6 +126,9 @@ pub trait ServiceRs: Send + Sync {
     /// 配置 service
     fn conf(&self);
 
+    /// Init in-service
+    fn init(&self);
+
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>);
 
@@ -201,53 +204,72 @@ pub fn start_service(srv: &Arc<dyn ServiceRs>, name_of_thread: &str) -> bool {
 
 ///
 pub fn run_service(srv: &Arc<dyn ServiceRs>, service_name: &str) {
-    let handle = srv.get_handle().read();
-    log::info!("[{}] start ... ID={}", service_name, handle.id);
-
-    while (State::Closed as u32) != (handle.state as u32) {
-        if (State::Closing as u32) == (handle.state as u32) {
-            if handle.rx.is_empty() {
-                let mut handle_mut = srv.get_handle().write();
-                handle_mut.quit_service();
-            }
-        }
+    {
+        let handle = srv.get_handle().read();
+        log::info!("[{}] start ... ID={}", service_name, handle.id);
     }
 
-    {
-        let sw = crate::StopWatch::new();
-
-        // mut handle
+    loop {
+        let mut run = false;
         {
-            let mut handle_mut = srv.get_handle().write();
-
-            // update clock
-            handle_mut.clock.update();
-        }
-
-        // dispatch cb -- process async tasks
-        let mut count = 4096_i32;
-        while count > 0 && !handle.rx.is_empty() {
-            match handle.rx.try_recv() {
-                Ok(mut cb) => {
-                    //log::info!("Dequeued item");
-                    cb();
-                    count -= 1;
+            let handle = srv.get_handle().read();
+            if (State::Closed as u32) == (handle.state as u32) {
+                break;
+            } else {
+                if (State::Closing as u32) == (handle.state as u32) {
+                    if handle.rx.is_empty() {
+                        // Quit
+                        let mut handle_mut = srv.get_handle().write();
+                        handle_mut.quit_service();
+                        break;
+                    }
+                    log::debug!("[{}] rx length={}", service_name, handle.rx.len());
                 }
-                Err(err) => {
-                    log::error!("service receive cb error:: {:?}", err);
-                }
+                run = true;
             }
         }
 
-        //
-        let cost = sw.elapsed();
-        if cost > 100_u128 {
-            log::error!(
-                "[{}] ID={} timeout cost: {}ms",
-                service_name,
-                handle.id,
-                cost
-            );
+        if run {
+            let sw = crate::StopWatch::new();
+
+            // handle for write
+            {
+                let mut handle_mut = srv.get_handle().write();
+
+                // update clock
+                handle_mut.clock.update();
+            }
+
+            // handle for read
+            {
+                let handle = srv.get_handle().read();
+
+                // dispatch cb -- process async tasks
+                let mut count = 4096_i32;
+                while count > 0 && !handle.rx.is_empty() {
+                    match handle.rx.try_recv() {
+                        Ok(mut cb) => {
+                            //log::info!("Dequeued item");
+                            cb();
+                            count -= 1;
+                        }
+                        Err(err) => {
+                            log::error!("service receive cb error:: {:?}", err);
+                        }
+                    }
+                }
+
+                //
+                let cost = sw.elapsed();
+                if cost > 100_u128 {
+                    log::error!(
+                        "[{}] ID={} timeout cost: {}ms",
+                        service_name,
+                        handle.id,
+                        cost
+                    );
+                }
+            }
         }
     }
 }

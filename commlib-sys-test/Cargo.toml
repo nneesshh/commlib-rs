@@ -8,6 +8,7 @@ readme = "README.md"
 build = "build.rs"
 
 [dependencies]
+lazy_static = "1"
 log = "0.4"
 commlib-sys = { path="../commlib-sys" }
 hashbrown = { path="../hashbrown" }

@@ -7,18 +7,21 @@ use parking_lot::RwLock;
 use commlib_sys::*;
 use std::sync::Arc;
 
+pub const SERVICE_ID_TEST_SERVICE: u64 = 10001_u64;
+lazy_static::lazy_static! {
+    pub static ref G_TEST_SERVICE: Arc<TestService> = Arc::new(TestService::new(SERVICE_ID_TEST_SERVICE));
+}
+
 pub struct TestService {
     pub handle: RwLock<ServiceHandle>,
 }
 
 impl TestService {
     ///
-    pub fn new(id: u64) -> Arc<TestService> {
-        Arc::new(
-            Self {
-                handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
-            }
-        )
+    pub fn new(id: u64) -> TestService {
+        Self {
+            handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
+        }
     }
 }
 
@@ -35,6 +38,13 @@ impl ServiceRs for TestService {
 
     /// 配置 service
     fn conf(&self) {}
+
+    /// Init in-service
+    fn init(&self) {
+        G_SERVICE_SIGNAL.listen_sig_int(G_TEST_SERVICE.clone(), || {
+            println!("WTF!!!!");
+        });
+    }
 
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {

@@ -59,10 +59,9 @@ impl ServiceSignalRs {
     }
 
     /// Listen signal: sig_int
-    pub fn listen_sig_int<F, S>(&self, f: F, srv: &'static Arc<RwLock<S>>)
+    pub fn listen_sig_int<F>(&self, srv: Arc<dyn ServiceRs>, f: F)
     where
         F: FnMut() + Send + Sync + 'static,
-        S: ServiceRs + Send + Sync + 'static,
     {
         let mut f = Some(f);
 
@@ -74,10 +73,10 @@ impl ServiceSignalRs {
                 let mut f = f.take();
 
                 // 事件触发时，将 f post 到工作线程执行
-                srv.read().run_in_service(Box::new(move || {
-                    let mut f = f.take().unwrap();
-                    f();
-                }));
+                // srv.run_in_service(Box::new(move || {
+                //     let mut f = f.take().unwrap();
+                //     f();
+                // }));
             });
         }));
     }
@@ -129,6 +128,9 @@ impl ServiceRs for ServiceSignalRs {
 
         crate::ffi_sig::init_signal_handlers(cb1, cb2, cb3);
     }
+
+    /// Init in-service
+    fn init(&self) {}
 
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {

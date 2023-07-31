@@ -5,7 +5,7 @@ fn main() {
   let mut app = App::new();
   app.start();
   app.attach(|| {
-    test_service::TestService::new(0)
+    test_service::G_TEST_SERVICE.clone()
   });
   app.run();
 }
