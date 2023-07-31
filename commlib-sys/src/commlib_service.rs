@@ -116,7 +116,7 @@ impl ServiceHandle {
 }
 
 /// Service start a new single thread, and run callback in it.
-pub trait ServiceRs {
+pub trait ServiceRs: Send + Sync {
     /// 获取 service 句柄
     fn get_handle(&self) -> &RwLock<ServiceHandle>;
 
@@ -134,10 +134,7 @@ pub trait ServiceRs {
 }
 
 /// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move
-pub fn start_service(
-    srv: Arc<dyn ServiceRs + Send + Sync + 'static>,
-    name_of_thread: String,
-) -> bool {
+pub fn start_service(srv: &Arc<dyn ServiceRs>, name_of_thread: &str) -> bool {
     let srv1 = srv.clone();
     let srv2 = srv.clone();
 
@@ -153,9 +150,10 @@ pub fn start_service(
 
     let exit_cv = Arc::clone(&crate::G_EXIT_CV);
 
+    let tname = name_of_thread.to_owned();
     handle1_mut.join_handle = Some(
         std::thread::Builder::new()
-            .name(name_of_thread.clone())
+            .name(tname.to_owned())
             .spawn(move || {
                 // notify ready
                 let tid = get_current_tid();
@@ -168,7 +166,7 @@ pub fn start_service(
                 cvar.notify_all();
 
                 // run
-                run_service(&srv2, name_of_thread);
+                run_service(&srv2, tname.as_str());
 
                 // exit
                 {
@@ -199,7 +197,7 @@ pub fn start_service(
 }
 
 ///
-pub fn run_service(srv: &Arc<dyn ServiceRs + Send + Sync + 'static>, service_name: String) {
+pub fn run_service(srv: &Arc<dyn ServiceRs>, service_name: &str) {
     let handle = srv.get_handle().read();
     log::info!("[{}] start ... ID={}", service_name, handle.id);
 

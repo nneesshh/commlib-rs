@@ -5,6 +5,7 @@
 use parking_lot::RwLock;
 
 use commlib_sys::*;
+use std::sync::Arc;
 
 pub struct TestService {
     pub handle: RwLock<ServiceHandle>,
@@ -12,10 +13,12 @@ pub struct TestService {
 
 impl TestService {
     ///
-    pub fn new(id: u64) -> TestService {
-        Self {
-            handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
-        }
+    pub fn new(id: u64) -> Arc<TestService> {
+        Arc::new(
+            Self {
+                handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
+            }
+        )
     }
 }
 

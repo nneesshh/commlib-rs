@@ -21,17 +21,11 @@ impl App {
     }
 
     fn init(&mut self) {
-        Self::add_service::<crate::ServiceSignalRs>(
-            &mut self.services,
-            crate::globals::G_SERVICE_SIGNAL.clone(),
-        );
-        Self::add_service::<crate::ServiceNetRs>(
-            &mut self.services,
-            crate::globals::G_SERVICE_NET.clone(),
-        );
+        Self::add_service(&mut self.services, crate::globals::G_SERVICE_SIGNAL.clone());
+        Self::add_service(&mut self.services, crate::globals::G_SERVICE_NET.clone());
     }
 
-    fn add_service<S>(
+    fn add_service(
         services: &mut Vec<crate::ServiceWrapper>,
         srv: Arc<dyn ServiceRs>,
     ) -> Option<Arc<dyn ServiceRs>> {
@@ -51,18 +45,16 @@ impl App {
     }
 
     /// 添加 service
-    pub fn attach<S, C>(&mut self, mut creator: C)
+    pub fn attach<C>(&mut self, mut creator: C)
     where
-        S: ServiceRs + 'static,
-        C: FnMut() -> S,
+        C: FnMut() -> Arc<dyn ServiceRs>,
     {
-        let s = creator();
-        let srv = Arc::new(s);
+        let srv = creator();
         srv.conf();
-        //start_service(w.srv, "");
+        start_service(&srv, "");
 
         // Update entry service
-        self.entry = Self::add_service::<S>(&mut self.services, srv);
+        self.entry = Self::add_service(&mut self.services, srv);
     }
 
     /// 启动 App
@@ -74,7 +66,7 @@ impl App {
 
         // 启动 servie
         for w in &mut self.services {
-            //start_service(w.srv, "");
+            start_service(&w.srv, "");
         }
     }
 
