@@ -2,11 +2,8 @@ use app_helper::App;
 mod test_service;
 
 fn main() {
-  let mut app = App::new();
-  app.start();
-  app.attach(|| {
-    test_service::G_TEST_SERVICE.as_ref()
-  });
-  app.run();
+    let mut app = App::new();
+    app.start();
+    app.attach(|| test_service::G_TEST_SERVICE.as_ref());
+    app.run();
 }
-

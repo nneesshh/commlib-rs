@@ -69,7 +69,7 @@ impl ServiceSignalRs {
             let mut f = f.take();
 
             // 在 Service thread 中注册事件回调
-            EventSignalInt::add_callback(move |e| {
+            EventSignalInt::add_callback(move |_e| {
                 let mut f = f.take();
 
                 // 事件触发时，将 f post 到工作线程执行

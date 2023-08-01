@@ -1,6 +1,7 @@
 //! Commlib: Conf
 use commlib_sys::*;
 
+#[allow(dead_code)]
 pub struct Log {
     level: u32,                 // log级别
     path: std::path::PathBuf,   // 日志路径
@@ -9,6 +10,7 @@ pub struct Log {
     async_queue: u32,           // 异步队列长度
 }
 
+#[allow(dead_code)]
 pub struct WebUrl {
     api_addr: String,
     player_id_addr: String, // 用来获取新玩家 pid
@@ -34,6 +36,7 @@ pub struct WebUrl {
     firebase_notice: String,       // firebase 消息通知地址
 }
 
+#[allow(dead_code)]
 pub struct Conf {
     job_params_: String, // 测试用例所需的工作参数字符串，用引号包围起来
 
@@ -73,4 +76,15 @@ impl Conf {
         let config_xml =
             xmlreader::XmlReader::read_file(std::path::Path::new("res/dragon.xml")).unwrap();
     }
+}
+
+/// 获取当前执行环境，正式环境目录结构
+/// dragon-game/
+///     env.dat
+///            /bin/
+///                 执行文件
+pub fn get_run_env() -> String {
+    
+
+    "".to_owned()
 }

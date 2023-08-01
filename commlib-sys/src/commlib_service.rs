@@ -89,7 +89,9 @@ impl ServiceHandle {
 
     ///
     pub fn quit_service(&mut self) {
-        self.state = State::Closed;
+        if (self.state as u32) < (State::Closed as u32) {
+            self.state = State::Closed;
+        }
     }
 
     /// 在 service 线程中执行回调任务
@@ -208,29 +210,36 @@ pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
         srv.init();
     }
 
+    let mut sw = crate::StopWatch::new();
     loop {
-        let mut run = false;
-        {
+        // check run
+        let run = {
             let handle = srv.get_handle().read();
             if (State::Closed as u32) == (handle.state as u32) {
-                break;
-            } else {
-                if (State::Closing as u32) == (handle.state as u32) {
-                    if handle.rx.is_empty() {
-                        // Quit
-                        let mut handle_mut = srv.get_handle().write();
-                        handle_mut.quit_service();
-                        break;
-                    }
+                false
+            } else if (State::Closing as u32) == (handle.state as u32) {
+                if handle.rx.is_empty() {
+                    false
+                } else {
                     log::debug!("[{}] rx length={}", service_name, handle.rx.len());
+                    true
                 }
-                run = true;
+            } else {
+                true
             }
-        }
+        };
 
-        if run {
-            let sw = crate::StopWatch::new();
+        // run or quit ?
+        if !run {
+            // handle for write
+            {
+                let mut handle_mut = srv.get_handle().write();
 
+                // mark service quit
+                handle_mut.quit_service();
+            }
+            break;
+        } else {
             // handle for write
             {
                 let mut handle_mut = srv.get_handle().write();
@@ -259,8 +268,8 @@ pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
                     }
                 }
 
-                //
-                let cost = sw.elapsed();
+                // sleep by cost
+                let cost = sw.elapsed_and_reset();
                 if cost > 60_u128 {
                     log::error!(
                         "[{}] ID={} timeout cost: {}ms",
@@ -268,6 +277,10 @@ pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
                         handle.id,
                         cost
                     );
+                } else {
+                    // sleep
+                    const SLEEP_MS: std::time::Duration = std::time::Duration::from_millis(1);
+                    std::thread::sleep(SLEEP_MS);
                 }
             }
         }

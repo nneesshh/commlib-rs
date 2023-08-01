@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config zone="1350034" group="1" limit_players="50000">
+    <nodes>1000,1001</nodes>
+    <!--是否检查登录session-->
+    <session_check>123</session_check>
+</config>
