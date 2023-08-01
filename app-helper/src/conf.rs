@@ -1,5 +1,14 @@
 //! Commlib: Conf
 use commlib_sys::*;
+use roxmltree::Node;
+
+use crate::conf;
+
+pub type NodeId = u64;
+pub type ZoneId = i32;
+pub type GroupId = u32;
+
+pub const TEST_NODE: NodeId = 999;
 
 #[allow(dead_code)]
 pub struct Log {
@@ -46,13 +55,20 @@ pub struct Conf {
     pub etcfile: std::ffi::OsString, // 配置文件名称
     pub env_: String,                // 当前的执行环境
 
-    pub xmlreader: XmlReader,
-
     pub log: Log,
     pub url: WebUrl,
 
     pub workdir: std::path::PathBuf, // 启动目录
     pub command: std::path::PathBuf, // 启动命令
+
+    pub node_id: NodeId,   // 区服节点 id
+    pub zone_id: ZoneId,   // 区服 id
+    pub group_id: GroupId, // 平台 id
+
+    pub version: String,     // 服务器版本号
+    pub version_check: bool, // 是否检查版本号
+
+    pub local_xml_nodes: hashbrown::HashMap<NodeId, XmlReader>, // xml 配置数据
 }
 
 impl Conf {
@@ -64,8 +80,6 @@ impl Conf {
             appname: "server".to_owned(),
             etcfile: std::ffi::OsString::default(),
             env_: "dev".to_owned(),
-
-            xmlreader: XmlReader::new(),
 
             log: Log {
                 level: spdlog::Level::Debug as u32,
@@ -99,11 +113,20 @@ impl Conf {
 
             workdir: std::path::PathBuf::default(),
             command: std::path::PathBuf::default(),
+
+            node_id: 0,
+            zone_id: 0,
+            group_id: 0,
+
+            version: "".to_owned(),
+            version_check: false,
+
+            local_xml_nodes: hashbrown::HashMap::new(),
         }
     }
 
     ///
-    pub fn init(&mut self, arg_vec: &Vec<std::ffi::OsString>, srv_name: String) {
+    pub fn init(&mut self, arg_vec: &Vec<std::ffi::OsString>, srv_name: &str) {
         // 读取一下当前的执行环境
         let env_r = get_run_env();
         match env_r {
@@ -140,7 +163,7 @@ impl Conf {
             .to_owned();
         if (self.etcfile.is_empty()) {
             const ETCFILE_DEFAULT: &str = "res/dragon.xml";
-            const DRAGON_XML_CFG_ENV: &str ="DRAGON_XML_CFG";
+            const DRAGON_XML_CFG_ENV: &str = "DRAGON_XML_CFG";
             if let Some(cfg_env) = std::env::var_os(DRAGON_XML_CFG_ENV) {
                 self.etcfile = cfg_env;
             } else {
@@ -154,9 +177,59 @@ impl Conf {
             self.url.auth_token = auth_token;
         }
 
-        // 从
-        let config_xml =
-            xmlreader::XmlReader::read_file(std::path::Path::new("res/dragon.xml")).unwrap();
+        //
+        self.job_params_ = matches.get_one::<String>("j").unwrap().to_owned();
+
+        //
+        let loglevel = matches.get_one::<u32>("l").unwrap();
+        if *loglevel > 0 {
+            self.log.level = *loglevel;
+        }
+
+        //
+        self.url.api_addr = matches.get_one::<String>("a").unwrap().to_owned();
+
+        //
+        self.node_id = *matches.get_one::<NodeId>("n").unwrap();
+        self.zone_id = *matches.get_one::<ZoneId>("z").unwrap();
+        self.group_id = *matches.get_one::<GroupId>("g").unwrap();
+
+        // 设置 appname (等价于设置 log file name)
+        let server_name = matches.get_one::<String>("s").unwrap();
+        if !server_name.is_empty() {
+            self.appname = server_name.to_owned();
+        } else {
+            self.appname = srv_name.to_owned();
+        }
+
+        //
+        let ver = matches.get_one::<String>("v").unwrap();
+        if !ver.is_empty() {
+            self.version = ver.to_owned();
+        }
+
+        // 从 etcfile(xml 格式) 中读取配置信息
+        if !self.etcfile.is_empty() {
+            let config_xml =
+                xmlreader::XmlReader::read_file(std::path::Path::new("res/dragon.xml")).unwrap();
+            Self::read_config_from_xml( &config_xml, srv_name);
+        }
+
+        // node_id must match xml_node
+        if self.node_id > 0 {
+            if TEST_NODE == self.node_id {
+                // test node do nothing
+            } else {
+                let found = false;
+                for (k, v) in &self.local_xml_nodes {
+
+                }
+            }
+        }
+    }
+
+    fn read_config_from_xml(config_xml:& xmlreader::XmlReader, srv_name: &str) {
+
     }
 }
 
