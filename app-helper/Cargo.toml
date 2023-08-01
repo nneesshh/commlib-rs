@@ -21,4 +21,5 @@ hashbrown = { path="../hashbrown" }
 parking_lot = { path="../parking_lot" }
 roxmltree = { path="../roxmltree" }
 spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
+clap = { path="../clap" }
 commlib-sys = { path="../commlib-sys" }

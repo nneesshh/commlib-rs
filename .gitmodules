@@ -16,3 +16,6 @@
 [submodule "curl-rust"]
 	path = curl-rust
 	url = https://github.com/nneesshh/curl-rust
+[submodule "clap"]
+	path = clap
+	url = https://github.com/nneesshh/clap.git

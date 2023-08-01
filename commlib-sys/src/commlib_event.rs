@@ -4,8 +4,13 @@
 //! EventDispatcher use "observer pattern"
 //! Observer is a behavioral design pattern that allows one objects to notify other objects about changes in their state.
 
+use crate::StopWatch;
+
 /// Trait to signal that this is an event type.
 pub trait Event {
+    /// Id string
+    fn id(&self) -> &str;
+
     /// Add callback for event
     fn add_callback<'a, F>(f: F)
     where
@@ -77,8 +82,21 @@ where
     }
 
     pub fn call(&mut self, e: &E) {
+        let sw = StopWatch::new();
         for h in &mut self.handlers {
             h.handle(e);
+        }
+
+        let cost = sw.elapsed();
+        if cost > 10_u128 {
+            let typeid = e.clone();
+            log::error!(
+                "call on event ID={} timeout cost: {}ms, hotspot **@{}:{}",
+                e.id(),
+                cost,
+                std::file!(), //TODO: rela filename
+                std::line!()  //TODO: real linenumber
+            )
         }
     }
 }
@@ -89,6 +107,10 @@ macro_rules! impl_event_for {
     ($s:ident, $t:ident) => {
         paste::paste! {
             impl Event for $t {
+                /// Id string
+                fn id(&self) -> &str {
+                    stringify!([<$s _ $t>])
+                }
                 fn add_callback<F>(f: F)
                 where
                     F: FnMut(&Self) + 'static,
