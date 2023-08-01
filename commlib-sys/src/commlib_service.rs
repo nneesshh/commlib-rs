@@ -261,7 +261,7 @@ pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
 
                 //
                 let cost = sw.elapsed();
-                if cost > 15_u128 {
+                if cost > 60_u128 {
                     log::error!(
                         "[{}] ID={} timeout cost: {}ms",
                         service_name,
