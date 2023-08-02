@@ -29,13 +29,6 @@ impl StartupHandle {
     }
 
     ///
-    pub(crate) fn clear(&mut self) {
-        self.tasks.clear();
-        self.index = 0;
-        self.suspending = false;
-    }
-
-    ///
     pub(crate) fn exec_tasks(&mut self) {
         let task_count = self.tasks.len();
         if 0 == task_count {
@@ -106,14 +99,14 @@ pub struct Startup {
 }
 
 impl Startup {
-    ///
+    /// Constructor
     pub fn new(srv_id: i32) -> Startup {
         Startup {
             handle: Mutex::new(StartupHandle::new(srv_id)),
         }
     }
 
-    ///
+    /// 添加启动步骤
     pub fn add_step<F>(&mut self, desc: &str, action: F)
     where
         F: FnMut() -> bool + Send + Sync + 'static,
@@ -132,18 +125,12 @@ impl Startup {
         handle.exec_tasks();
     }
 
-    ///
+    /// 挂起返回，继续执行启动步骤，注意避免死循环
     pub fn resume(&mut self) {
         let mut handle = self.handle.lock();
         if handle.suspending {
             handle.index += 1;
         }
         handle.exec_tasks();
-    }
-
-    ///
-    pub fn clear(&mut self) {
-        let mut handle = self.handle.lock();
-        handle.clear();
     }
 }
