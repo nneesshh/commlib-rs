@@ -53,11 +53,11 @@ pub fn split_string_to_vec_vec<T>(s: &str, sep: &str) -> Vec<Vec<T>>
 where
     T: std::str::FromStr + Default,
 {
-    let vec1 = split_string_to_vec::<String>(s, "|");
-    let mut vec_vec = Vec::<Vec<T>>::with_capacity(vec1.len());
-    for it1 in &vec1 {
-        let tvec = split_string_to_vec::<T>(it1, sep);
-        vec_vec.push(tvec);
+    let first_vec = split_string_to_vec::<String>(s, "|");
+    let mut vec_vec = Vec::<Vec<T>>::with_capacity(first_vec.len());
+    for first_it in &first_vec {
+        let second_vec = split_string_to_vec::<T>(first_it, sep);
+        vec_vec.push(second_vec);
     }
     vec_vec
 }
@@ -69,17 +69,57 @@ where
     K: std::str::FromStr + Default + std::hash::Hash + std::cmp::Eq,
     V: std::str::FromStr + Default,
 {
-    let vec1 = split_string_to_vec::<String>(s, "|");
-    let mut table = hashbrown::HashMap::<K, V>::with_capacity(vec1.len());
-    for it1 in &vec1 {
-        let kvvec = split_string_to_vec::<String>(it1, sep);
-        if kvvec.len() >= 2 {
-            let k = string_to_value::<K>(&kvvec[0]);
-            let v = string_to_value::<V>(&kvvec[1]);
+    let first_vec = split_string_to_vec::<String>(s, "|");
+    let mut table = hashbrown::HashMap::<K, V>::with_capacity(first_vec.len());
+    for first_it in &first_vec {
+        let second_vec = split_string_to_vec::<String>(first_it, sep);
+        if second_vec.len() >= 2 {
+            let k = string_to_value::<K>(&second_vec[0]);
+            let v = string_to_value::<V>(&second_vec[1]);
             table.insert(k, v);
         }
     }
     table
+}
+
+/// 分割字符串，结果转换成目标类型 std::tuple(U, V)
+#[inline(always)]
+pub fn split_string_to_pair<U, V>(s: &str, sep: &str) -> (U, V)
+where
+    U: std::str::FromStr + Default,
+    V: std::str::FromStr + Default,
+{
+    let vec = split_string_to_vec::<String>(s, "|");
+    if vec.len() >= 2 {
+        let u = string_to_value::<U>(&vec[0]);
+        let v = string_to_value::<V>(&vec[1]);
+        (u, v)
+    } else {
+        (U::default(), V::default())
+    }
+}
+
+/// 分割字符串，结果转换成目标类型 Vec<(U, V)>
+#[inline(always)]
+pub fn split_string_to_vec_pair<U, V>(s: &str, sep: &str) -> Vec<(U, V)>
+where
+    U: std::str::FromStr + Default,
+    V: std::str::FromStr + Default,
+{
+    let first_vec = split_string_to_vec::<String>(s, "|");
+    let mut vec_pair = Vec::<(U, V)>::with_capacity(first_vec.len());
+    for first_it in &first_vec {
+        let second_vec = split_string_to_vec::<String>(first_it, sep);
+        let pair = if second_vec.len() >= 2 {
+            let u = string_to_value::<U>(&second_vec[0]);
+            let v = string_to_value::<V>(&second_vec[1]);
+            (u, v)
+        } else {
+            (U::default(), V::default())
+        };
+        vec_pair.push(pair);
+    }
+    vec_pair
 }
 
 #[allow(dead_code)]
