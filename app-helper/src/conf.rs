@@ -80,7 +80,7 @@ pub struct Conf {
     pub node_id: NodeId,   // 区服节点 id
     pub zone_id: ZoneId,   // 区服 id
     pub group_id: GroupId, // 平台 id
-    
+
     pub limit_players: u32, // 玩家注册数限制
 
     pub version: String,     // 服务器版本号
@@ -180,16 +180,12 @@ impl Conf {
         self.command = std::env::current_exe().unwrap();
 
         // 配置文件位置，先从参数获取，再从默认位置
-        let etcfile = matches
-            .get_one::<String>("config")
-            .unwrap()
-            .to_owned();
+        let etcfile = matches.get_one::<String>("config").unwrap().to_owned();
 
         //self.etcfile
         if !etcfile.is_empty() {
             self.etcfile = std::ffi::OsString::from(etcfile.trim());
-        }
-        else {
+        } else {
             const ETCFILE_DEFAULT: &str = "res/dragon.xml";
             const DRAGON_XML_CFG_ENV: &str = "DRAGON_XML_CFG";
             if let Some(cfg_env) = std::env::var_os(DRAGON_XML_CFG_ENV) {
@@ -309,15 +305,39 @@ impl Conf {
             self.version = config_xml.get::<String>(vec!["version"], "".to_owned());
         }
 
+        //
+        self.version_check = config_xml.get::<bool>(vec!["version", "check"], true);
+
         // use command line first
         if self.cross_zones.len() == 0 {
             let zones = config_xml.get::<String>(vec!["zones"], "".to_owned());
             self.cross_zones = split_string_to_set::<ZoneId>(&zones, ",");
         }
 
-        // 
+        //
         self.limit_players = config_xml.get::<u32>(vec!["limit_players"], self.limit_players);
-        
+
+        //
+        if srv_name.is_empty() {
+            if TEST_NODE == self.node_id {
+                // TEST NODE
+                std::panic!("TEST NODE ID must be {}", TEST_NODE);
+                //std::process::exit(0);
+            }
+        } else {
+            // node id must match xml_node
+            if let Some(xml_nodes) = config_xml.get_children(vec!["node"]) {
+                for xml_node in xml_nodes {
+                    let nid = xml_node.get_u64(vec!["id"], 0);
+                    let name = xml_node.get_string(vec!["name"], "");
+
+                    self.local_xml_nodes.insert(nid, xml_node.to_owned());
+
+                    if self.node_id == 0 && name == srv_name {
+                        self.node_id = nid;
+                    }
+                }
+            }
+        }
     }
 }
-

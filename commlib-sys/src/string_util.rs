@@ -89,7 +89,7 @@ where
     U: std::str::FromStr + Default,
     V: std::str::FromStr + Default,
 {
-    let vec = split_string_to_vec::<String>(s, "|");
+    let vec = split_string_to_vec::<String>(s, sep);
     if vec.len() >= 2 {
         let u = string_to_value::<U>(&vec[0]);
         let v = string_to_value::<V>(&vec[1]);

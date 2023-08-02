@@ -17,6 +17,9 @@ impl ServiceNetRs {
             handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
         }
     }
+
+    ///
+    pub fn listen(srv: &dyn ServiceRs, name: &str) {}
 }
 
 impl ServiceRs for ServiceNetRs {
