@@ -9,6 +9,10 @@ pub mod stop_watch;
 pub use stop_watch::*;
 
 ///
+pub mod string_util;
+pub use string_util::*;
+
+///
 pub mod commlib_event;
 pub use commlib_event::*;
 

@@ -6,9 +6,6 @@ pub mod ffi_common {
     }
 }
 
-use parking_lot::{Condvar, Mutex, RwLock};
-use std::sync::Arc;
-
 #[repr(transparent)]
 pub struct ServiceWrapper {
     pub srv: &'static dyn ServiceRs,

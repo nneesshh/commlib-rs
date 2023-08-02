@@ -1,27 +1,19 @@
 //!
 //! Common Library: service-signal
 //!
-use parking_lot::{Condvar, Mutex, RwLock};
-use spdlog::get_current_tid;
-use std::{borrow::BorrowMut, sync::Arc};
+use parking_lot::RwLock;
 
 use super::commlib_service::*;
 use crate::commlib_event::*;
 
 /// Event
-pub struct EventSignalInt {
-    code: u32,
-}
+pub struct EventSignalInt();
 crate::impl_event_for!(ServiceSignalRs, EventSignalInt);
 
-pub struct EventSignalUsr1 {
-    code: u32,
-}
+pub struct EventSignalUsr1();
 crate::impl_event_for!(ServiceSignalRs, EventSignalUsr1);
 
-pub struct EventSignalUsr2 {
-    code: u32,
-}
+pub struct EventSignalUsr2();
 crate::impl_event_for!(ServiceSignalRs, EventSignalUsr2);
 
 /// ServiceSignal
@@ -40,21 +32,21 @@ impl ServiceSignalRs {
     /// Event: sig_int
     pub fn on_sig_int(&self) {
         // Trigger event
-        let mut e = EventSignalInt { code: 0 };
+        let mut e = EventSignalInt {};
         e.trigger();
     }
 
     /// Event: sig_usr1
     pub fn on_sig_usr1(&self) {
         // Trigger event
-        let mut e = EventSignalUsr1 { code: 0 };
+        let mut e = EventSignalUsr1 {};
         e.trigger();
     }
 
     /// Event: sig_usr2
     pub fn on_sig_usr2(&self) {
         // Trigger event
-        let mut e = EventSignalUsr2 { code: 0 };
+        let mut e = EventSignalUsr2 {};
         e.trigger();
     }
 

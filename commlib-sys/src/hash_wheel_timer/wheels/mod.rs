@@ -1,15 +1,7 @@
 //! This module contains the level 1 and 2 APIs for building event timers.
 
 use super::*;
-use std::{
-    cmp::Eq,
-    convert::Infallible,
-    fmt::Debug,
-    hash::Hash,
-    mem,
-    time::Duration,
-    u32,
-};
+use std::{cmp::Eq, convert::Infallible, fmt::Debug, hash::Hash, mem, time::Duration, u32};
 
 pub mod byte_wheel;
 pub mod cancellable;

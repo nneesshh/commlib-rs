@@ -1,9 +1,8 @@
 //!
 //! Common Library: service-signal
 //!
-use parking_lot::{Condvar, Mutex, RwLock};
-use spdlog::get_current_tid;
-use std::sync::Arc;
+use parking_lot::RwLock;
+//use std::sync::Arc;
 
 use super::commlib_service::*;
 

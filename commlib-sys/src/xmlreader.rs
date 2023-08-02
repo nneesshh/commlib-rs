@@ -97,18 +97,41 @@ impl XmlReader {
     }
 
     /// 根据 键值路径(keys) 读取 节点 字符串值
-    pub fn get_string(&self, keys: Vec<&str>) -> Option<String> {
+    pub fn get_string(&self, keys: Vec<&str>, default_value: &str) -> String {
         if let Some(reader) = self.get_child(keys) {
-            Some(reader.value.clone())
+            reader.value.clone()
         } else {
-            None
+            default_value.to_owned()
         }
     }
 
     /// 根据 键值路径(keys) 读取 节点 u64值
-    pub fn get_u64(self, keys: Vec<&str>) -> Option<u64> {
-        let str_r = self.get_string(keys);
-        str_r.map(|s| if let Ok(n) = s.parse::<u64>() { n } else { 0 })
+    pub fn get_u64(&self, keys: Vec<&str>, default_value: u64) -> u64 {
+        if let Some(reader) = self.get_child(keys) {
+            if let Ok(n) = reader.value.parse::<u64>() {
+                n
+            } else {
+                0
+            }
+        } else {
+            default_value
+        }
+    }
+
+    /// 根据 键值路径(keys) 读取 节点 字符串值，然后转换成目标类型 T
+    pub fn get<T>(&self, keys: Vec<&str>, default_value: T) -> T
+    where
+        T: std::str::FromStr + ToOwned<Owned = T>,
+    {
+        if let Some(reader) = self.get_child(keys) {
+            if let Ok(v) = reader.value.parse::<T>() {
+                v
+            } else {
+                default_value
+            }
+        } else {
+            default_value
+        }
     }
 
     /// 根据 键值路径(keys) 查找 节点, 遇到多 children 直接选取第一个child

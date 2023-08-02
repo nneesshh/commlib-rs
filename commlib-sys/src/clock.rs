@@ -2,8 +2,8 @@
 //! Clock
 //!
 
-use std::ops::AddAssign;
 use crate::hash_wheel_timer::{self, ClosureTimer, TimerReturn::Reschedule};
+use std::ops::AddAssign;
 
 pub type WheelTimer = hash_wheel_timer::wheel_timer::WheelTimer<
     uuid::Uuid,
@@ -79,11 +79,11 @@ impl Clock {
 
     /// 更新计时器 tick
     pub fn update(&mut self) {
-        match self.last_time.elapsed(){
+        match self.last_time.elapsed() {
             Ok(d) => {
                 self.wheel_timer.update(d);
                 self.last_time.add_assign(d);
-            },
+            }
             Err(err) => {
                 log::error!("clock error: {:?}!!!", err);
             }

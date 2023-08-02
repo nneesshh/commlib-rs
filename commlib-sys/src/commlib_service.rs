@@ -7,8 +7,6 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use spdlog::get_current_tid;
 use std::sync::Arc;
 
-use crate::G_EXIT_CV;
-
 ///
 #[derive(Debug, Copy, Clone)]
 pub enum State {

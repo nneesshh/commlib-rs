@@ -88,17 +88,21 @@ where
 {
     /// Insert a new timeout into the wheel
     pub fn insert(&mut self, e: EntryType) -> Result<(), TimerError<EntryType>> {
-        self.insert_ref(std::sync::Arc::new(e)).map_err(|err| match err {
-            TimerError::Expired(rc_e) => {
-                let e = std::sync::Arc::try_unwrap(rc_e).unwrap(); // No one except us should have references as this point, so this should be safe
-                TimerError::Expired(e)
-            }
-            TimerError::NotFound => TimerError::NotFound,
-        })
+        self.insert_ref(std::sync::Arc::new(e))
+            .map_err(|err| match err {
+                TimerError::Expired(rc_e) => {
+                    let e = std::sync::Arc::try_unwrap(rc_e).unwrap(); // No one except us should have references as this point, so this should be safe
+                    TimerError::Expired(e)
+                }
+                TimerError::NotFound => TimerError::NotFound,
+            })
     }
 
     /// Insert a new timeout into the wheel
-    pub fn insert_ref(&mut self, e: std::sync::Arc<EntryType>) -> Result<(), TimerError<std::sync::Arc<EntryType>>> {
+    pub fn insert_ref(
+        &mut self,
+        e: std::sync::Arc<EntryType>,
+    ) -> Result<(), TimerError<std::sync::Arc<EntryType>>> {
         let delay = e.delay();
         self.insert_ref_with_delay(e, delay)
     }
@@ -148,7 +152,10 @@ where
         }
     }
 
-    fn take_timer(&mut self, weak_e: std::sync::Weak<EntryType>) -> Option<std::sync::Arc<EntryType>> {
+    fn take_timer(
+        &mut self,
+        weak_e: std::sync::Weak<EntryType>,
+    ) -> Option<std::sync::Arc<EntryType>> {
         match weak_e.upgrade() {
             Some(rc_e) => {
                 match self.timers.remove_entry(rc_e.id()) {

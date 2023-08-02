@@ -1,14 +1,30 @@
 //! Commlib: Conf
 use commlib_sys::*;
-use roxmltree::Node;
-
-use crate::conf;
 
 pub type NodeId = u64;
 pub type ZoneId = i32;
 pub type GroupId = u32;
 
 pub const TEST_NODE: NodeId = 999;
+
+/// 获取当前执行环境，正式环境目录结构
+/// dragon-game/
+///     env.dat
+///            /bin/
+///                 执行文件
+pub fn get_run_env() -> Result<String, String> {
+    const ENV_FILE_PATH: &str = "../env.dat";
+    let path = std::path::Path::new(ENV_FILE_PATH);
+    let content_r = std::fs::read_to_string(path);
+    match content_r {
+        Ok(content) => Ok(content),
+        Err(e) => {
+            let errmsg = format!("read env file({:?}) error: {}.", path, e);
+            println!("{errmsg}");
+            Err(errmsg)
+        }
+    }
+}
 
 #[allow(dead_code)]
 pub struct Log {
@@ -64,11 +80,15 @@ pub struct Conf {
     pub node_id: NodeId,   // 区服节点 id
     pub zone_id: ZoneId,   // 区服 id
     pub group_id: GroupId, // 平台 id
+    
+    pub limit_players: u32, // 玩家注册数限制
 
     pub version: String,     // 服务器版本号
     pub version_check: bool, // 是否检查版本号
 
     pub local_xml_nodes: hashbrown::HashMap<NodeId, XmlReader>, // xml 配置数据
+
+    pub cross_zones: hashbrown::HashSet<ZoneId>, // 同一跨服内的区服列表
 }
 
 impl Conf {
@@ -118,10 +138,14 @@ impl Conf {
             zone_id: 0,
             group_id: 0,
 
+            limit_players: 20000,
+
             version: "".to_owned(),
             version_check: false,
 
             local_xml_nodes: hashbrown::HashMap::new(),
+
+            cross_zones: hashbrown::HashSet::new(),
         }
     }
 
@@ -131,23 +155,22 @@ impl Conf {
         let env_r = get_run_env();
         match env_r {
             Ok(content) => self.env_ = content,
-            Err(err) => {}
+            Err(_err) => {}
         }
 
         // 解析命令行参数
         let matches = clap::Command::new("myprog")
-            .version("1.0")
             .author("nneessh<nneessh@gmail.com>")
             .about("app-helper::conf")
-            .arg(clap::arg!(-c --config <FILE> "配置文件地址").required(false).default_value(""))
-            .arg(clap::arg!(-n --nodeid <VALUE> "启动节点").required(false).default_value("0"))
-            .arg(clap::arg!(-l --loglevel <VALUE> "日志等级").required(false).default_value("0"))
-            .arg(clap::arg!(-a --api <VALUE> "node api 地址").required(false).default_value(""))
-            .arg(clap::arg!(-s --servername <STRING> "服务器名称").required(false).default_value(""))
-            .arg(clap::arg!(-z --zone <VALUE> "区服id").required(false).default_value("0"))
-            .arg(clap::arg!(-g --group <VALUE> "服务器组（平台）").required(false).default_value("0"))
-            .arg(clap::arg!(-v --version <VALUE> "版本号").required(false).default_value(""))
-            .arg(clap::arg!(-j --"job-params" <VALUE> "测试用例所需的工作参数字符串，用引号包围起来").required(false).default_value(""))
+            .arg(clap::arg!(-c --config <FILE> "配置文件地址").value_parser(clap::value_parser!(String)).required(false).default_value(""))
+            .arg(clap::arg!(-n --nodeid <VALUE> "启动节点").value_parser(clap::value_parser!(NodeId)).required(false).default_value("0"))
+            .arg(clap::arg!(-l --loglevel <VALUE> "日志等级").value_parser(clap::value_parser!(u32)).required(false).default_value("0"))
+            .arg(clap::arg!(-a --api <VALUE> "node api 地址").value_parser(clap::value_parser!(String)).required(false).default_value(""))
+            .arg(clap::arg!(-s --servername <STRING> "服务器名称").value_parser(clap::value_parser!(String)).required(false).default_value(""))
+            .arg(clap::arg!(-z --zone <VALUE> "区服id").value_parser(clap::value_parser!(ZoneId)).required(false).default_value("0"))
+            .arg(clap::arg!(-g --group <VALUE> "服务器组（平台）").value_parser(clap::value_parser!(GroupId)).required(false).default_value("0"))
+            .arg(clap::arg!(-v --version <VALUE> "版本号").value_parser(clap::value_parser!(String)).required(false).default_value(""))
+            .arg(clap::arg!(-j --"job-params" <VALUE> "测试用例所需的工作参数字符串，用引号包围起来").value_parser(clap::value_parser!(String)).required(false).default_value(""))
             .get_matches_from(arg_vec);
 
         // 启动目录
@@ -157,11 +180,16 @@ impl Conf {
         self.command = std::env::current_exe().unwrap();
 
         // 配置文件位置，先从参数获取，再从默认位置
-        self.etcfile = matches
-            .get_one::<std::ffi::OsString>("c")
+        let etcfile = matches
+            .get_one::<String>("config")
             .unwrap()
             .to_owned();
-        if (self.etcfile.is_empty()) {
+
+        //self.etcfile
+        if !etcfile.is_empty() {
+            self.etcfile = std::ffi::OsString::from(etcfile.trim());
+        }
+        else {
             const ETCFILE_DEFAULT: &str = "res/dragon.xml";
             const DRAGON_XML_CFG_ENV: &str = "DRAGON_XML_CFG";
             if let Some(cfg_env) = std::env::var_os(DRAGON_XML_CFG_ENV) {
@@ -178,24 +206,24 @@ impl Conf {
         }
 
         //
-        self.job_params_ = matches.get_one::<String>("j").unwrap().to_owned();
+        self.job_params_ = matches.get_one::<String>("job-params").unwrap().to_owned();
 
         //
-        let loglevel = matches.get_one::<u32>("l").unwrap();
+        let loglevel = matches.get_one::<u32>("loglevel").unwrap();
         if *loglevel > 0 {
             self.log.level = *loglevel;
         }
 
         //
-        self.url.api_addr = matches.get_one::<String>("a").unwrap().to_owned();
+        self.url.api_addr = matches.get_one::<String>("api").unwrap().to_owned();
 
         //
-        self.node_id = *matches.get_one::<NodeId>("n").unwrap();
-        self.zone_id = *matches.get_one::<ZoneId>("z").unwrap();
-        self.group_id = *matches.get_one::<GroupId>("g").unwrap();
+        self.node_id = *matches.get_one::<NodeId>("nodeid").unwrap();
+        self.zone_id = *matches.get_one::<ZoneId>("zone").unwrap();
+        self.group_id = *matches.get_one::<GroupId>("group").unwrap();
 
         // 设置 appname (等价于设置 log file name)
-        let server_name = matches.get_one::<String>("s").unwrap();
+        let server_name = matches.get_one::<String>("servername").unwrap();
         if !server_name.is_empty() {
             self.appname = server_name.to_owned();
         } else {
@@ -203,16 +231,15 @@ impl Conf {
         }
 
         //
-        let ver = matches.get_one::<String>("v").unwrap();
+        let ver = matches.get_one::<String>("version").unwrap();
         if !ver.is_empty() {
             self.version = ver.to_owned();
         }
 
         // 从 etcfile(xml 格式) 中读取配置信息
         if !self.etcfile.is_empty() {
-            let config_xml =
-                xmlreader::XmlReader::read_file(std::path::Path::new("res/dragon.xml")).unwrap();
-            Self::read_config_from_xml( &config_xml, srv_name);
+            let config_xml = XmlReader::read_file(std::path::Path::new(&self.etcfile)).unwrap();
+            self.read_config_from_xml(&config_xml, srv_name);
         }
 
         // node_id must match xml_node
@@ -220,34 +247,77 @@ impl Conf {
             if TEST_NODE == self.node_id {
                 // test node do nothing
             } else {
-                let found = false;
-                for (k, v) in &self.local_xml_nodes {
+                //
+                let found = {
+                    if let Some(_) = self.local_xml_nodes.get(&self.node_id) {
+                        true
+                    } else {
+                        false
+                    }
+                };
 
+                // can't find xml node
+                if !found {
+                    // commlib exit
+                    std::panic!("node xml error");
+                    //std::process::exit(0);
                 }
             }
+        } else {
+            // commlib exit
+            std::panic!("null node");
+            //std::process::exit(0);
+        }
+
+        // 保证 includes 包含自己
+        self.cross_zones.insert(self.zone_id);
+    }
+
+    ///
+    pub fn is_valid_zone(&self, zone: ZoneId) -> bool {
+        if zone == self.zone_id {
+            true
+        } else {
+            for z in &self.cross_zones {
+                if zone == *z {
+                    return true;
+                }
+            }
+            false
         }
     }
 
-    fn read_config_from_xml(config_xml:& xmlreader::XmlReader, srv_name: &str) {
-
+    ///
+    pub fn get_xml_node(&self, node_id: NodeId) -> Option<&XmlReader> {
+        self.local_xml_nodes.get(&node_id)
     }
-}
 
-/// 获取当前执行环境，正式环境目录结构
-/// dragon-game/
-///     env.dat
-///            /bin/
-///                 执行文件
-pub fn get_run_env() -> Result<String, String> {
-    const ENV_FILE_PATH: &str = "../env.dat";
-    let path = std::path::Path::new(ENV_FILE_PATH);
-    let content_r = std::fs::read_to_string(path);
-    match content_r {
-        Ok(content) => Ok(content),
-        Err(e) => {
-            let errmsg = format!("read env file({:?}) error: {}.", path, e);
-            println!("{errmsg}");
-            Err(errmsg)
+    ///
+    fn read_config_from_xml(&mut self, config_xml: &XmlReader, srv_name: &str) {
+        // use command line first
+        if self.zone_id == 0 {
+            self.zone_id = config_xml.get::<ZoneId>(vec!["zone"], 0);
         }
+
+        // use command line first
+        if self.group_id == 0 {
+            self.group_id = config_xml.get::<GroupId>(vec!["group"], 0);
+        }
+
+        // use command line first
+        if self.version.is_empty() {
+            self.version = config_xml.get::<String>(vec!["version"], "".to_owned());
+        }
+
+        // use command line first
+        if self.cross_zones.len() == 0 {
+            let zones = config_xml.get::<String>(vec!["zones"], "".to_owned());
+            self.cross_zones = split_string_to_set::<ZoneId>(&zones, ",");
+        }
+
+        // 
+        self.limit_players = config_xml.get::<u32>(vec!["limit_players"], self.limit_players);
+        
     }
 }
+

@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<config zone="1350034" group="1" limit_players="50000">
+<config zone="1350034" group="1" version="v0.1" limit_players="50000">
     <nodes>1000,1001</nodes>
     <!--是否检查登录session-->
     <session_check>123</session_check>
+    <!--跨服玩法服务器节点，须遵循拼写规则“ 1002 + zoned ”-->
+    <cross>10021350034</cross>
+    <!--包含的区-->
+    <zones>33</zones>
 </config>

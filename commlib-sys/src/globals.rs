@@ -1,6 +1,5 @@
-use hashbrown::{HashMap, HashSet};
-use parking_lot::{Condvar, Mutex, RwLock};
-use std::sync::{atomic::AtomicBool, Arc};
+use parking_lot::{Condvar, Mutex};
+use std::sync::Arc;
 
 /// Service ID
 pub const SERVICE_ID_SIG: u64 = 1001_u64;

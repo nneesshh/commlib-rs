@@ -89,7 +89,6 @@ where
 
         let cost = sw.elapsed();
         if cost > 10_u128 {
-            let typeid = e.clone();
             log::error!(
                 "call on event ID={} timeout cost: {}ms, hotspot **@{}:{}",
                 e.id(),

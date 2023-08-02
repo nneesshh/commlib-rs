@@ -63,5 +63,4 @@ impl ServiceRs for TestService {
         let mut handle_mut = self.get_handle().write();
         handle_mut.join_service();
     }
-
 }

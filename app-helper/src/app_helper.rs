@@ -7,20 +7,40 @@ pub struct App {
 
 impl App {
     /// Constructor
-    pub fn new() -> Self {
+    pub fn new(arg_vec: &Vec<std::ffi::OsString>, srv_name: &str) -> Self {
         let mut app = Self {
             services: Vec::default(),
         };
-        app.init();
+        app.init(arg_vec, srv_name);
+        app.start();
         app
     }
 
-    fn init(&mut self) {
+    fn init(&mut self, arg_vec: &Vec<std::ffi::OsString>, srv_name: &str) {
+        // init G_CONF
+        {
+            let mut g_conf_mut = crate::G_CONF.write();
+            (*g_conf_mut).init(&arg_vec, srv_name);
+        }
+
+        // init logger
         let log_path = std::path::PathBuf::from("auto-legend");
         init_logger(&log_path, "testlog", spdlog::Level::Info as u32, true);
 
         Self::add_service(&mut self.services, G_SERVICE_SIGNAL.as_ref());
         Self::add_service(&mut self.services, G_SERVICE_NET.as_ref());
+    }
+
+    fn start(&mut self) {
+        // 配置 servie
+        for w in &mut self.services {
+            w.srv.conf();
+        }
+
+        // 启动 servie
+        for w in &mut self.services {
+            start_service(w.srv, w.srv.name());
+        }
     }
 
     fn add_service(services: &mut Vec<ServiceWrapper>, srv: &'static dyn ServiceRs) {
@@ -47,19 +67,6 @@ impl App {
 
         // add server to app
         Self::add_service(&mut self.services, srv);
-    }
-
-    /// 启动 App
-    pub fn start(&mut self) {
-        // 配置 servie
-        for w in &mut self.services {
-            w.srv.conf();
-        }
-
-        // 启动 servie
-        for w in &mut self.services {
-            start_service(w.srv, w.srv.name());
-        }
     }
 
     /// App  等待直至服务关闭
