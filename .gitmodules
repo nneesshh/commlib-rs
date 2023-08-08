@@ -28,3 +28,9 @@
 [submodule "prost"]
 	path = prost
 	url = https://github.com/nneesshh/prost.git
+[submodule "httparse"]
+	path = httparse
+	url = https://github.com/nneesshh/httparse
+[submodule "rand"]
+	path = rand
+	url = https://github.com/nneesshh/rand.git

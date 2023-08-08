@@ -51,6 +51,7 @@ chrono = "0.4"
 bytes = "1"
 hashbrown = { path="../hashbrown" }
 parking_lot = { path="../parking_lot" }
+rand = { path = "../rand", features = ["small_rng"]}
 roxmltree = { path="../roxmltree" }
 spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
 message-io = { path="../message-io" }
