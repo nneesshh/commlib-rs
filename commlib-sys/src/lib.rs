@@ -9,6 +9,10 @@ pub mod stop_watch;
 pub use stop_watch::*;
 
 ///
+pub mod rand_util;
+pub use rand_util::*;
+
+///
 pub mod string_util;
 pub use string_util::*;
 
@@ -46,3 +50,15 @@ pub use service_net::ServiceNetRs;
 ///
 pub mod globals;
 pub use globals::*;
+
+/// 节点 id type
+pub type NodeId = u64;
+
+/// 区服 id type
+pub type ZoneId = i32;
+
+/// 平台 id type
+pub type GroupId = u32;
+
+/// Player id type
+pub type PlayerId = u64;

@@ -6,6 +6,28 @@ use parking_lot::RwLock;
 
 use super::commlib_service::*;
 
+///
+pub mod buffer;
+pub use buffer::Buffer;
+
+///
+pub mod net_packet;
+
+///
+pub mod net_packet_pool;
+
+///
+pub mod net_proxy;
+
+///
+pub mod tcp_callbacks;
+
+///
+pub mod tcp_conn;
+
+///
+pub mod tcp_server;
+
 pub struct ServiceNetRs {
     pub handle: RwLock<ServiceHandle>,
 }

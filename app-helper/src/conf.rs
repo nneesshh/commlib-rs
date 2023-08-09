@@ -1,10 +1,6 @@
 //! Commlib: Conf
 use commlib_sys::*;
 
-pub type NodeId = u64;
-pub type ZoneId = i32;
-pub type GroupId = u32;
-
 pub const TEST_NODE: NodeId = 999;
 
 /// 获取当前执行环境，正式环境目录结构

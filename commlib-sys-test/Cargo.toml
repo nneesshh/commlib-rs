@@ -10,6 +10,7 @@ build = "build.rs"
 [dependencies]
 lazy_static = "1"
 log = "0.4"
+bytes = "1"
 hashbrown = { path="../hashbrown" }
 parking_lot = { path="../parking_lot" }
 roxmltree = { path="../roxmltree" }
