@@ -3,6 +3,32 @@ use commlib_sys::*;
 
 pub const TEST_NODE: NodeId = 999;
 
+/// use thread local unsafe cell for conf -- mut
+#[macro_export]
+macro_rules! with_conf_mut {
+    ($t:path, $c:ident, $body:block) => {
+        $t.with(|v| {
+            paste::paste! {
+                let $c = unsafe { &mut *v.get() };
+                $body
+            }
+        })
+    };
+}
+
+/// use thread local unsafe cell for conf
+#[macro_export]
+macro_rules! with_conf {
+    ($t:path, $c:ident, $body:block) => {
+        $t.with(|v| {
+            paste::paste! {
+                let $c = unsafe { &*v.get() };
+                $body
+            }
+        })
+    };
+}
+
 /// 获取当前执行环境，正式环境目录结构
 /// dragon-game/
 ///     env.dat
@@ -236,7 +262,7 @@ impl Conf {
 
         // node_id must match xml_node
         if self.node_id > 0 {
-            if TEST_NODE == self.node_id {
+            if srv_name.is_empty() && TEST_NODE == self.node_id {
                 // test node do nothing
             } else {
                 //
@@ -315,7 +341,7 @@ impl Conf {
 
         //
         if srv_name.is_empty() {
-            if TEST_NODE == self.node_id {
+            if TEST_NODE != self.node_id {
                 // TEST NODE
                 std::panic!("TEST NODE ID must be {}", TEST_NODE);
                 //std::process::exit(0);
@@ -329,7 +355,7 @@ impl Conf {
 
                     self.local_xml_nodes.insert(nid, xml_node.to_owned());
 
-                    if self.node_id == 0 && name == srv_name {
+                    if self.node_id == 0 && name.eq_ignore_ascii_case(srv_name) {
                         self.node_id = nid;
                     }
                 }

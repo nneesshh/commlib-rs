@@ -45,20 +45,12 @@ pub use service_signal::ServiceSignalRs;
 
 ///
 pub mod service_net;
-pub use service_net::ServiceNetRs;
+pub use service_net::{NetPacket, ServiceNetRs};
 
 ///
 pub mod globals;
 pub use globals::*;
 
-/// 节点 id type
-pub type NodeId = u64;
-
-/// 区服 id type
-pub type ZoneId = i32;
-
-/// 平台 id type
-pub type GroupId = u32;
-
-/// Player id type
-pub type PlayerId = u64;
+///
+pub mod commlib_def;
+pub use commlib_def::*;

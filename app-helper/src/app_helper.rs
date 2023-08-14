@@ -1,5 +1,7 @@
 use commlib_sys::*;
 
+use crate::with_conf_mut;
+
 /// App: 应用框架RwLock<
 pub struct App {
     services: Vec<ServiceWrapper>,
@@ -18,10 +20,9 @@ impl App {
 
     fn init(&mut self, arg_vec: &Vec<std::ffi::OsString>, srv_name: &str) {
         // init G_CONF
-        {
-            let mut g_conf_mut = crate::G_CONF.write();
-            (*g_conf_mut).init(&arg_vec, srv_name);
-        }
+        with_conf_mut!(crate::G_CONF, cfg_mut, {
+            cfg_mut.init(&arg_vec, srv_name);
+        });
 
         // init logger
         let log_path = std::path::PathBuf::from("auto-legend");
@@ -39,7 +40,8 @@ impl App {
 
         // 启动 servie
         for w in &mut self.services {
-            start_service(w.srv, w.srv.name());
+            let ready_pair = start_service(w.srv, w.srv.name());
+            wait_service_ready(w.srv, ready_pair);
         }
     }
 
@@ -56,14 +58,33 @@ impl App {
         services.push(ServiceWrapper { srv });
     }
 
-    /// 添加 service
+    /// 添加 custom service
     pub fn attach<C>(&mut self, mut creator: C)
     where
         C: FnMut() -> &'static dyn ServiceRs,
     {
         let srv = creator();
+
+        // attach xml node to custom service
+        crate::with_conf!(crate::G_CONF, cfg, {
+            let node_id = cfg.node_id;
+            if let Some(xml_node) = cfg.get_xml_node(node_id) {
+                let srv_type = xml_node.get_u64(vec!["srv"], 0);
+
+                // xml config
+                {
+                    let mut handle_mut = srv.get_handle().write();
+                    (*handle_mut).set_xml_config(xml_node.clone());
+                }
+            } else {
+                log::error!("node {} xml config not found!!!", node_id);
+            }
+        });
+
+        //
         srv.conf();
-        start_service(srv, srv.name());
+        let ready_pair = start_service(srv, srv.name());
+        wait_service_ready(srv, ready_pair);
 
         // add server to app
         Self::add_service(&mut self.services, srv);
@@ -86,7 +107,7 @@ impl App {
                     w_srv_handle.id(),
                     w_srv_handle.state()
                 );
-                if State::Closed as u32 != w_srv_handle.state() as u32 {
+                if NodeState::Closed as u32 != w_srv_handle.state() as u32 {
                     exitflag = false;
                     break;
                 }

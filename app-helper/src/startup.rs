@@ -11,7 +11,7 @@ struct StartupTask {
 }
 
 struct StartupHandle {
-    srv_id: i32,
+    srv_id: u64,
     tasks: Vec<StartupTask>,
     index: usize,
     suspending: bool,
@@ -19,7 +19,7 @@ struct StartupHandle {
 
 impl StartupHandle {
     ///
-    pub(crate) fn new(srv_id: i32) -> StartupHandle {
+    pub(crate) fn new(srv_id: u64) -> StartupHandle {
         StartupHandle {
             srv_id,
             tasks: Vec::new(),
@@ -100,7 +100,7 @@ pub struct Startup {
 
 impl Startup {
     /// Constructor
-    pub fn new(srv_id: i32) -> Startup {
+    pub fn new(srv_id: u64) -> Startup {
         Startup {
             handle: Mutex::new(StartupHandle::new(srv_id)),
         }

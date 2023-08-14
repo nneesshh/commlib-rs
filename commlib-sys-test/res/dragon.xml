@@ -9,8 +9,8 @@
     <!--包含的区-->
     <zones>33</zones>
 
-    <!-- gateway -->
-    <node srv="1001" id="1001" name="gatewaysrv">
+    <!-- test -->
+    <node srv="999" id="999" name="test">
         <addr>0.0.0.0</addr>
         <port>20001</port>
         <world id="1006" addr="127.0.0.1" port="20006"></world>

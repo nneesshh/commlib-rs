@@ -109,11 +109,9 @@ pub fn rand_between_exclusive_i8(start: i8, end: i8, exclude_list: &LinkedList<i
 ///
 pub fn rand_many(start: i32, end: i32, count: usize) -> Vec<i32> {
     let mut vec = Vec::<i32>::with_capacity(count);
-    while (vec.len() < count) {
-        let n = G_SMALL_RNG.with(|rng| {
-            let rng_mut = unsafe { &mut (*rng.get()) };
-            vec.push(rng_mut.gen());
-        });
+    while vec.len() < count {
+        let n = rand_between(start, end);
+        vec.push(n);
     }
     vec
 }
@@ -137,10 +135,20 @@ pub fn rand_one_from_hashmap<T>(table: &hashbrown::HashMap<u32, T>) -> &T {
 }
 
 ///
-pub fn rand_shuffle(src: &mut Vec<i32>) {
+#[inline(always)]
+pub fn rand_ratio_(numerator: u32, denominator: u32) -> bool {
     G_SMALL_RNG.with(|rng| {
         let rng_mut = unsafe { &mut (*rng.get()) };
-        src.shuffle(rng_mut);
+        rand_ratio(rng_mut, numerator, denominator)
+    })
+}
+
+///
+#[inline(always)]
+pub fn rand_shuffle(vec: &mut Vec<i32>) {
+    G_SMALL_RNG.with(|rng| {
+        let rng_mut = unsafe { &mut (*rng.get()) };
+        vec.shuffle(rng_mut);
     });
 }
 

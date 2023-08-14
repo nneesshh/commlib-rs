@@ -1,33 +1,60 @@
 //! Commlib: TcpServer
+//! We can use this class to create a TCP server.
+//! The typical usage is :
+//!      1. Create a TCPServer object
+//!      2. Set the message callback and connection callback
+//!      3. Call TCPServer::Init()
+//!      4. Call TCPServer::Start()
+//!      5. Process TCP client connections and messages in callbacks
+//!      6. At last call Server::Stop() to stop the whole server
+//!
+//! The example code is as bellow:
+//! //<code>
+//! # Example
+//! ```
+//!     std::string addr = "0.0.0.0:9099";
+//!     int thread_num = 4;
+//!     evpp::EventLoop loop;
+//!     evpp::TCPServer server(&loop, addr, "TCPEchoServer", thread_num);
+//!     server.SetMessageCallback([](const evpp::TCPConnPtr& conn,
+//!                                  evpp::Buffer* msg) {
+//!         // Do something with the received message
+//!         conn->Send(msg); // At here, we just send the received message back.
+//!     });
+//!     server.SetConnectionCallback([](const evpp::TCPConnPtr& conn) {
+//!         if (conn->IsConnected()) {
+//!             LOG_INFO << "A new connection from " << conn->remote_addr();
+//!         } else {
+//!             LOG_INFO << "Lost the connection from " << conn->remote_addr();
+//!         }
+//!     });
+//!     server.Init();
+//!     server.Start();
+//!     loop.Run();
+//! ```
+//! //</code>
+//!
 
-use super::net_packet::*;
-use super::tcp_callbacks::*;
-use super::tcp_conn::*;
-use crate::ServiceRs;
+use super::MessageIoServer;
+use super::{ServerCallbacks, TcpServerHandler};
+use super::{ServerStatus, ServerSubStatus};
+
+use crate::G_SERVICE_NET;
 use parking_lot::RwLock;
-use std::rc::Rc;
-use std::sync::{atomic::AtomicUsize, Arc};
 
-lazy_static::lazy_static! {
-    pub static ref TCP_SERVER_LIST: Arc<RwLock<Vec<TcpServer>>> = Arc::new(RwLock::new(Vec::new()));
-}
-
+use std::sync::atomic::AtomicUsize;
 ///
+#[repr(C)]
 pub struct TcpServer {
     start: std::time::Instant,
-
-    handler: Option<TcpHandler>,
-
-    conn_fn: Box<dyn FnMut(&TcpServer, &mut TcpHandler, &mut TcpConn) + Send + Sync + 'static>,
-    msg_fn:
-        Box<dyn FnMut(&TcpServer, &mut TcpHandler, &mut TcpConn, &[u8]) + Send + Sync + 'static>,
-
-    stopped_cb: Box<dyn FnMut() + Send + Sync + 'static>,
+    status: RwLock<ServerStatus>,
+    substatus: RwLock<ServerSubStatus>,
 
     connection_limit: AtomicUsize,
     connection_num: AtomicUsize,
 
     inner_server: Option<MessageIoServer>,
+    pub callbacks: ServerCallbacks,
 }
 
 impl TcpServer {
@@ -35,146 +62,89 @@ impl TcpServer {
     pub fn new() -> TcpServer {
         TcpServer {
             start: std::time::Instant::now(),
-            handler: None,
-
-            conn_fn: Box::new(|_1, _2, _3| {}),
-            msg_fn: Box::new(|_1, _2, _3, _4| {}),
-
-            stopped_cb: Box::new(|| {}),
+            status: RwLock::new(ServerStatus::Null),
+            substatus: RwLock::new(ServerSubStatus::SubStatusNull),
 
             connection_limit: AtomicUsize::new(0),
             connection_num: AtomicUsize::new(0),
 
             inner_server: None,
+            callbacks: ServerCallbacks::new(),
         }
     }
 
     ///
-    pub fn on_connection<S>(&self, srv: &S, h: &mut TcpHandler, conn: &mut TcpConn, encrypt: bool)
-    where
-        S: ServiceRs,
-    {
-    }
+    pub fn init(&mut self) -> bool {
+        let mut status_mut = self.status.write();
 
-    ///
-    pub fn on_message<S>(&self, srv: &S, h: &mut TcpHandler, conn: &mut TcpConn, slice: &[u8])
-    where
-        S: ServiceRs,
-    {
-    }
+        // inner server
+        let tcp_server_handler = TcpServerHandler::new();
+        let tcp_server_id = self as *const TcpServer as usize;
+        self.inner_server = Some(MessageIoServer::new(tcp_server_handler, tcp_server_id));
 
-    ///
-    pub fn listen<S>(
-        srv: &'static S,
-        name: &str,
-        ip: &str,
-        port: u16,
-        h: TcpHandler,
-        thread_num: u32,
-        connection_limit: u32,
-    ) -> TcpServer
-    where
-        S: ServiceRs,
-    {
-        let mut tcp_server = TcpServer::new();
-        let raddr = std::format!("{}:{}", ip, port);
-        tcp_server.tcp_listen_addr(srv, name, raddr.as_ref(), h, thread_num, connection_limit);
-        tcp_server
-    }
-
-    fn tcp_listen_addr<S>(
-        &mut self,
-        srv: &'static S,
-        name: &str,
-        addr: &str,
-        h: TcpHandler,
-        thread_num: u32,
-        connection_limit: u32,
-    ) where
-        S: ServiceRs,
-    {
-        self.handler = Some(h);
-
-        self.set_connection_callback(
-            move |tcp_server: &TcpServer, h: &mut TcpHandler, conn: &mut TcpConn| {
-                let encrypt = true; // tcp server 立即发送 EncryptToken
-                tcp_server.on_connection(srv, h, conn, encrypt);
-            },
-        );
-
-        self.set_message_callback(
-            move |tcp_server: &TcpServer, h: &mut TcpHandler, conn: &mut TcpConn, slice: &[u8]| {
-                let encrypt = true; // tcp server 立即发送 EncryptToken
-                tcp_server.on_message(srv, h, conn, slice);
-            },
-        );
-
-        //
-        self.init(name);
-
-        // trigger OnListen event in srv
-        let on_listen = self.handler.as_ref().unwrap().on_listen.to_owned();
-        let name = name.to_owned();
-        srv.run_in_service(Box::new(move || {
-            on_listen(srv, name.to_owned());
-        }));
-    }
-
-    fn set_connection_callback<F>(&mut self, cb: F)
-    where
-        F: FnMut(&TcpServer, &mut TcpHandler, &mut TcpConn) + Send + Sync + 'static,
-    {
-        self.conn_fn = Box::new(cb);
-    }
-
-    fn set_message_callback<F>(&mut self, cb: F)
-    where
-        F: FnMut(&TcpServer, &mut TcpHandler, &mut TcpConn, &[u8]) + Send + Sync + 'static,
-    {
-        self.msg_fn = Box::new(cb);
-    }
-
-    fn init(&mut self, addr: &str) -> bool {
-        let inner = MessageIoServer::new(addr).unwrap();
-        self.inner_server = Some(inner);
-        //se
+        // initialize finish
+        (*status_mut) = ServerStatus::Initialized;
         true
     }
-}
 
-struct MessageIoServer {
-    handler: message_io::node::NodeHandler<()>,
-    node_listener: Option<message_io::node::NodeListener<()>>,
-}
+    ///
+    pub fn start(&mut self, addr: &str) {
+        let inner_server = self.inner_server.as_mut().unwrap();
 
-impl MessageIoServer {
-    pub fn new(listen_addr: &str) -> std::io::Result<MessageIoServer> {
-        // Create a node, the main message-io entity. It is divided in 2 parts:
-        // The 'handler', used to make actions (connect, send messages, signals, stop the node...)
-        // The 'listener', used to read events from the network or signals.
-        let (handler, node_listener) = message_io::node::split::<()>();
+        // server prepare
+        {
+            let mut status_mut = self.status.write();
 
-        handler
-            .network()
-            .listen(message_io::network::Transport::Tcp, listen_addr)?;
+            assert_eq!((*status_mut) as u32, ServerStatus::Initialized as u32);
+            (*status_mut) = ServerStatus::Starting;
 
-        log::info!("server running at {}", listen_addr);
+            // TODO:
 
-        Ok(MessageIoServer {
-            handler,
-            node_listener: Some(node_listener),
-        })
+            (*status_mut) = ServerStatus::Running;
+        }
+
+        // server listen
+        inner_server.listen(addr, G_SERVICE_NET.as_ref()).unwrap();
+
+        // server loop
+        inner_server.run(G_SERVICE_NET.as_ref());
     }
 
-    pub fn run(mut self) {
-        let node_listener = self.node_listener.take().unwrap();
+    ///
+    pub fn listen(
+        ip: &str,
+        port: u16,
+        thread_num: u32,
+        connection_limit: u32,
+        callbacks: ServerCallbacks,
+    ) -> TcpServer {
+        let mut tcp_server = TcpServer::new();
 
-        // Read incoming network events.
-        node_listener.for_each(move |event| match event.network() {
-            message_io::network::NetEvent::Connected(_, _) => unreachable!(), // There is no connect() calls.
-            message_io::network::NetEvent::Accepted(_, _) => (), // All endpoint accepted
-            message_io::network::NetEvent::Message(endpoint, input_data) => {}
-            message_io::network::NetEvent::Disconnected(endpoint) => {}
-        });
+        //
+        {
+            let raddr = std::format!("{}:{}", ip, port);
+            tcp_server.tcp_listen_addr(raddr.as_ref(), thread_num, connection_limit, callbacks);
+            tcp_server
+        }
+    }
+
+    fn tcp_listen_addr(
+        &mut self,
+        addr: &str,
+        _thread_num: u32,       // TODO:
+        _connection_limit: u32, // TODO:
+        callbacks: ServerCallbacks,
+    ) {
+        // init callbacks
+        unsafe {
+            let callbacks_mut = &self.callbacks as *const ServerCallbacks as *mut ServerCallbacks;
+            (*callbacks_mut) = callbacks;
+        }
+
+        //
+        self.init();
+
+        //
+        self.start(addr);
     }
 }

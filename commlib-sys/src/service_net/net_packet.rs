@@ -1,6 +1,6 @@
-use crate::service_net::buffer;
 use std::collections::LinkedList;
-use std::fmt::Debug;
+
+use super::ConnId;
 
 ///
 pub static EMPTY_SLICE: &[u8; 0] = &[0_u8; 0];
@@ -47,6 +47,8 @@ pub struct EncryptData {
 }
 
 ///
+#[derive(Debug, Copy, Clone)]
+#[repr(u32)]
 pub enum PacketType {
     Server = 0, // 服务器内部包：不加密
 
@@ -128,6 +130,24 @@ impl NetPacket {
     }
 
     ///
+    #[inline(always)]
+    pub fn set_type(&mut self, packet_type: PacketType) {
+        self.packet_type = packet_type
+    }
+
+    ///
+    #[inline(always)]
+    pub fn cmd(&self) -> CmdId {
+        self.cmd
+    }
+
+    ///
+    #[inline(always)]
+    pub fn consume(&mut self) -> &[u8] {
+        self.buffer.next_all()
+    }
+
+    ///
     pub fn set_msg<M>(&mut self, msg: &M)
     where
         M: prost::Message,
@@ -205,11 +225,11 @@ impl NetPacket {
     /// Decode header from packet slice and return the data part of packet slice
     pub fn decode_packet(
         &mut self,
-        client_no: i8,
-        packet_type: PacketType,
-        hd: i32,
-        encrypt_table: &mut hashbrown::HashMap<i32, EncryptData>,
-    ) -> &[u8] {
+        hd: ConnId,
+        encrypt_table: &mut hashbrown::HashMap<ConnId, EncryptData>,
+    ) -> bool {
+        let client_no = self.client.no;
+
         match self.packet_type {
             PacketType::Client => {
                 // 解密
@@ -217,29 +237,36 @@ impl NetPacket {
                     if !self.check_packet() {
                         // TODO: 是不是直接 close 这个连接？？？
                         log::error!(
-                            "[decode_packet::PacketType::Client] received client data from [hd={}] error: check packet failed!!!",
+                            "[decode_packet::PacketType::Client] received client data from [hd={:?}] error: check packet failed!!!",
                             hd
                         );
-                        EMPTY_SLICE
+
+                        //
+                        false
                     } else {
-                        let buffer = self.read_client(encrypt.encrypt_key.as_str());
+                        self.read_client_packet(encrypt.encrypt_key.as_str());
 
                         // TODO: 包序号检查
                         if !add_packet_no(encrypt, client_no) {
-                            log::error!("[decode_packet::PacketType::Client] received client data from [hd={}] error: packet no {} already exist!!!",
+                            log::error!("[decode_packet::PacketType::Client] received client data from [hd={:?}] error: packet no {} already exist!!!",
                                 hd, client_no
                             );
-                            EMPTY_SLICE
+
+                            //
+                            false
                         } else {
-                            buffer
+                            //
+                            true
                         }
                     }
                 } else {
                     log::error!(
-                        "[decode_packet::PacketType::Client] received client data from [hd={}] error: encrypt data not exist!!!",
+                        "[decode_packet::PacketType::Client] received client data from [hd={:?}] error: encrypt data not exist!!!",
                         hd
                     );
-                    EMPTY_SLICE
+
+                    //
+                    false
                 }
             }
 
@@ -249,45 +276,61 @@ impl NetPacket {
                     if !self.check_packet() {
                         // TODO: 是不是直接 close 这个连接？？？
                         log::error!(
-                            "[decode_packet::PacketType::ClientWs] received client data from [hd={}] error: check packet failed!!!",
+                            "[decode_packet::PacketType::ClientWs] received client data from [hd={:?}] error: check packet failed!!!",
                             hd
                         );
-                        EMPTY_SLICE
+
+                        //
+                        false
                     } else {
-                        let buffer = self.read_client_ws(encrypt.encrypt_key.as_str());
+                        self.read_client_ws_packet(encrypt.encrypt_key.as_str());
 
                         // TODO: 包序号检查
                         if !add_packet_no(encrypt, client_no) {
-                            log::error!("[decode_packet::PacketType::ClientWs] received client data from [hd={}] error: packet no {} already exist!!!",
-                            hd, client_no
-                        );
-                            EMPTY_SLICE
+                            log::error!("[decode_packet::PacketType::ClientWs] received client data from [hd={:?}] error: packet no {} already exist!!!",
+                                hd, client_no);
+
+                            //
+                            false
                         } else {
-                            buffer
+                            //
+                            true
                         }
                     }
                 } else {
                     log::error!(
-                        "[decode_packet::PacketType::ClientWs] received client data from [hd={}] error: encrypt data not exist!!!",
+                        "[decode_packet::PacketType::ClientWs] received client data from [hd={:?}] error: encrypt data not exist!!!",
                         hd
                     );
-                    EMPTY_SLICE
+
+                    //
+                    false
                 }
             }
 
-            PacketType::Server => self.read_server(),
-            PacketType::Robot => self.read_robot(),
-            PacketType::RobotWs => self.read_robot_ws(),
+            PacketType::Server => {
+                self.read_server_packet();
+                true
+            }
+
+            PacketType::Robot => {
+                self.read_robot_packet();
+                true
+            }
+
+            PacketType::RobotWs => {
+                self.read_robot_ws_packet();
+                true
+            }
         }
     }
 
     /// Encode header into packet slice and return the full packet slice
     pub fn encode_packet(
         &mut self,
-        packet_type: PacketType,
-        hd: i32,
-        encrypt_table: &mut hashbrown::HashMap<i32, EncryptData>,
-    ) -> &[u8] {
+        hd: ConnId,
+        encrypt_table: &mut hashbrown::HashMap<ConnId, EncryptData>,
+    ) -> bool {
         match self.packet_type {
             PacketType::Robot => {
                 // 加密
@@ -295,13 +338,18 @@ impl NetPacket {
                     // 随机序号
                     let no = rand_packet_no(encrypt, hd);
                     self.client.no = no;
-                    self.write_robot(encrypt.encrypt_key.as_str())
+                    self.write_robot_packet(encrypt.encrypt_key.as_str());
+
+                    //
+                    true
                 } else {
                     log::error!(
-                        "[encode_packet::PacketType::Robot] [hd={}] send packet error: encrypt data not exist!!!",
+                        "[encode_packet::PacketType::Robot] [hd={:?}] send packet error: encrypt data not exist!!!",
                         hd
                     );
-                    EMPTY_SLICE
+
+                    //
+                    false
                 }
             }
 
@@ -311,24 +359,40 @@ impl NetPacket {
                     // 随机序号
                     let no = rand_packet_no(encrypt, hd);
                     self.client.no = no;
-                    self.write_robot_ws(encrypt.encrypt_key.as_str())
+                    self.write_robot_ws_packet(encrypt.encrypt_key.as_str());
+
+                    //
+                    true
                 } else {
                     log::error!(
-                        "[encode_packet::PacketType::RobotWs] [hd={}] send packet error: encrypt data not exist!!!",
+                        "[encode_packet::PacketType::RobotWs] [hd={:?}] send packet error: encrypt data not exist!!!",
                         hd
                     );
-                    EMPTY_SLICE
+
+                    //
+                    false
                 }
             }
 
-            PacketType::Server => self.write_server(),
-            PacketType::Client => self.write_client(),
-            PacketType::ClientWs => self.write_client_ws(),
+            PacketType::Server => {
+                self.write_server_packet();
+                true
+            }
+
+            PacketType::Client => {
+                self.write_client_packet();
+                true
+            }
+
+            PacketType::ClientWs => {
+                self.write_client_ws_packet();
+                true
+            }
         }
     }
 
     /* **** server **** */
-    fn write_server(&mut self) -> &[u8] {
+    fn write_server_packet(&mut self) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
@@ -338,11 +402,9 @@ impl NetPacket {
         let size = SERVER_INNER_HEADER_SIZE + self.data_size;
         self.buffer.prepend_u32(size as u32);
         self.buffer_raw_len += 4;
-
-        self.buffer.next_all()
     }
 
-    fn read_server(&mut self) -> &[u8] {
+    fn read_server_packet(&mut self) {
         // MUST BE only one packet in buffer
         assert_eq!(self.buffer_raw_len, self.buffer.length());
 
@@ -353,11 +415,10 @@ impl NetPacket {
         self.cmd = self.buffer.read_u16();
 
         self.data_size -= SERVER_INNER_HEADER_SIZE;
-        self.buffer.next_all()
     }
 
     /* **** client **** */
-    fn write_client(&mut self) -> &[u8] {
+    fn write_client_packet(&mut self) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
@@ -367,11 +428,9 @@ impl NetPacket {
         let size = TO_CLIENT_HEADER_SIZE + self.data_size;
         self.buffer.prepend_u32(size as u32);
         self.buffer_raw_len += 4;
-
-        self.buffer.next_all()
     }
 
-    fn read_client(&mut self, key: &str) -> &[u8] {
+    fn read_client_packet(&mut self, key: &str) {
         // MUST BE only one packet in buffer
         assert_eq!(self.buffer_raw_len, self.buffer.length());
 
@@ -389,11 +448,10 @@ impl NetPacket {
         self.cmd = self.buffer.read_u16();
 
         self.data_size -= SERVER_INNER_HEADER_SIZE;
-        self.buffer.next_all()
     }
 
     /* **** robot **** */
-    fn write_robot(&mut self, key: &str) -> &[u8] {
+    fn write_robot_packet(&mut self, key: &str) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
@@ -410,11 +468,9 @@ impl NetPacket {
         let size = FROM_CLIENT_HEADER_SIZE + self.data_size;
         self.buffer.prepend_u16(size as u16);
         self.buffer_raw_len += 2;
-
-        self.buffer.next_all()
     }
 
-    fn read_robot(&mut self) -> &[u8] {
+    fn read_robot_packet(&mut self) {
         // MUST BE only one packet in buffer
         assert_eq!(self.buffer_raw_len, self.buffer.length());
 
@@ -425,20 +481,17 @@ impl NetPacket {
         self.cmd = self.buffer.read_u16();
 
         self.data_size -= TO_CLIENT_HEADER_SIZE;
-        self.buffer.next_all()
     }
 
     /* **** client ws **** */
-    fn write_client_ws(&mut self) -> &[u8] {
+    fn write_client_ws_packet(&mut self) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
         self.buffer_raw_len += 2;
-
-        self.buffer.next_all()
     }
 
-    fn read_client_ws(&mut self, key: &str) -> &[u8] {
+    fn read_client_ws_packet(&mut self, key: &str) {
         // MUST BE only one packet in buffer
         assert_eq!(self.buffer_raw_len, self.buffer.length());
 
@@ -453,12 +506,10 @@ impl NetPacket {
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
-
-        self.buffer.next_all()
     }
 
     /* **** robot ws **** */
-    fn write_robot_ws(&mut self, key: &str) -> &[u8] {
+    fn write_robot_ws_packet(&mut self, key: &str) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
@@ -470,11 +521,9 @@ impl NetPacket {
         // 1 字节序号
         self.buffer.prepend_u8(self.client.no as u8);
         self.buffer_raw_len += 1;
-
-        self.buffer.next_all()
     }
 
-    fn read_robot_ws(&mut self) -> &[u8] {
+    fn read_robot_ws_packet(&mut self) {
         // MUST BE only one packet in buffer
         assert_eq!(self.buffer_raw_len, self.buffer.length());
 
@@ -483,8 +532,6 @@ impl NetPacket {
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
-
-        self.buffer.next_all()
     }
 }
 
@@ -496,14 +543,14 @@ where
     match msg.encode(&mut buf) {
         Ok(()) => true,
         Err(err) => {
-            log::error!("encode msg error!!! {:?}", msg);
+            log::error!("encode msg error: {}!!! {:?},", err, msg);
             false
         }
     }
 }
 
 #[inline(always)]
-pub fn rand_packet_no(encrypt: &mut EncryptData, _hd: i32) -> i8 {
+pub fn rand_packet_no(encrypt: &mut EncryptData, _hd: ConnId) -> i8 {
     let no_list = &mut encrypt.no_list;
     let no = crate::rand_between_exclusive_i8(0, (ENCRYPT_KEY_LEN - 1) as i8, no_list);
 

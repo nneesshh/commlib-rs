@@ -6,10 +6,12 @@ use crossbeam::channel;
 use parking_lot::{Condvar, Mutex, RwLock};
 use spdlog::get_current_tid;
 use std::sync::Arc;
+use std::thread::JoinHandle;
 
 ///
 #[derive(Debug, Copy, Clone)]
-pub enum State {
+#[repr(u32)]
+pub enum NodeState {
     Idle = 0,  // 空闲
     Init,      // 初始化
     Start,     // 启动中
@@ -26,13 +28,13 @@ pub type ServiceFuncType = dyn FnMut() + Send + Sync + 'static;
 /// Service handle
 pub struct ServiceHandle {
     pub id: u64,
-    pub state: State,
+    pub state: NodeState,
 
     pub tx: channel::Sender<Box<ServiceFuncType>>,
     pub rx: channel::Receiver<Box<ServiceFuncType>>,
 
-    pub join_handle: Option<std::thread::JoinHandle<()>>,
     pub tid: u64,
+    join_handle_opt: Option<JoinHandle<()>>,
 
     pub clock: crate::Clock,
     pub xml_config: crate::XmlReader,
@@ -40,7 +42,7 @@ pub struct ServiceHandle {
 
 impl ServiceHandle {
     ///
-    pub fn new(id: u64, state: State) -> ServiceHandle {
+    pub fn new(id: u64, state: NodeState) -> ServiceHandle {
         let (tx, rx) = channel::unbounded::<Box<ServiceFuncType>>();
 
         Self {
@@ -48,8 +50,8 @@ impl ServiceHandle {
             state,
             tx,
             rx,
-            join_handle: None,
             tid: 0u64,
+            join_handle_opt: None,
             clock: crate::Clock::new(),
             xml_config: crate::XmlReader::new(),
         }
@@ -61,12 +63,12 @@ impl ServiceHandle {
     }
 
     ///
-    pub fn state(&self) -> State {
+    pub fn state(&self) -> NodeState {
         self.state
     }
 
     ///
-    pub fn set_state(&mut self, state: State) {
+    pub fn set_state(&mut self, state: NodeState) {
         self.state = state;
     }
 
@@ -87,8 +89,8 @@ impl ServiceHandle {
 
     ///
     pub fn quit_service(&mut self) {
-        if (self.state as u32) < (State::Closed as u32) {
-            self.state = State::Closed;
+        if (self.state as u32) < (NodeState::Closed as u32) {
+            self.state = NodeState::Closed;
         }
     }
 
@@ -109,7 +111,7 @@ impl ServiceHandle {
 
     /// 等待线程结束
     pub fn join_service(&mut self) {
-        if let Some(join_handle) = self.join_handle.take() {
+        if let Some(join_handle) = self.join_handle_opt.take() {
             join_handle.join().unwrap();
         }
     }
@@ -126,8 +128,8 @@ pub trait ServiceRs: Send + Sync {
     /// 配置 service
     fn conf(&self);
 
-    /// Init in-service
-    fn init(&self);
+    /// Init in-service （修改变量使用内部小粒度的局部锁，不能锁定整个 service）
+    fn init(&self) -> bool;
 
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>);
@@ -140,11 +142,16 @@ pub trait ServiceRs: Send + Sync {
 }
 
 /// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move
-pub fn start_service(srv: &'static dyn ServiceRs, name_of_thread: &str) -> bool {
-    let mut handle1_mut = srv.get_handle().write();
-    if handle1_mut.tid > 0u64 {
-        log::error!("service already started!!! tid={}", handle1_mut.tid);
-        return false;
+pub fn start_service(
+    srv: &'static dyn ServiceRs,
+    name_of_thread: &str,
+) -> (Option<JoinHandle<()>>, Option<Arc<(Mutex<u64>, Condvar)>>) {
+    {
+        let handle = srv.get_handle().read();
+        if handle.tid > 0u64 {
+            log::error!("service already started!!! tid={}", handle.tid);
+            return (None, None);
+        }
     }
 
     //
@@ -154,68 +161,86 @@ pub fn start_service(srv: &'static dyn ServiceRs, name_of_thread: &str) -> bool 
     let exit_cv = Arc::clone(&crate::G_EXIT_CV);
 
     let tname = name_of_thread.to_owned();
-    handle1_mut.join_handle = Some(
-        std::thread::Builder::new()
-            .name(tname.to_owned())
-            .spawn(move || {
-                // notify ready
-                let tid = get_current_tid();
-                let (lock, cvar) = &*tid_ready;
-                {
-                    // release guard after value ok
-                    let mut guard = lock.lock();
-                    *guard = tid;
-                }
-                cvar.notify_all();
+    let join_handle = std::thread::Builder::new()
+        .name(tname.to_owned())
+        .spawn(move || {
+            // notify ready
+            let tid = get_current_tid();
+            let (lock, cvar) = &*tid_ready;
+            {
+                // release guard after value ok
+                let mut guard = lock.lock();
+                *guard = tid;
+            }
+            cvar.notify_all();
 
-                // run
-                run_service(srv, tname.as_str());
+            //
+            srv.init();
 
-                // exit
-                {
-                    let mut handle2_mut = srv.get_handle().write();
+            // run, 假如 srv 是 mutable borrow, 那么函数使用完毕后将被释放，此时需要返回出来，后续步骤才能使用
+            let srv2 = run_service(srv, tname.as_str());
 
-                    // mark closed
-                    handle2_mut.state = State::Closed;
+            // exit with srv2
+            {
+                let mut handle2_mut = srv2.get_handle().write();
 
-                    // notify exit
-                    (&*exit_cv).1.notify_all();
-                    log::info!(
-                        "service exit: ID={} state={:?}",
-                        handle2_mut.id,
-                        handle2_mut.state
-                    );
-                }
-            })
-            .unwrap(),
-    );
+                // mark closed
+                handle2_mut.state = NodeState::Closed;
 
-    //tid (ThreadId.as_u64() is not stable yet)
-    // wait ready
-    let (lock, cvar) = &*tid_cv;
-    let mut guard = lock.lock();
-    cvar.wait(&mut guard);
-    handle1_mut.tid = *guard;
-    true
+                // notify exit
+                (&*exit_cv).1.notify_all();
+                log::info!(
+                    "service exit: ID={} state={:?}",
+                    handle2_mut.id,
+                    handle2_mut.state
+                );
+            }
+        })
+        .unwrap();
+
+    //
+    (Some(join_handle), Some(tid_cv))
+}
+
+/// 等待线程启动完成
+pub fn wait_service_ready(
+    srv: &'static dyn ServiceRs,
+    ready_pair: (Option<JoinHandle<()>>, Option<Arc<(Mutex<u64>, Condvar)>>),
+) -> bool {
+    if let (join_handle_opt, Some(tid_cv)) = ready_pair {
+        let mut handle_mut = srv.get_handle().write();
+        handle_mut.join_handle_opt = join_handle_opt;
+
+        //tid (ThreadId.as_u64() is not stable yet)
+        // wait ready
+        let (lock, cvar) = &*tid_cv;
+        let mut guard = lock.lock();
+        cvar.wait(&mut guard);
+        handle_mut.tid = *guard;
+        true
+    } else {
+        log::error!("[wait_service_ready] failed!!!");
+        false
+    }
 }
 
 ///
-pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
+pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) -> &'static dyn ServiceRs {
     // init
     {
         let handle = srv.get_handle().read();
         log::info!("[{}] init ... ID={}", service_name, handle.id);
-        srv.init();
     }
 
+    //
     let mut sw = crate::StopWatch::new();
     loop {
         // check run
         let run = {
             let handle = srv.get_handle().read();
-            if (State::Closed as u32) == (handle.state as u32) {
+            if (NodeState::Closed as u32) == (handle.state as u32) {
                 false
-            } else if (State::Closing as u32) == (handle.state as u32) {
+            } else if (NodeState::Closing as u32) == (handle.state as u32) {
                 if handle.rx.is_empty() {
                     false
                 } else {
@@ -283,4 +308,7 @@ pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
             }
         }
     }
+
+    // mutable borrow of service 使用完毕，返回出去供后续步骤使用
+    srv
 }

@@ -25,7 +25,7 @@ impl ServiceSignalRs {
     ///
     pub fn new(id: u64) -> ServiceSignalRs {
         Self {
-            handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
+            handle: RwLock::new(ServiceHandle::new(id, NodeState::Idle)),
         }
     }
 
@@ -122,7 +122,9 @@ impl ServiceRs for ServiceSignalRs {
     }
 
     /// Init in-service
-    fn init(&self) {}
+    fn init(&self) -> bool {
+        true
+    }
 
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {

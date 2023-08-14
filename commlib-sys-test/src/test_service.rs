@@ -2,10 +2,16 @@
 //! Common Library: service-signal
 //!
 
+use app_helper::Startup;
 use parking_lot::RwLock;
 
-use commlib_sys::*;
+use commlib_sys::service_net::{NodeState, ServerCallbacks, ServiceHandle};
+use commlib_sys::ServiceRs;
+use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
+
 use std::sync::Arc;
+
+use crate::test_conf::G_TEST_CONF;
 
 pub const SERVICE_ID_TEST_SERVICE: u64 = 10001_u64;
 lazy_static::lazy_static! {
@@ -14,14 +20,47 @@ lazy_static::lazy_static! {
 
 pub struct TestService {
     pub handle: RwLock<ServiceHandle>,
+    pub startup: RwLock<Startup>,
 }
 
 impl TestService {
     ///
     pub fn new(id: u64) -> TestService {
         Self {
-            handle: RwLock::new(ServiceHandle::new(id, State::Idle)),
+            handle: RwLock::new(ServiceHandle::new(id, NodeState::Idle)),
+            startup: RwLock::new(Startup::new(id)),
         }
+    }
+
+    fn init_startup(&self) {
+        let mut startup_mut = self.startup.write();
+        startup_mut.add_step("start network listen", || {
+            let thread_num: u32 = 1;
+            let connection_limit: u32 = 0; // 0=no limit
+
+            let mut callbacks = ServerCallbacks::new();
+            callbacks.conn_fn = Box::new(|conn_id| {
+                log::info!("conn_id={:?}", conn_id);
+
+                conn_id.send("hello, rust".as_bytes());
+            });
+
+            app_helper::with_conf!(G_TEST_CONF, cfg, {
+                G_SERVICE_NET.listen(
+                    cfg.my.addr.as_str(),
+                    cfg.my.port,
+                    thread_num,
+                    connection_limit,
+                    callbacks,
+                );
+            });
+
+            //
+            true
+        });
+
+        //
+        startup_mut.run();
     }
 }
 
@@ -40,10 +79,24 @@ impl ServiceRs for TestService {
     fn conf(&self) {}
 
     /// Init in-service
-    fn init(&self) {
+    fn init(&self) -> bool {
+        let mut handle_mut = self.get_handle().write();
+
+        // ctrl-c stop, DEBUG ONLY
         G_SERVICE_SIGNAL.listen_sig_int(G_TEST_SERVICE.as_ref(), || {
             println!("WTF!!!!");
         });
+        println!("\nGAME init ...\n");
+
+        //
+        app_helper::with_conf_mut!(G_TEST_CONF, cfg, { cfg.init(handle_mut.xml_config()) });
+
+        //
+        self.init_startup();
+
+        //
+        handle_mut.set_state(NodeState::Start);
+        true
     }
 
     /// 在 service 线程中执行回调任务

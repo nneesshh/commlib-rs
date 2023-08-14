@@ -1,6 +1,6 @@
-use bytes::{Buf, BufMut, BytesMut};
-use libc::{read, write};
+use bytes::{BufMut, BytesMut};
 
+#[allow(dead_code)]
 static CRLF: &[u8; 2] = b"\r\n";
 
 ///
@@ -299,7 +299,7 @@ impl Buffer {
     #[inline(always)]
     pub fn peek_u128(&self) -> u128 {
         let len = std::mem::size_of::<u128>();
-        let mut be = 0_u128;
+        let be = 0_u128;
         assert!(self.length() >= len);
         unsafe {
             let src = self.begin_ptr_const().offset(self.read_index as isize);
@@ -313,7 +313,7 @@ impl Buffer {
     #[inline(always)]
     pub fn peek_u64(&self) -> u64 {
         let len = std::mem::size_of::<u64>();
-        let mut be = 0_u64;
+        let be = 0_u64;
         assert!(self.length() >= len);
         unsafe {
             let src = self.begin_ptr_const().offset(self.read_index as isize);
@@ -327,7 +327,7 @@ impl Buffer {
     #[inline(always)]
     pub fn peek_u32(&self) -> u32 {
         let len = std::mem::size_of::<u32>();
-        let mut be = 0_u32;
+        let be = 0_u32;
         assert!(self.length() >= len);
         unsafe {
             let src = self.begin_ptr_const().offset(self.read_index as isize);
@@ -341,7 +341,7 @@ impl Buffer {
     #[inline(always)]
     pub fn peek_u16(&self) -> u16 {
         let len = std::mem::size_of::<u16>();
-        let mut be = 0_u16;
+        let be = 0_u16;
         assert!(self.length() >= len);
         unsafe {
             let src = self.begin_ptr_const().offset(self.read_index as isize);

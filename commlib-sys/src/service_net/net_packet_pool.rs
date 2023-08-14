@@ -1,6 +1,9 @@
-use super::net_packet::NetPacket;
+use super::{net_packet::NetPacket, PacketType};
 use lazy_static::lazy_static;
 use opool::{Pool, PoolAllocator, RefGuard};
+
+///
+pub type NetPacketGuard = RefGuard<'static, NetPacketPool, NetPacket>;
 
 ///
 pub struct NetPacketPool;
@@ -26,11 +29,18 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
 }
 
 ///
-pub fn take_packet(size: usize) -> RefGuard<'static, NetPacketPool, NetPacket> {
+#[inline(always)]
+pub fn take_packet(size: usize, packet_type: PacketType, slice: &[u8]) -> NetPacketGuard {
     if size < SMALL_PACKEG_MAX_SIZE {
-        G_PACKET_POOL_SMALL.get()
+        let mut pkt = G_PACKET_POOL_SMALL.get();
+        pkt.set_type(packet_type);
+        pkt.set_slice(slice);
+        pkt
     } else {
-        G_PACKET_POOL_LARGE.get()
+        let mut pkt = G_PACKET_POOL_LARGE.get();
+        pkt.set_type(packet_type);
+        pkt.set_slice(slice);
+        pkt
     }
 }
 

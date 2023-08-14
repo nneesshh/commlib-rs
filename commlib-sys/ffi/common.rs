@@ -6,7 +6,8 @@ pub mod ffi_common {
     }
 }
 
-#[repr(transparent)]
+///
+#[repr(C)]
 pub struct ServiceWrapper {
     pub srv: &'static dyn ServiceRs,
 }
