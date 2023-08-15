@@ -27,35 +27,30 @@ impl App {
         // init logger
         let log_path = std::path::PathBuf::from("auto-legend");
         init_logger(&log_path, "testlog", spdlog::Level::Info as u32, true);
-
-        Self::add_service(&mut self.services, G_SERVICE_SIGNAL.as_ref());
-        Self::add_service(&mut self.services, G_SERVICE_NET.as_ref());
     }
 
     fn start(&mut self) {
-        // 配置 servie
-        for w in &mut self.services {
-            w.srv.conf();
-        }
-
-        // 启动 servie
-        for w in &mut self.services {
-            let ready_pair = start_service(w.srv, w.srv.name());
-            wait_service_ready(w.srv, ready_pair);
-        }
+        // attach default services
+        self.attach(|| G_SERVICE_SIGNAL.as_ref());
+        self.attach(|| G_SERVICE_NET.as_ref());
     }
 
     fn add_service(services: &mut Vec<ServiceWrapper>, srv: &'static dyn ServiceRs) {
+        //
+        let id = srv.get_handle().read().id();
+
         // 是否已经存在相同 id 的 service ?
         for w in &*services {
-            let id = srv.get_handle().read().id();
             let w_srv_handle = w.srv.get_handle().read();
             if w_srv_handle.id() == id {
                 log::error!("App::add_service() failed!!! ID={}", id);
                 return;
             }
         }
+
+        //
         services.push(ServiceWrapper { srv });
+        log::info!("App::add_service() ok, ID={}", id);
     }
 
     /// 添加 custom service

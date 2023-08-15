@@ -97,7 +97,7 @@ impl TcpConn {
 
     ///
     pub fn send(&self, data: &[u8]) {
-        log::trace!("[hd={:?}] send data ...", self.hd);
+        log::debug!("[hd={:?}] send data ...", self.hd);
 
         let netctrl = unsafe { &*(self.netctrl_id as *const NetworkController) };
         netctrl.send(self.endpoint, data);

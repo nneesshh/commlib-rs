@@ -5,8 +5,7 @@
 use app_helper::Startup;
 use parking_lot::RwLock;
 
-use commlib_sys::service_net::{NodeState, ServerCallbacks, ServiceHandle};
-use commlib_sys::ServiceRs;
+use commlib_sys::{NodeState, ServerCallbacks, ServiceHandle, ServiceRs};
 use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
 use std::sync::Arc;
@@ -35,23 +34,34 @@ impl TestService {
     fn init_startup(&self) {
         let mut startup_mut = self.startup.write();
         startup_mut.add_step("start network listen", || {
-            let thread_num: u32 = 1;
-            let connection_limit: u32 = 0; // 0=no limit
+            // TODO: let thread_num: u32 = 1;
+            // TODO: let connection_limit: u32 = 0; // 0=no limit
 
             let mut callbacks = ServerCallbacks::new();
             callbacks.conn_fn = Box::new(|conn_id| {
-                log::info!("conn_id={:?}", conn_id);
+                log::info!("[conn_fn] conn_id={:?}", conn_id);
 
                 conn_id.send("hello, rust".as_bytes());
             });
 
+            callbacks.msg_fn = Box::new(|conn_id, pkt| {
+                log::info!("[msg_fn] conn_id={:?}", conn_id);
+
+                conn_id.send("hello, rust".as_bytes());
+            });
+
+            callbacks.stopped_cb = Box::new(|conn_id| {
+                log::info!("[stopped_cb] conn_id={:?}", conn_id);
+
+                conn_id.send("bye, rust".as_bytes());
+            });
+
             app_helper::with_conf!(G_TEST_CONF, cfg, {
                 G_SERVICE_NET.listen(
-                    cfg.my.addr.as_str(),
+                    cfg.my.addr.clone(),
                     cfg.my.port,
-                    thread_num,
-                    connection_limit,
                     callbacks,
+                    G_TEST_SERVICE.as_ref(),
                 );
             });
 
@@ -86,7 +96,7 @@ impl ServiceRs for TestService {
         G_SERVICE_SIGNAL.listen_sig_int(G_TEST_SERVICE.as_ref(), || {
             println!("WTF!!!!");
         });
-        println!("\nGAME init ...\n");
+        log::info!("\nGAME init ...\n");
 
         //
         app_helper::with_conf_mut!(G_TEST_CONF, cfg, { cfg.init(handle_mut.xml_config()) });
@@ -100,7 +110,7 @@ impl ServiceRs for TestService {
     }
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>) {
         let handle = self.get_handle().read();
         handle.run_in_service(cb);
     }

@@ -5,11 +5,12 @@ use super::tcp_conn::*;
 use super::OsSocketAddr;
 use crate::service_net::net_packet::PacketType;
 use crate::service_net::TcpServer;
-use crate::ServiceNetRs;
+use crate::{ServiceNetRs, ServiceRs};
 use message_io::network::{Endpoint, NetworkController, ResourceId};
 use opool::RefGuard;
 
 /// Tcp server handler
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct TcpServerHandler {
     pub on_listen: extern "C" fn(*const ServiceNetRs, *const TcpServer),
@@ -48,6 +49,7 @@ pub struct TcpClientHandler {
 
 ///
 pub struct ServerCallbacks {
+    pub srv: Option<&'static dyn ServiceRs>,
     pub conn_fn: Box<dyn Fn(ConnId) + Send + Sync + 'static>,
     pub msg_fn:
         Box<dyn Fn(ConnId, RefGuard<'static, NetPacketPool, NetPacket>) + Send + Sync + 'static>,
@@ -58,6 +60,7 @@ impl ServerCallbacks {
     /// Constructor
     pub fn new() -> ServerCallbacks {
         ServerCallbacks {
+            srv: None,
             conn_fn: Box::new(|_1| {}),
             msg_fn: Box::new(|_1, _2| {}),
 
@@ -106,9 +109,13 @@ extern "C" fn on_accept_cb(
         (*conn_table_mut).insert(hd, conn);
     }
 
-    // callback
-    {
-        (tcp_server.callbacks.conn_fn)(hd);
+    // run callback in target srv
+    if let Some(srv) = tcp_server.callbacks.srv {
+        srv.run_in_service(Box::new(move || {
+            (tcp_server.callbacks.conn_fn)(hd);
+        }));
+    } else {
+        std::unreachable!();
     }
 }
 
@@ -140,9 +147,13 @@ extern "C" fn on_server_message_cb(
     let slice = unsafe { std::slice::from_raw_parts(data, len) };
     let pkt = take_packet(len, packet_type, slice);
 
-    // callback
-    {
-        (tcp_server.callbacks.msg_fn)(hd, pkt);
+    // run callback in target srv
+    if let Some(srv) = tcp_server.callbacks.srv {
+        srv.run_in_service(Box::new(move || {
+            (tcp_server.callbacks.msg_fn)(hd, pkt);
+        }));
+    } else {
+        std::unreachable!();
     }
 }
 
@@ -162,8 +173,12 @@ extern "C" fn on_server_close_cb(
         }
     }
 
-    // callback
-    {
-        (tcp_server.callbacks.stopped_cb)(hd);
+    // run callback in target srv
+    if let Some(srv) = tcp_server.callbacks.srv {
+        srv.run_in_service(Box::new(move || {
+            (tcp_server.callbacks.stopped_cb)(hd);
+        }));
+    } else {
+        std::unreachable!();
     }
 }

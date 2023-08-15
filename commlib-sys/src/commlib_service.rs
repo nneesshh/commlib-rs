@@ -23,7 +23,7 @@ pub enum NodeState {
     NodeLost,  // 节点丢失（world 管理节点用）
 }
 
-pub type ServiceFuncType = dyn FnMut() + Send + Sync + 'static;
+pub type ServiceFuncType = dyn FnOnce() + Send + Sync + 'static;
 
 /// Service handle
 pub struct ServiceHandle {
@@ -95,7 +95,7 @@ impl ServiceHandle {
     }
 
     /// 在 service 线程中执行回调任务
-    pub fn run_in_service(&self, mut cb: Box<dyn FnMut() + Send + Sync + 'static>) {
+    pub fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>) {
         if self.is_in_service_thread() {
             cb();
         } else {
@@ -132,7 +132,7 @@ pub trait ServiceRs: Send + Sync {
     fn init(&self) -> bool;
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>);
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>);
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool;
@@ -166,6 +166,8 @@ pub fn start_service(
         .spawn(move || {
             // notify ready
             let tid = get_current_tid();
+            log::info!("service({}) spawn on thread: {}", tname, tid);
+
             let (lock, cvar) = &*tid_ready;
             {
                 // release guard after value ok
@@ -279,7 +281,7 @@ pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) -> &'static 
                 let mut count = 4096_i32;
                 while count > 0 && !handle.rx.is_empty() {
                     match handle.rx.try_recv() {
-                        Ok(mut cb) => {
+                        Ok(cb) => {
                             log::info!("Dequeued item ID={}", handle.id);
                             println!("Dequeued item ID={}", handle.id);
                             cb();

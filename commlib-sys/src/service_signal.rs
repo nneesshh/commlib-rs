@@ -53,20 +53,17 @@ impl ServiceSignalRs {
     /// Listen signal: sig_int
     pub fn listen_sig_int<F>(&self, srv: &'static dyn ServiceRs, f: F)
     where
-        F: FnMut() + Send + Sync + 'static,
+        F: FnOnce() + Send + Sync + 'static,
     {
-        let mut f = Some(f);
-
         self.run_in_service(Box::new(move || {
-            let mut f = f.take();
+            let mut f_opt = Some(f);
 
             // 在 Service thread 中注册事件回调
             EventSignalInt::add_callback(move |_e| {
-                let mut f = f.take();
+                let f = f_opt.take().unwrap(); // use option trick to take "f" from FnMut() closure
 
                 // 事件触发时，将 f post 到工作线程执行
                 srv.run_in_service(Box::new(move || {
-                    let mut f = f.take().unwrap();
                     f();
                 }));
             });
@@ -127,7 +124,7 @@ impl ServiceRs for ServiceSignalRs {
     }
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnMut() + Send + Sync + 'static>) {
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>) {
         let handle = self.get_handle().read();
         handle.run_in_service(cb);
     }

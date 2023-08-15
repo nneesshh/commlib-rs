@@ -35,14 +35,16 @@
 //! //</code>
 //!
 
+use super::start_message_io_server_async;
 use super::MessageIoServer;
 use super::{ServerCallbacks, TcpServerHandler};
 use super::{ServerStatus, ServerSubStatus};
 
-use crate::G_SERVICE_NET;
+use crate::ServiceNetRs;
 use parking_lot::RwLock;
 
 use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 ///
 #[repr(C)]
 pub struct TcpServer {
@@ -53,7 +55,7 @@ pub struct TcpServer {
     connection_limit: AtomicUsize,
     connection_num: AtomicUsize,
 
-    inner_server: Option<MessageIoServer>,
+    pub inner_server_opt: Arc<RwLock<Option<MessageIoServer>>>,
     pub callbacks: ServerCallbacks,
 }
 
@@ -68,29 +70,63 @@ impl TcpServer {
             connection_limit: AtomicUsize::new(0),
             connection_num: AtomicUsize::new(0),
 
-            inner_server: None,
+            inner_server_opt: Arc::new(RwLock::new(None)),
             callbacks: ServerCallbacks::new(),
         }
     }
 
-    ///
-    pub fn init(&mut self) -> bool {
+    /// Create a tcp server and listen on [ip:port]
+    pub fn listen(
+        &'static self,
+        ip: String,
+        port: u16,
+        callbacks: ServerCallbacks,
+        srv_net: &'static ServiceNetRs,
+    ) {
+        let raddr = std::format!("{}:{}", ip, port);
+
+        // init callbacks
+        unsafe {
+            let callbacks_mut = &self.callbacks as *const ServerCallbacks as *mut ServerCallbacks;
+            (*callbacks_mut) = callbacks;
+        }
+
+        // init inner-server
+        self.inner_server_init();
+
+        // inner-server listen
+        self.inner_server_listen(raddr.as_str(), srv_net);
+    }
+
+    /// Start net event loop
+    pub fn start(&'static self, srv_net: &'static ServiceNetRs) {
+        self.inner_start(srv_net);
+    }
+
+    /// Stop net event loop
+    pub fn stop(&self) {
+        self.inner_stop();
+    }
+
+    fn inner_server_init(&self) -> bool {
         let mut status_mut = self.status.write();
 
         // inner server
         let tcp_server_handler = TcpServerHandler::new();
         let tcp_server_id = self as *const TcpServer as usize;
-        self.inner_server = Some(MessageIoServer::new(tcp_server_handler, tcp_server_id));
+
+        // mount inner server opt
+        {
+            let mut inner_server_opt_mut = self.inner_server_opt.write();
+            (*inner_server_opt_mut) = Some(MessageIoServer::new(tcp_server_handler, tcp_server_id));
+        }
 
         // initialize finish
         (*status_mut) = ServerStatus::Initialized;
         true
     }
 
-    ///
-    pub fn start(&mut self, addr: &str) {
-        let inner_server = self.inner_server.as_mut().unwrap();
-
+    fn inner_server_listen(&self, addr: &str, srv_net: &'static ServiceNetRs) {
         // server prepare
         {
             let mut status_mut = self.status.write();
@@ -103,48 +139,25 @@ impl TcpServer {
             (*status_mut) = ServerStatus::Running;
         }
 
-        // server listen
-        inner_server.listen(addr, G_SERVICE_NET.as_ref()).unwrap();
-
-        // server loop
-        inner_server.run(G_SERVICE_NET.as_ref());
-    }
-
-    ///
-    pub fn listen(
-        ip: &str,
-        port: u16,
-        thread_num: u32,
-        connection_limit: u32,
-        callbacks: ServerCallbacks,
-    ) -> TcpServer {
-        let mut tcp_server = TcpServer::new();
-
-        //
+        // inner server listen
         {
-            let raddr = std::format!("{}:{}", ip, port);
-            tcp_server.tcp_listen_addr(raddr.as_ref(), thread_num, connection_limit, callbacks);
-            tcp_server
+            let mut inner_server_opt_mut = self.inner_server_opt.write();
+            (*inner_server_opt_mut)
+                .as_mut()
+                .unwrap()
+                .listen(addr, srv_net)
+                .unwrap();
         }
     }
 
-    fn tcp_listen_addr(
-        &mut self,
-        addr: &str,
-        _thread_num: u32,       // TODO:
-        _connection_limit: u32, // TODO:
-        callbacks: ServerCallbacks,
-    ) {
-        // init callbacks
-        unsafe {
-            let callbacks_mut = &self.callbacks as *const ServerCallbacks as *mut ServerCallbacks;
-            (*callbacks_mut) = callbacks;
-        }
+    fn inner_start(&'static self, srv_net: &'static ServiceNetRs) {
+        // inner server run in async mode -- loop in a isolate thread
+        start_message_io_server_async(&self.inner_server_opt, srv_net);
+    }
 
-        //
-        self.init();
-
-        //
-        self.start(addr);
+    fn inner_stop(&self) {
+        // inner server stop
+        let mut inner_server_opt_mut = self.inner_server_opt.write();
+        (*inner_server_opt_mut).as_mut().unwrap().stop();
     }
 }
