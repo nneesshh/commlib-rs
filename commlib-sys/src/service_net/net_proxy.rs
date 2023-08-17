@@ -9,7 +9,7 @@ pub struct CrossRoutInfo {
 }
 
 ///
-pub type PacketHander = Box<dyn FnMut(ConnId, CmdId, &[u8])>;
+pub type PacketHander = Box<dyn Fn(ConnId, CmdId, &[u8]) + Send + Sync>;
 
 ///
 pub struct NetProxy {
@@ -55,8 +55,9 @@ impl NetProxy {
 
     /// 发送接口线程安全,
     pub fn send_raw(&mut self, hd: ConnId, cmd: CmdId, slice: &[u8]) {
-        let guard = take_packet(slice.len(), self.packet_type, slice);
-        self.send_packet(hd, guard);
+        let mut pkt = take_packet(slice.len(), self.packet_type);
+        pkt.set_body(slice);
+        self.send_packet(hd, pkt);
     }
 
     #[inline(always)]

@@ -25,7 +25,7 @@ pub struct EventHandler<E>
 where
     E: Event,
 {
-    pub func: Box<dyn FnMut(&E) + 'static>,
+    pub func: Box<dyn FnMut(&E)>,
     _phantom: std::marker::PhantomData<E>,
 }
 

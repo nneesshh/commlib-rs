@@ -3,12 +3,14 @@ use lazy_static::lazy_static;
 use opool::{Pool, PoolAllocator, RefGuard};
 
 ///
+pub const SMALL_PACKET_MAX_SIZE: usize = 1024 * 4;
+
+///
 pub type NetPacketGuard = RefGuard<'static, NetPacketPool, NetPacket>;
 
 ///
 pub struct NetPacketPool;
 
-const SMALL_PACKEG_MAX_SIZE: usize = 1024 * 4;
 impl PoolAllocator<NetPacket> for NetPacketPool {
     #[inline]
     fn allocate(&self) -> NetPacket {
@@ -17,12 +19,12 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
 
     /// OPTIONAL METHODS:
     #[inline]
-    fn reset(&self, _obj: &mut NetPacket) {
-        // Optionally you can clear or zero object fields here
+    fn reset(&self, pkt: &mut NetPacket) {
+        pkt.release();
     }
 
     #[inline]
-    fn is_valid(&self, _obj: &NetPacket) -> bool {
+    fn is_valid(&self, pkt: &NetPacket) -> bool {
         // you can optionally is_valid if object is good to be pushed back to the pool
         true
     }
@@ -30,16 +32,14 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
 
 ///
 #[inline(always)]
-pub fn take_packet(size: usize, packet_type: PacketType, slice: &[u8]) -> NetPacketGuard {
-    if size < SMALL_PACKEG_MAX_SIZE {
+pub fn take_packet(size: usize, packet_type: PacketType) -> NetPacketGuard {
+    if size <= SMALL_PACKET_MAX_SIZE {
         let mut pkt = G_PACKET_POOL_SMALL.get();
         pkt.set_type(packet_type);
-        pkt.set_slice(slice);
         pkt
     } else {
         let mut pkt = G_PACKET_POOL_LARGE.get();
         pkt.set_type(packet_type);
-        pkt.set_slice(slice);
         pkt
     }
 }

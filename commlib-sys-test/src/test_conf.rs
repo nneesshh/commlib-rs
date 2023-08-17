@@ -1,5 +1,14 @@
+//!
+//! TestConf
+//!
+
 use commlib_sys::{NodeConf, XmlReader};
 use std::cell::UnsafeCell;
+
+thread_local! {
+    ///
+    pub static G_TEST_CONF: UnsafeCell<TestConf> = UnsafeCell::new(TestConf::new());
+}
 
 ///
 pub struct TestConf {
@@ -20,9 +29,4 @@ impl TestConf {
         self.my.addr = xr.get_string(vec!["addr"], "");
         self.my.port = xr.get_u64(vec!["port"], 0) as u16;
     }
-}
-
-thread_local! {
-    pub static G_TEST_CONF: UnsafeCell<TestConf> = UnsafeCell::new(TestConf::new());
-
 }

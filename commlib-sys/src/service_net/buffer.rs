@@ -7,7 +7,7 @@ static CRLF: &[u8; 2] = b"\r\n";
 pub struct Buffer {
     inner: BytesMut, // inner.len() is the write_index, Don't use any "split" method of inner
     read_index: usize,
-    reserved_prepend_index: usize,
+    reserved_prepend_index: usize, // send write data with this offet for prepend header later
 }
 
 impl Buffer {

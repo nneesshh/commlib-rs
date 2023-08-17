@@ -84,6 +84,7 @@ impl TcpServer {
         srv_net: &'static ServiceNetRs,
     ) {
         let raddr = std::format!("{}:{}", ip, port);
+        log::info!("tcp server listen raddr: {}", raddr);
 
         // init callbacks
         unsafe {
@@ -100,6 +101,13 @@ impl TcpServer {
 
     /// Start net event loop
     pub fn start(&'static self, srv_net: &'static ServiceNetRs) {
+        log::info!(
+            "tcp server start at {:?} status={} conn_num={}...",
+            self.start,
+            self.status.read().to_string(),
+            self.connection_num
+                .load(std::sync::atomic::Ordering::Relaxed),
+        );
         self.inner_start(srv_net);
     }
 
@@ -109,8 +117,6 @@ impl TcpServer {
     }
 
     fn inner_server_init(&self) -> bool {
-        let mut status_mut = self.status.write();
-
         // inner server
         let tcp_server_handler = TcpServerHandler::new();
         let tcp_server_id = self as *const TcpServer as usize;
@@ -122,7 +128,10 @@ impl TcpServer {
         }
 
         // initialize finish
-        (*status_mut) = ServerStatus::Initialized;
+        {
+            let mut status_mut = self.status.write();
+            (*status_mut) = ServerStatus::Initialized;
+        }
         true
     }
 

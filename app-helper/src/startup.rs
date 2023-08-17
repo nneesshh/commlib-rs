@@ -11,7 +11,7 @@ struct StartupTask {
 }
 
 struct StartupHandle {
-    srv_id: u64,
+    name: String,
     tasks: Vec<StartupTask>,
     index: usize,
     suspending: bool,
@@ -19,9 +19,9 @@ struct StartupHandle {
 
 impl StartupHandle {
     ///
-    pub(crate) fn new(srv_id: u64) -> StartupHandle {
+    pub(crate) fn new(name: &str) -> StartupHandle {
         StartupHandle {
-            srv_id,
+            name: name.to_owned(),
             tasks: Vec::new(),
             index: 0,
             suspending: false,
@@ -32,7 +32,7 @@ impl StartupHandle {
     pub(crate) fn exec_tasks(&mut self) {
         let task_count = self.tasks.len();
         if 0 == task_count {
-            log::info!("startup[{}]: no task.", self.srv_id);
+            log::info!("startup[{}]: no task.", self.name);
             return;
         }
 
@@ -41,9 +41,9 @@ impl StartupHandle {
 
             if self.index < task_count {
                 let task = &self.tasks[self.index];
-                log::debug!(
+                log::info!(
                     "startup[{}]: next task({}) index({}) ... ... tail_index={}",
-                    self.srv_id,
+                    self.name,
                     task.desc,
                     self.index,
                     task_count - 1
@@ -54,35 +54,35 @@ impl StartupHandle {
         if self.index < task_count {
             let task = &self.tasks[self.index];
             self.suspending = true;
-            log::debug!(
+            log::info!(
                 "startup[{}]: task({}) suspending at index({}) ... ... tail_index={}",
-                self.srv_id,
+                self.name,
                 task.desc,
                 self.index,
                 task_count - 1
             );
         } else {
             self.suspending = false;
-            log::debug!("startup[{}]: ======== over ========", self.srv_id);
+            log::info!("startup[{}]: ======== over ========", self.name);
         }
     }
 
     fn exec_step(&mut self) -> bool {
         let task_count = self.tasks.len();
         if 0 == task_count {
-            log::info!("startup[{}]: no task.", self.srv_id);
+            log::info!("startup[{}]: no task.", self.name);
             return true;
         }
 
         if self.index >= task_count {
-            log::info!("startup[{}]: all task are over.", self.srv_id);
+            log::info!("startup[{}]: all task are over.", self.name);
             return true;
         }
 
         let task = &mut self.tasks[self.index];
-        log::debug!(
+        log::info!(
             "startup[{}]: exec task({}) at index({}) ... ... tail_index={}",
-            self.srv_id,
+            self.name,
             task.desc,
             self.index,
             task_count - 1
@@ -100,9 +100,9 @@ pub struct Startup {
 
 impl Startup {
     /// Constructor
-    pub fn new(srv_id: u64) -> Startup {
+    pub fn new(name: &str) -> Startup {
         Startup {
-            handle: Mutex::new(StartupHandle::new(srv_id)),
+            handle: Mutex::new(StartupHandle::new(name)),
         }
     }
 
@@ -119,8 +119,8 @@ impl Startup {
         handle.tasks.push(task)
     }
 
-    ///
-    pub fn run(&mut self) {
+    /// 执行 startup 步骤
+    pub fn exec(&mut self) {
         let mut handle = self.handle.lock();
         handle.exec_tasks();
     }

@@ -124,7 +124,7 @@ impl ServiceRs for ServiceSignalRs {
     }
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>) {
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
         let handle = self.get_handle().read();
         handle.run_in_service(cb);
     }

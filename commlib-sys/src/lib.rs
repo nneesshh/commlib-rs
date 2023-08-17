@@ -45,7 +45,7 @@ pub use service_signal::ServiceSignalRs;
 
 ///
 pub mod service_net;
-pub use service_net::{NetPacket, ServiceNetRs, ServerCallbacks};
+pub use service_net::{NetPacket, NetProxy, ServerCallbacks, ServiceNetRs};
 
 ///
 pub mod globals;

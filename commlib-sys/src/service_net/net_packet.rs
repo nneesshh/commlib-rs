@@ -1,6 +1,6 @@
 use std::collections::LinkedList;
 
-use super::ConnId;
+use super::{Buffer, ConnId};
 
 ///
 pub static EMPTY_SLICE: &[u8; 0] = &[0_u8; 0];
@@ -13,31 +13,36 @@ const BUFFER_RESERVED_PREPEND_SIZE: usize = 8;
 pub type CmdId = u16;
 
 /// 消息体加密字节数
-const ENCRYPT_MAX_PKT_LEN: usize = 4; /* 4字节消息体 */
+const ENCRYPT_MAX_BODY_LEN: usize = 4; /* 4字节消息体 */
 const PKT_CMD_LEN: usize = 2; /* 2字节协议号 */
-const ENCRYPT_MAX_LEN: usize = PKT_CMD_LEN + ENCRYPT_MAX_PKT_LEN;
+const ENCRYPT_MAX_LEN: usize = PKT_CMD_LEN + ENCRYPT_MAX_BODY_LEN;
 const ENCRYPT_KEY_LEN: usize = 64; /* 密钥总长度，根据 client no 进行偏移 */
 const SAVED_NO_COUNT: usize = 1;
 
-/// 4字节包头
-const PKT_HEADER_LENGTH_SIZE: usize = 4;
+/// 4字节包体前导长度字段
+const PKT_LEADING_SIZE: usize = 4;
 
-/// 2字节包头(来自客户端)
-const FROM_CLIENT_PKT_HEADER_LENGTH_SIZE: usize = 2;
+/// 2字节包体前导长度字段(来自客户端)
+const FROM_CLIENT_PKT_LEADING_SIZE: usize = 2;
 
-/// 4字节包头 + 2字节协议号 // sizeof(data_size_) + sizeof(cmd_)
-const SERVER_INNER_HEADER_SIZE: usize = PKT_HEADER_LENGTH_SIZE + 2;
+/// 4字节包体前导长度字段 + 2字节协议号
+///     leading(pkt_full_len)(4) + cmd(2)
+const SERVER_INNER_HEADER_SIZE: usize = PKT_LEADING_SIZE + 2;
 
-/// 4字节包头 + 2字节协议号(发往客户端) // sizeof(data_size_) + sizeof(cmd_)
-const TO_CLIENT_HEADER_SIZE: usize = PKT_HEADER_LENGTH_SIZE + 2;
+/// 4字节包体前导长度字段 + 2字节协议号(发往客户端)
+///     leading( pkt_full_len)(4) + cmd(2)
+const TO_CLIENT_HEADER_SIZE: usize = PKT_LEADING_SIZE + 2;
 
-/// 2字节包头 + 1字节序号 + 2字节协议号(来自客户端) // sizeof(data_size_) + sizeof(ClientHead::no_) + sizeof(cmd_)
-const FROM_CLIENT_HEADER_SIZE: usize = FROM_CLIENT_PKT_HEADER_LENGTH_SIZE + 1 + 2;
+/// 2字节包体前导长度字段 + 1字节序号 + 2字节协议号(来自客户端)
+///     leading(pkt_full_len)(2) + client_no(1) + cmd(2)
+const FROM_CLIENT_HEADER_SIZE: usize = FROM_CLIENT_PKT_LEADING_SIZE + 1 + 2;
 
 /// 2字节协议号: WS
+///     cmd(2)
 const TO_CLIENT_HEADER_SIZE_WS: usize = 2;
 
 /// 1字节序号 + 2字节协议号: WS
+///     client_no(1) + cmd(2)
 const FROM_CLIENT_HEADER_SIZE_WS: usize = 3;
 
 ///
@@ -70,37 +75,38 @@ pub struct ClientHead {
     no: i8, // 包序号
 }
 
-/// 包头：
+/// 包头前导长度字段：
 /// 服务器内部 => 4字节长度 + 2字节协议号
 /// 客户端协议
 ///     客户端发包      => 2字节长度 + 1字节序号 + 2字节协议号
 ///     服务器到客户端包 => 4字节长度 + 2字节协议号
 #[repr(C)]
 pub struct NetPacket {
-    packeg_size: PacketSzie,
+    packet_size: PacketSzie,
     packet_type: PacketType,
+    leading_field_size: usize,
 
-    data_size: usize,
+    ///
+    body_size: usize, // 包体纯数据长度，不包含包头（包头：包体前导长度字段，协议号，包序号等）
     cmd: CmdId,
     client: ClientHead,
 
-    buffer: super::Buffer, // 完整包体
-    buffer_raw_len: usize, // 完整包体原始长度
+    buffer: Buffer, // 包体数据缓冲区
 }
 
 impl NetPacket {
     ///
     pub fn new() -> NetPacket {
         NetPacket {
-            packeg_size: PacketSzie::Small,
+            packet_size: PacketSzie::Small,
             packet_type: PacketType::Server,
+            leading_field_size: get_packet_leading_field_size(PacketType::Server),
 
-            data_size: 0,
+            body_size: 0,
             cmd: 0,
             client: ClientHead { no: 0 },
 
-            buffer: super::Buffer::new(BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE),
-            buffer_raw_len: 0,
+            buffer: Buffer::new(BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE),
         }
     }
 
@@ -111,40 +117,67 @@ impl NetPacket {
 
     ///
     pub fn release(&mut self) {
-        self.data_size = 0;
+        self.body_size = 0;
         self.cmd = 0;
         self.client.no = 0;
         self.buffer.reset();
-        self.buffer_raw_len = 0;
     }
 
-    ///
-    pub fn set_slice(&mut self, slice: &[u8]) {
-        assert_eq!(self.buffer_raw_len, 0);
-        let len = slice.len();
-        self.buffer.write_slice(slice);
-        self.buffer_raw_len = len;
-        assert_eq!(self.buffer_raw_len, self.buffer.length());
+    /// 向 pkt 追加数据
+    #[inline(always)]
+    pub fn append(&mut self, data: *const u8, len: usize) {
+        self.buffer.write(data, len);
 
-        self.data_size = self.buffer_raw_len;
+        // body size 计数
+        self.body_size = if self.buffer_raw_len() >= self.leading_field_size {
+            self.buffer_raw_len() - self.leading_field_size
+        } else {
+            0
+        };
     }
 
     ///
     #[inline(always)]
     pub fn set_type(&mut self, packet_type: PacketType) {
-        self.packet_type = packet_type
+        self.packet_type = packet_type;
+        self.leading_field_size = get_packet_leading_field_size(packet_type);
     }
 
-    ///
+    /// 查看包体前导长度字段位数
+    #[inline(always)]
+    pub fn peek_leading_field(&self) -> usize {
+        peek_packet_leading_field(&self.buffer, self.packet_type)
+    }
+
+    /// 包体前导长度字段位数
+    #[inline(always)]
+    pub fn leading_field_size(&self) -> usize {
+        self.leading_field_size
+    }
+
+    /// 包体数据缓冲区尚未读取的数据数量
+    #[inline(always)]
+    pub fn buffer_raw_len(&self) -> usize {
+        self.buffer.length()
+    }
+
+    /// 协议号
     #[inline(always)]
     pub fn cmd(&self) -> CmdId {
         self.cmd
     }
 
-    ///
+    /// 内部消耗掉 buffer 数据，供给外部使用
     #[inline(always)]
     pub fn consume(&mut self) -> &[u8] {
         self.buffer.next_all()
+    }
+
+    ///
+    pub fn set_body(&mut self, slice: &[u8]) {
+        let len = slice.len();
+        self.buffer.write_slice(slice);
+        self.body_size = len;
     }
 
     ///
@@ -156,8 +189,7 @@ impl NetPacket {
         let pb_slice = self.buffer.next_of_write(len);
         write_prost_message(msg, pb_slice);
 
-        self.buffer_raw_len = len;
-        self.data_size = self.buffer_raw_len;
+        self.body_size = len;
     }
 
     ///
@@ -165,17 +197,17 @@ impl NetPacket {
     where
         M: prost::Message,
     {
+        // 4字节 pid
         self.buffer.append_u64(pid);
-        self.buffer_raw_len += 4;
 
+        // 2字节 cmd
         self.buffer.append_u16(cmd);
-        self.buffer_raw_len += 2;
 
         let len = msg.encoded_len();
         let pb_slice = self.buffer.next_of_write(len);
         write_prost_message(msg, pb_slice);
-        self.buffer_raw_len += len;
-        self.data_size = self.buffer_raw_len;
+
+        self.body_size = len;
         true
     }
 
@@ -189,23 +221,22 @@ impl NetPacket {
     where
         M: prost::Message,
     {
+        // 2字节 pids 列表长度
         self.buffer.append_u16(pids.len() as u16);
-        self.buffer_raw_len += 2;
 
         for pid in pids {
+            // 4字节 pid
             self.buffer.append_u64(pid);
-            self.buffer_raw_len += 4;
         }
 
+        // 2字节 cmd
         self.buffer.append_u16(cmd);
-        self.buffer_raw_len += 2;
 
         let len = msg.encoded_len();
         let pb_slice = self.buffer.next_of_write(len);
         write_prost_message(msg, pb_slice);
 
-        self.buffer_raw_len += len;
-        self.data_size = self.buffer_raw_len;
+        self.body_size = len;
         true
     }
 
@@ -228,8 +259,6 @@ impl NetPacket {
         hd: ConnId,
         encrypt_table: &mut hashbrown::HashMap<ConnId, EncryptData>,
     ) -> bool {
-        let client_no = self.client.no;
-
         match self.packet_type {
             PacketType::Client => {
                 // 解密
@@ -247,6 +276,7 @@ impl NetPacket {
                         self.read_client_packet(encrypt.encrypt_key.as_str());
 
                         // TODO: 包序号检查
+                        let client_no = self.client.no;
                         if !add_packet_no(encrypt, client_no) {
                             log::error!("[decode_packet::PacketType::Client] received client data from [hd={:?}] error: packet no {} already exist!!!",
                                 hd, client_no
@@ -286,6 +316,7 @@ impl NetPacket {
                         self.read_client_ws_packet(encrypt.encrypt_key.as_str());
 
                         // TODO: 包序号检查
+                        let client_no = self.client.no;
                         if !add_packet_no(encrypt, client_no) {
                             log::error!("[decode_packet::PacketType::ClientWs] received client data from [hd={:?}] error: packet no {} already exist!!!",
                                 hd, client_no);
@@ -396,25 +427,21 @@ impl NetPacket {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
-        self.buffer_raw_len += 2;
 
         // 4 字节包长度
-        let size = SERVER_INNER_HEADER_SIZE + self.data_size;
+        let size = SERVER_INNER_HEADER_SIZE + self.body_size;
         self.buffer.prepend_u32(size as u32);
-        self.buffer_raw_len += 4;
     }
 
     fn read_server_packet(&mut self) {
-        // MUST BE only one packet in buffer
-        assert_eq!(self.buffer_raw_len, self.buffer.length());
+        // MUST only one packet in buffer
 
         // 4 字节长度
-        self.data_size = self.buffer.read_u32() as usize;
+        let pkt_full_len = self.buffer.read_u32() as usize;
+        self.body_size = pkt_full_len - SERVER_INNER_HEADER_SIZE;
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
-
-        self.data_size -= SERVER_INNER_HEADER_SIZE;
     }
 
     /* **** client **** */
@@ -422,32 +449,27 @@ impl NetPacket {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
-        self.buffer_raw_len += 2;
 
         // 4 字节包长度
-        let size = TO_CLIENT_HEADER_SIZE + self.data_size;
+        let size = TO_CLIENT_HEADER_SIZE + self.body_size;
         self.buffer.prepend_u32(size as u32);
-        self.buffer_raw_len += 4;
     }
 
     fn read_client_packet(&mut self, key: &str) {
-        // MUST BE only one packet in buffer
-        assert_eq!(self.buffer_raw_len, self.buffer.length());
+        // MUST only one packet in buffer
 
         // 2 字节长度
-        self.data_size = self.buffer.read_u16() as usize;
-        self.data_size -= FROM_CLIENT_HEADER_SIZE;
+        let pkt_full_len = self.buffer.read_u16() as usize;
+        self.body_size = pkt_full_len - FROM_CLIENT_HEADER_SIZE;
 
         // 1 字节序号
         self.client.no = self.buffer.read_u8() as i8;
 
         // 解密
-        decrypt_packet(self.buffer.data_mut(), self.data_size, key, self.client.no);
+        decrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
-
-        self.data_size -= SERVER_INNER_HEADER_SIZE;
     }
 
     /* **** robot **** */
@@ -455,32 +477,27 @@ impl NetPacket {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
-        self.buffer_raw_len += 2;
 
         // 加密
-        encrypt_packet(self.buffer.data_mut(), self.data_size, key, self.client.no);
+        encrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
 
         // 1 字节序号
         self.buffer.prepend_u8(self.client.no as u8);
-        self.buffer_raw_len += 1;
 
         // 2 字节包长度
-        let size = FROM_CLIENT_HEADER_SIZE + self.data_size;
+        let size = FROM_CLIENT_HEADER_SIZE + self.body_size;
         self.buffer.prepend_u16(size as u16);
-        self.buffer_raw_len += 2;
     }
 
     fn read_robot_packet(&mut self) {
-        // MUST BE only one packet in buffer
-        assert_eq!(self.buffer_raw_len, self.buffer.length());
+        // MUST only one packet in buffer
 
         // 4 字节长度
-        self.data_size = self.buffer.read_u32() as usize;
+        let pkt_full_len = self.buffer.read_u32() as usize;
+        self.body_size = pkt_full_len - TO_CLIENT_HEADER_SIZE;
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
-
-        self.data_size -= TO_CLIENT_HEADER_SIZE;
     }
 
     /* **** client ws **** */
@@ -488,21 +505,19 @@ impl NetPacket {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
-        self.buffer_raw_len += 2;
     }
 
     fn read_client_ws_packet(&mut self, key: &str) {
-        // MUST BE only one packet in buffer
-        assert_eq!(self.buffer_raw_len, self.buffer.length());
+        // MUST only one packet in buffer
 
         //
-        self.data_size = self.buffer_raw_len - FROM_CLIENT_HEADER_SIZE_WS;
+        self.body_size = self.buffer_raw_len() - FROM_CLIENT_HEADER_SIZE_WS;
 
         // 1 字节序号
         self.client.no = self.buffer.read_u8() as i8;
 
         // 解密
-        decrypt_packet(self.buffer.data_mut(), self.data_size, key, self.client.no);
+        decrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
@@ -513,28 +528,26 @@ impl NetPacket {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
-        self.buffer_raw_len += 2;
 
         // 加密
-        encrypt_packet(self.buffer.data_mut(), self.data_size, key, self.client.no);
+        encrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
 
         // 1 字节序号
         self.buffer.prepend_u8(self.client.no as u8);
-        self.buffer_raw_len += 1;
     }
 
     fn read_robot_ws_packet(&mut self) {
-        // MUST BE only one packet in buffer
-        assert_eq!(self.buffer_raw_len, self.buffer.length());
+        // MUST only one packet in buffer
 
         //
-        self.data_size = self.buffer_raw_len - TO_CLIENT_HEADER_SIZE_WS;
+        self.body_size = self.buffer_raw_len() - TO_CLIENT_HEADER_SIZE_WS;
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
     }
 }
 
+///
 #[inline(always)]
 pub fn write_prost_message<M>(msg: &M, mut buf: &mut [u8]) -> bool
 where
@@ -549,6 +562,7 @@ where
     }
 }
 
+///
 #[inline(always)]
 pub fn rand_packet_no(encrypt: &mut EncryptData, _hd: ConnId) -> i8 {
     let no_list = &mut encrypt.no_list;
@@ -562,6 +576,7 @@ pub fn rand_packet_no(encrypt: &mut EncryptData, _hd: ConnId) -> i8 {
     no
 }
 
+///
 #[inline(always)]
 pub fn add_packet_no(encrypt: &mut EncryptData, no: i8) -> bool {
     if no >= ENCRYPT_KEY_LEN as i8 {
@@ -585,7 +600,7 @@ pub fn add_packet_no(encrypt: &mut EncryptData, no: i8) -> bool {
 
 #[inline(always)]
 fn encrypt_packet(data: *mut u8, len: usize, key: &str, no: i8) {
-    let slice_len = if len < ENCRYPT_MAX_PKT_LEN {
+    let slice_len = if len < ENCRYPT_MAX_BODY_LEN {
         PKT_CMD_LEN + len
     } else {
         ENCRYPT_MAX_LEN
@@ -605,4 +620,24 @@ fn encrypt_packet(data: *mut u8, len: usize, key: &str, no: i8) {
 fn decrypt_packet(data: *mut u8, len: usize, key: &str, no: i8) {
     // xor decrypt is just same as encrypt
     encrypt_packet(data, len, key, no);
+}
+
+#[inline(always)]
+fn get_packet_leading_field_size(packet_type: PacketType) -> usize {
+    // 客户端包 2 字节包头，其他都是 4 字节包头
+    if packet_type as u32 == PacketType::Client as u32 {
+        2_usize
+    } else {
+        4_usize
+    }
+}
+
+#[inline(always)]
+fn peek_packet_leading_field(buffer: &Buffer, packet_type: PacketType) -> usize {
+    // 客户端包 2 字节包头，其他都是 4 字节包头
+    if packet_type as u32 == PacketType::Client as u32 {
+        buffer.peek_u16() as usize
+    } else {
+        buffer.peek_u32() as usize
+    }
 }

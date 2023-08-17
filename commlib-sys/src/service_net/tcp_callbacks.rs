@@ -1,13 +1,9 @@
-use super::net_packet::NetPacket;
-use super::net_packet_pool::take_packet;
-use super::net_packet_pool::NetPacketPool;
-use super::tcp_conn::*;
-use super::OsSocketAddr;
-use crate::service_net::net_packet::PacketType;
-use crate::service_net::TcpServer;
-use crate::{ServiceNetRs, ServiceRs};
 use message_io::network::{Endpoint, NetworkController, ResourceId};
 use opool::RefGuard;
+
+use crate::{ServiceNetRs, ServiceRs};
+
+use super::{ConnId, NetPacket, NetPacketPool, OsSocketAddr, PacketType, TcpConn, TcpServer};
 
 /// Tcp server handler
 #[derive(Copy, Clone)]
@@ -50,10 +46,9 @@ pub struct TcpClientHandler {
 ///
 pub struct ServerCallbacks {
     pub srv: Option<&'static dyn ServiceRs>,
-    pub conn_fn: Box<dyn Fn(ConnId) + Send + Sync + 'static>,
-    pub msg_fn:
-        Box<dyn Fn(ConnId, RefGuard<'static, NetPacketPool, NetPacket>) + Send + Sync + 'static>,
-    pub stopped_cb: Box<dyn Fn(ConnId) + Send + Sync + 'static>,
+    pub conn_fn: Box<dyn Fn(ConnId) + Send + Sync>,
+    pub msg_fn: Box<dyn Fn(ConnId, RefGuard<'static, NetPacketPool, NetPacket>) + Send + Sync>,
+    pub stopped_cb: Box<dyn Fn(ConnId) + Send + Sync>,
 }
 
 impl ServerCallbacks {
@@ -130,30 +125,23 @@ extern "C" fn on_server_message_cb(
     srv_net: *const ServiceNetRs,
     tcp_server: *const TcpServer,
     hd: ConnId,
-    data: *const u8,
-    len: usize,
+    input_data: *const u8,
+    input_len: usize,
 ) {
     let srv_net = unsafe { &*srv_net };
     let tcp_server = unsafe { &*tcp_server };
 
-    let mut packet_type = PacketType::Server;
+    //
     {
         let conn_table = srv_net.conn_table.read();
         if let Some(conn) = conn_table.get(&hd) {
-            packet_type = conn.packet_type;
+            // 转到 conn 处理
+            let slice = unsafe { std::slice::from_raw_parts(input_data, input_len) };
+            conn.handle_read(srv_net, tcp_server, hd, slice);
+        } else {
+            //
+            log::error!("[on_server_message_cb][hd={:?}] not found!!!", hd);
         }
-    }
-
-    let slice = unsafe { std::slice::from_raw_parts(data, len) };
-    let pkt = take_packet(len, packet_type, slice);
-
-    // run callback in target srv
-    if let Some(srv) = tcp_server.callbacks.srv {
-        srv.run_in_service(Box::new(move || {
-            (tcp_server.callbacks.msg_fn)(hd, pkt);
-        }));
-    } else {
-        std::unreachable!();
     }
 }
 

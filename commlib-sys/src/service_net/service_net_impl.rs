@@ -24,12 +24,12 @@ impl ServiceNetRs {
     /// Send over tcp conn
     pub fn send(&self, hd: ConnId, data: &[u8]) {
         let conn_table = self.conn_table.read();
-        if let Some(&tcp_conn) = conn_table.get(&hd) {
+        if let Some(tcp_conn) = conn_table.get(&hd) {
             tcp_conn.send(data);
         }
     }
 
-    /// Listen on [ip:port]
+    /// Listen on [ip:port] and start tcp server
     pub fn listen(
         &'static self,
         ip: String,
@@ -37,15 +37,15 @@ impl ServiceNetRs {
         callbacks: ServerCallbacks,
         srv: &'static dyn ServiceRs,
     ) {
+        //
         let cb = move || {
+            // tcp server start
             self.tcp_server.listen(ip, port, callbacks, self);
+
+            // tcp server start
+            self.tcp_server.start(self);
         };
         self.run_in_service(Box::new(cb));
-    }
-
-    /// Start net event loop
-    pub fn start(&'static self) {
-        self.tcp_server.start(self);
     }
 }
 
@@ -69,7 +69,7 @@ impl ServiceRs for ServiceNetRs {
     }
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>) {
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
         let handle = self.get_handle().read();
         handle.run_in_service(cb);
     }

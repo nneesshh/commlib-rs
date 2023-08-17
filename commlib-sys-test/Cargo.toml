@@ -7,6 +7,12 @@ edition = "2021"
 readme = "README.md"
 build = "build.rs"
 
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
 [dependencies]
 lazy_static = "1"
 paste = "1"

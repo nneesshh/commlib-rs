@@ -175,7 +175,7 @@ pub struct OneShotClosureState<I> {
     /// The id of the timeout state
     id: I,
     /// The action to invoke when the timeout expires
-    action: Box<dyn FnOnce(I) + Send + Sync + 'static>,
+    action: Box<dyn FnOnce(I) + Send + Sync>,
 }
 
 impl<I> OneShotClosureState<I> {

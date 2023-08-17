@@ -1,6 +1,10 @@
 use app_helper::App;
+
 mod test_conf;
 mod test_service;
+
+mod app_startup;
+mod test_manager;
 
 fn main() {
     // panic hook
@@ -22,6 +26,11 @@ fn main() {
     //
     let arg_vec: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let mut app = App::new(&arg_vec, "test");
-    app.attach(|| test_service::G_TEST_SERVICE.as_ref());
+    app.init(
+        || test_service::G_TEST_SERVICE.as_ref(),
+        |srv| {
+            app_startup::exec(srv);
+        },
+    );
     app.run();
 }

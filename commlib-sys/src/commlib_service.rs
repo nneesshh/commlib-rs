@@ -23,7 +23,7 @@ pub enum NodeState {
     NodeLost,  // 节点丢失（world 管理节点用）
 }
 
-pub type ServiceFuncType = dyn FnOnce() + Send + Sync + 'static;
+pub type ServiceFuncType = dyn FnOnce() + Send + Sync; // Note: tait object is always 'static, no need add 'static here
 
 /// Service handle
 pub struct ServiceHandle {
@@ -95,7 +95,7 @@ impl ServiceHandle {
     }
 
     /// 在 service 线程中执行回调任务
-    pub fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>) {
+    pub fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
         if self.is_in_service_thread() {
             cb();
         } else {
@@ -132,7 +132,7 @@ pub trait ServiceRs: Send + Sync {
     fn init(&self) -> bool;
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>);
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>);
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool;
@@ -174,27 +174,29 @@ pub fn start_service(
                 let mut guard = lock.lock();
                 *guard = tid;
             }
-            cvar.notify_all();
 
-            //
+            // 服务线程初始化
             srv.init();
 
-            // run, 假如 srv 是 mutable borrow, 那么函数使用完毕后将被释放，此时需要返回出来，后续步骤才能使用
-            let srv2 = run_service(srv, tname.as_str());
+            // 服务线程就绪通知
+            cvar.notify_all();
 
-            // exit with srv2
+            // run
+            run_service(srv, tname.as_str());
+
+            // exit
             {
-                let mut handle2_mut = srv2.get_handle().write();
+                let mut handle_mut = srv.get_handle().write();
 
                 // mark closed
-                handle2_mut.state = NodeState::Closed;
+                handle_mut.state = NodeState::Closed;
 
                 // notify exit
                 (&*exit_cv).1.notify_all();
                 log::info!(
                     "service exit: ID={} state={:?}",
-                    handle2_mut.id,
-                    handle2_mut.state
+                    handle_mut.id,
+                    handle_mut.state
                 );
             }
         })
@@ -210,15 +212,18 @@ pub fn wait_service_ready(
     ready_pair: (Option<JoinHandle<()>>, Option<Arc<(Mutex<u64>, Condvar)>>),
 ) -> bool {
     if let (join_handle_opt, Some(tid_cv)) = ready_pair {
-        let mut handle_mut = srv.get_handle().write();
-        handle_mut.join_handle_opt = join_handle_opt;
-
         //tid (ThreadId.as_u64() is not stable yet)
         // wait ready
         let (lock, cvar) = &*tid_cv;
         let mut guard = lock.lock();
         cvar.wait(&mut guard);
-        handle_mut.tid = *guard;
+
+        // update tid
+        {
+            let mut handle_mut = srv.get_handle().write();
+            handle_mut.join_handle_opt = join_handle_opt;
+            handle_mut.tid = *guard;
+        }
         true
     } else {
         log::error!("[wait_service_ready] failed!!!");
@@ -226,15 +231,14 @@ pub fn wait_service_ready(
     }
 }
 
-///
-pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) -> &'static dyn ServiceRs {
+fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
     // init
     {
         let handle = srv.get_handle().read();
         log::info!("[{}] init ... ID={}", service_name, handle.id);
     }
 
-    //
+    // loop until "NodeState::Closed"
     let mut sw = crate::StopWatch::new();
     loop {
         // check run
@@ -310,7 +314,4 @@ pub fn run_service(srv: &'static dyn ServiceRs, service_name: &str) -> &'static 
             }
         }
     }
-
-    // mutable borrow of service 使用完毕，返回出去供后续步骤使用
-    srv
 }

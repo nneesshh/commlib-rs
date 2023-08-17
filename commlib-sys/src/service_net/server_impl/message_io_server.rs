@@ -101,9 +101,17 @@ fn create_message_io_server_node_task(
                 unreachable!();
             } // There is no connect() calls.
 
-            NetEvent::Accepted(endpoint, _id) => {
+            NetEvent::Accepted(endpoint, id) => {
                 //
                 let raw_id = endpoint.resource_id().raw();
+                let hd = ConnId::from(raw_id);
+                log::info!(
+                    "[hd={:?}] {} endpoint {} accepted, raw_id={}",
+                    hd,
+                    id,
+                    endpoint,
+                    raw_id
+                );
 
                 //
                 (tcp_server_handler.on_accept)(
@@ -128,11 +136,12 @@ fn create_message_io_server_node_task(
 
             NetEvent::Disconnected(endpoint) => {
                 //
-                (tcp_server_handler.on_close)(
-                    srv_net,
-                    tcp_server,
-                    ConnId::from(endpoint.resource_id().raw()),
-                );
+                let raw_id = endpoint.resource_id().raw();
+                let hd = ConnId::from(raw_id);
+                log::info!("[hd={:?}] endpoint {} disconnected", hd, endpoint);
+
+                //
+                (tcp_server_handler.on_close)(srv_net, tcp_server, hd);
             }
         }
     });
