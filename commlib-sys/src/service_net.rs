@@ -15,6 +15,14 @@ pub mod net_packet_pool;
 pub use net_packet_pool::{take_packet, NetPacketGuard, NetPacketPool};
 
 ///
+pub mod packet_reader;
+pub use packet_reader::PacketReader;
+
+///
+pub mod conn_id;
+pub use conn_id::ConnId;
+
+///
 pub mod net_proxy;
 pub use net_proxy::NetProxy;
 
@@ -24,7 +32,7 @@ pub use tcp_callbacks::{ServerCallbacks, TcpClientHandler, TcpServerHandler};
 
 ///
 pub mod tcp_conn;
-pub use tcp_conn::{ConnId, TcpConn};
+pub use tcp_conn::TcpConn;
 
 ///
 pub mod tcp_server;

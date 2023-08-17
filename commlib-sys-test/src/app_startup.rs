@@ -9,6 +9,7 @@
 //!     });
 //! '''
 
+use commlib_sys::service_net::{ConnId, NetPacketGuard};
 use commlib_sys::G_SERVICE_NET;
 use commlib_sys::{ServerCallbacks, ServiceRs};
 
@@ -56,29 +57,30 @@ pub fn startup_network_listen(srv: &'static dyn ServiceRs) -> bool {
     // TODO: let thread_num: u32 = 1;
     // TODO: let connection_limit: u32 = 0; // 0=no limit
 
-    let mut callbacks = ServerCallbacks::new();
-    callbacks.srv = Some(srv);
-    callbacks.conn_fn = Box::new(|hd| {
+    let conn_fn = |hd: ConnId| {
         log::info!("[hd={:?}] conn_fn", hd);
 
         hd.send(G_SERVICE_NET.as_ref(), "hello, rust conn_fn".as_bytes());
-    });
+    };
 
-    callbacks.msg_fn = Box::new(|hd, pkt| {
+    let pkt_fn = |hd: ConnId, pkt: NetPacketGuard| {
         log::info!("[hd={:?}] msg_fn", hd);
 
         G_TEST_MANAGER.with(|g| {
             let mut test_manager = g.borrow_mut();
             test_manager.server_proxy.on_net_packet(hd, pkt);
         });
-    });
+    };
 
-    callbacks.stopped_cb = Box::new(|hd| {
+    let stopped_cb = |hd: ConnId| {
         log::info!("[hd={:?}] stopped_cb", hd);
 
         hd.send(G_SERVICE_NET.as_ref(), "bye, rust stopped_cb".as_bytes());
-    });
+    };
 
+    let callbacks = ServerCallbacks::new(srv, conn_fn, pkt_fn, stopped_cb);
+
+    //
     app_helper::with_conf!(G_TEST_CONF, cfg, {
         G_SERVICE_NET.listen(cfg.my.addr.clone(), cfg.my.port, callbacks, srv);
     });

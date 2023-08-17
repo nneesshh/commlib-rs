@@ -1,4 +1,5 @@
 use super::{net_packet::NetPacket, PacketType};
+use crate::service_net::net_packet::PacketSizeType;
 use lazy_static::lazy_static;
 use opool::{Pool, PoolAllocator, RefGuard};
 
@@ -14,7 +15,9 @@ pub struct NetPacketPool;
 impl PoolAllocator<NetPacket> for NetPacketPool {
     #[inline]
     fn allocate(&self) -> NetPacket {
-        NetPacket::new()
+        let mut pkt = NetPacket::new();
+        pkt.init(true);
+        pkt
     }
 
     /// OPTIONAL METHODS:
@@ -39,9 +42,23 @@ pub fn take_packet(size: usize, packet_type: PacketType) -> NetPacketGuard {
         pkt
     } else {
         let mut pkt = G_PACKET_POOL_LARGE.get();
+        pkt.set_size_type(PacketSizeType::Large);
         pkt.set_type(packet_type);
         pkt
     }
+}
+
+#[inline(always)]
+pub fn take_larget_packet(
+    ensure_bytes: usize,
+    packet_type: PacketType,
+    init_slice: &[u8],
+) -> NetPacketGuard {
+    let mut pkt = G_PACKET_POOL_LARGE.get();
+    pkt.set_type(packet_type);
+    pkt.ensure_writable_bytes(ensure_bytes);
+    pkt.append_slice(init_slice);
+    pkt
 }
 
 lazy_static! {

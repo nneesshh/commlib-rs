@@ -358,6 +358,12 @@ impl Buffer {
         (self.inner)[self.read_index]
     }
 
+    /// Peek all readable data
+    #[inline(always)]
+    pub fn peek(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.read_ptr(), self.length()) }
+    }
+
     /*================================ private ================================*/
 
     #[inline(always)]

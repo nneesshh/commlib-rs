@@ -1,6 +1,7 @@
 use message_io::network::{Endpoint, NetworkController, ResourceId};
 use opool::RefGuard;
 
+use crate::service_net::NetPacketGuard;
 use crate::{ServiceNetRs, ServiceRs};
 
 use super::{ConnId, NetPacket, NetPacketPool, OsSocketAddr, PacketType, TcpConn, TcpServer};
@@ -45,21 +46,30 @@ pub struct TcpClientHandler {
 
 ///
 pub struct ServerCallbacks {
-    pub srv: Option<&'static dyn ServiceRs>,
+    pub srv: &'static dyn ServiceRs,
     pub conn_fn: Box<dyn Fn(ConnId) + Send + Sync>,
-    pub msg_fn: Box<dyn Fn(ConnId, RefGuard<'static, NetPacketPool, NetPacket>) + Send + Sync>,
+    pub pkt_fn: Box<dyn Fn(ConnId, NetPacketGuard) + Send + Sync>,
     pub stopped_cb: Box<dyn Fn(ConnId) + Send + Sync>,
 }
 
 impl ServerCallbacks {
     /// Constructor
-    pub fn new() -> ServerCallbacks {
+    pub fn new<C, P, S>(
+        srv: &'static dyn ServiceRs,
+        conn_fn: C,
+        pkt_fn: P,
+        stopped_cb: S,
+    ) -> ServerCallbacks
+    where
+        C: Fn(ConnId) + Send + Sync + 'static,
+        P: Fn(ConnId, NetPacketGuard) + Send + Sync + 'static,
+        S: Fn(ConnId) + Send + Sync + 'static,
+    {
         ServerCallbacks {
-            srv: None,
-            conn_fn: Box::new(|_1| {}),
-            msg_fn: Box::new(|_1, _2| {}),
-
-            stopped_cb: Box::new(|_1| {}),
+            srv,
+            conn_fn: Box::new(conn_fn),
+            pkt_fn: Box::new(pkt_fn),
+            stopped_cb: Box::new(stopped_cb),
         }
     }
 
@@ -72,9 +82,9 @@ impl ServerCallbacks {
 
     fn set_message_callback<F>(&mut self, cb: F)
     where
-        F: Fn(ConnId, RefGuard<'static, NetPacketPool, NetPacket>) + Send + Sync + 'static,
+        F: Fn(ConnId, NetPacketGuard) + Send + Sync + 'static,
     {
-        self.msg_fn = Box::new(cb);
+        self.pkt_fn = Box::new(cb);
     }
 }
 
@@ -105,13 +115,10 @@ extern "C" fn on_accept_cb(
     }
 
     // run callback in target srv
-    if let Some(srv) = tcp_server.callbacks.srv {
-        srv.run_in_service(Box::new(move || {
-            (tcp_server.callbacks.conn_fn)(hd);
-        }));
-    } else {
-        std::unreachable!();
-    }
+    let callbacks = tcp_server.callbacks_opt.as_ref().unwrap();
+    callbacks.srv.run_in_service(Box::new(move || {
+        (callbacks.conn_fn)(hd);
+    }));
 }
 
 extern "C" fn on_server_encrypt_cb(
@@ -135,9 +142,26 @@ extern "C" fn on_server_message_cb(
     {
         let conn_table = srv_net.conn_table.read();
         if let Some(conn) = conn_table.get(&hd) {
-            // 转到 conn 处理
-            let slice = unsafe { std::slice::from_raw_parts(input_data, input_len) };
-            conn.handle_read(srv_net, tcp_server, hd, slice);
+            // conn 循环处理 input
+            let mut consumed = 0_usize;
+
+            loop {
+                let ptr = unsafe { input_data.offset(consumed as isize) };
+                let (pkt_opt, remain) = conn.handle_read(ptr, input_len - consumed);
+                if let Some(pkt) = pkt_opt {
+                    let callbacks = tcp_server.callbacks_opt.as_ref().unwrap();
+                    callbacks.srv.run_in_service(Box::new(move || {
+                        (callbacks.pkt_fn)(hd, pkt);
+                    }));
+                }
+
+                //
+                consumed = input_len - remain;
+
+                if 0 == remain {
+                    break;
+                }
+            }
         } else {
             //
             log::error!("[on_server_message_cb][hd={:?}] not found!!!", hd);
@@ -162,11 +186,8 @@ extern "C" fn on_server_close_cb(
     }
 
     // run callback in target srv
-    if let Some(srv) = tcp_server.callbacks.srv {
-        srv.run_in_service(Box::new(move || {
-            (tcp_server.callbacks.stopped_cb)(hd);
-        }));
-    } else {
-        std::unreachable!();
-    }
+    let callbacks = tcp_server.callbacks_opt.as_ref().unwrap();
+    callbacks.srv.run_in_service(Box::new(move || {
+        (callbacks.stopped_cb)(hd);
+    }));
 }

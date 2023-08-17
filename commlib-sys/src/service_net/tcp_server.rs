@@ -45,6 +45,7 @@ use parking_lot::RwLock;
 
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+
 ///
 #[repr(C)]
 pub struct TcpServer {
@@ -56,7 +57,7 @@ pub struct TcpServer {
     connection_num: AtomicUsize,
 
     pub inner_server_opt: Arc<RwLock<Option<MessageIoServer>>>,
-    pub callbacks: ServerCallbacks,
+    pub callbacks_opt: Option<ServerCallbacks>,
 }
 
 impl TcpServer {
@@ -71,7 +72,7 @@ impl TcpServer {
             connection_num: AtomicUsize::new(0),
 
             inner_server_opt: Arc::new(RwLock::new(None)),
-            callbacks: ServerCallbacks::new(),
+            callbacks_opt: None,
         }
     }
 
@@ -86,10 +87,11 @@ impl TcpServer {
         let raddr = std::format!("{}:{}", ip, port);
         log::info!("tcp server listen raddr: {}", raddr);
 
-        // init callbacks
+        // set callbacks forcely
         unsafe {
-            let callbacks_mut = &self.callbacks as *const ServerCallbacks as *mut ServerCallbacks;
-            (*callbacks_mut) = callbacks;
+            let callbacks_opt_mut = &self.callbacks_opt as *const Option<ServerCallbacks>
+                as *mut Option<ServerCallbacks>;
+            (*callbacks_opt_mut) = Some(callbacks);
         }
 
         // init inner-server

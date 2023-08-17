@@ -7,7 +7,7 @@ pub struct ServiceNetRs {
     pub handle: RwLock<ServiceHandle>,
 
     pub conn_table: RwLock<hashbrown::HashMap<ConnId, TcpConn>>, // TODO: remove lock?
-    pub tcp_server: TcpServer,
+    pub tcp_server_opt: Option<TcpServer>,
 }
 
 impl ServiceNetRs {
@@ -17,7 +17,7 @@ impl ServiceNetRs {
             handle: RwLock::new(ServiceHandle::new(id, NodeState::Idle)),
 
             conn_table: RwLock::new(hashbrown::HashMap::with_capacity(4096)),
-            tcp_server: TcpServer::new(),
+            tcp_server_opt: Some(TcpServer::new()),
         }
     }
 
@@ -38,12 +38,15 @@ impl ServiceNetRs {
         srv: &'static dyn ServiceRs,
     ) {
         //
+        let tcp_server = self.tcp_server_opt.as_ref().unwrap();
+
+        //
         let cb = move || {
             // tcp server start
-            self.tcp_server.listen(ip, port, callbacks, self);
+            tcp_server.listen(ip, port, callbacks, self);
 
             // tcp server start
-            self.tcp_server.start(self);
+            tcp_server.start(self);
         };
         self.run_in_service(Box::new(cb));
     }
@@ -83,7 +86,9 @@ impl ServiceRs for ServiceNetRs {
     /// 等待线程结束
     fn join(&self) {
         //
-        self.tcp_server.stop();
+        if let Some(tcp_server) = self.tcp_server_opt.as_ref() {
+            tcp_server.stop();
+        }
 
         //
         {

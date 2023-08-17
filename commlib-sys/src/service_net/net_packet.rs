@@ -65,7 +65,7 @@ pub enum PacketType {
 }
 
 ///
-pub enum PacketSzie {
+pub enum PacketSizeType {
     Small = 0,
     Large = 1,
 }
@@ -82,7 +82,7 @@ pub struct ClientHead {
 ///     服务器到客户端包 => 4字节长度 + 2字节协议号
 #[repr(C)]
 pub struct NetPacket {
-    packet_size: PacketSzie,
+    size_type: PacketSizeType,
     packet_type: PacketType,
     leading_field_size: usize,
 
@@ -98,7 +98,7 @@ impl NetPacket {
     ///
     pub fn new() -> NetPacket {
         NetPacket {
-            packet_size: PacketSzie::Small,
+            size_type: PacketSizeType::Small,
             packet_type: PacketType::Server,
             leading_field_size: get_packet_leading_field_size(PacketType::Server),
 
@@ -111,11 +111,13 @@ impl NetPacket {
     }
 
     ///
+    #[inline(never)]
     pub fn init(&mut self, _new_malloc: bool) {
         // 兼容内存池
     }
 
     ///
+    #[inline(never)]
     pub fn release(&mut self) {
         self.body_size = 0;
         self.cmd = 0;
@@ -126,6 +128,7 @@ impl NetPacket {
     /// 向 pkt 追加数据
     #[inline(always)]
     pub fn append(&mut self, data: *const u8, len: usize) {
+        //
         self.buffer.write(data, len);
 
         // body size 计数
@@ -134,6 +137,25 @@ impl NetPacket {
         } else {
             0
         };
+    }
+
+    /// 向 pkt 追加数据
+    #[inline(always)]
+    pub fn append_slice(&mut self, slice: &[u8]) {
+        //
+        self.buffer.write_slice(slice);
+
+        // body size 计数
+        self.body_size = if self.buffer_raw_len() >= self.leading_field_size {
+            self.buffer_raw_len() - self.leading_field_size
+        } else {
+            0
+        };
+    }
+
+    #[inline(always)]
+    pub fn set_size_type(&mut self, size_type: PacketSizeType) {
+        self.size_type = size_type;
     }
 
     ///
@@ -155,6 +177,18 @@ impl NetPacket {
         self.leading_field_size
     }
 
+    /// 包体数据缓冲区 剩余可写容量
+    #[inline(always)]
+    pub fn buffer_writable_bytes(&self) -> usize {
+        self.buffer.writable_bytes()
+    }
+
+    /// 确保包体数据缓冲区 剩余可写容量
+    #[inline(always)]
+    pub fn ensure_writable_bytes(&mut self, len: usize) {
+        self.buffer.ensure_writable_bytes(len);
+    }
+
     /// 包体数据缓冲区尚未读取的数据数量
     #[inline(always)]
     pub fn buffer_raw_len(&self) -> usize {
@@ -165,6 +199,12 @@ impl NetPacket {
     #[inline(always)]
     pub fn cmd(&self) -> CmdId {
         self.cmd
+    }
+
+    /// 查看 buffer 数据，供给外部使用
+    #[inline(always)]
+    pub fn peek(&self) -> &[u8] {
+        self.buffer.peek()
     }
 
     /// 内部消耗掉 buffer 数据，供给外部使用
@@ -547,6 +587,26 @@ impl NetPacket {
     }
 }
 
+#[inline(always)]
+pub fn get_packet_leading_field_size(packet_type: PacketType) -> usize {
+    // 客户端包 2 字节包头，其他都是 4 字节包头
+    if packet_type as u32 == PacketType::Client as u32 {
+        2_usize
+    } else {
+        4_usize
+    }
+}
+
+#[inline(always)]
+pub fn peek_packet_leading_field(buffer: &Buffer, packet_type: PacketType) -> usize {
+    // 客户端包 2 字节包头，其他都是 4 字节包头
+    if packet_type as u32 == PacketType::Client as u32 {
+        buffer.peek_u16() as usize
+    } else {
+        buffer.peek_u32() as usize
+    }
+}
+
 ///
 #[inline(always)]
 pub fn write_prost_message<M>(msg: &M, mut buf: &mut [u8]) -> bool
@@ -620,24 +680,4 @@ fn encrypt_packet(data: *mut u8, len: usize, key: &str, no: i8) {
 fn decrypt_packet(data: *mut u8, len: usize, key: &str, no: i8) {
     // xor decrypt is just same as encrypt
     encrypt_packet(data, len, key, no);
-}
-
-#[inline(always)]
-fn get_packet_leading_field_size(packet_type: PacketType) -> usize {
-    // 客户端包 2 字节包头，其他都是 4 字节包头
-    if packet_type as u32 == PacketType::Client as u32 {
-        2_usize
-    } else {
-        4_usize
-    }
-}
-
-#[inline(always)]
-fn peek_packet_leading_field(buffer: &Buffer, packet_type: PacketType) -> usize {
-    // 客户端包 2 字节包头，其他都是 4 字节包头
-    if packet_type as u32 == PacketType::Client as u32 {
-        buffer.peek_u16() as usize
-    } else {
-        buffer.peek_u32() as usize
-    }
 }
