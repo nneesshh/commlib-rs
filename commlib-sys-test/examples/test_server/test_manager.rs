@@ -3,7 +3,7 @@
 //!
 
 use commlib_sys::service_net::PacketType;
-use commlib_sys::{NetProxy, ServerCallbacks, ServiceRs};
+use commlib_sys::{NetProxy, ServiceRs};
 
 thread_local! {
     ///

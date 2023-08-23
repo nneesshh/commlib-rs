@@ -1,10 +1,10 @@
 use app_helper::App;
 
-mod cli_conf;
-mod cli_service;
+mod test_conf;
+mod test_service;
 
-mod cli_app_startup;
-mod cli_manager;
+mod app_startup;
+mod test_manager;
 
 fn main() {
     // panic hook
@@ -25,11 +25,11 @@ fn main() {
 
     //
     let arg_vec: Vec<std::ffi::OsString> = std::env::args_os().collect();
-    let mut app = App::new(&arg_vec, "clisrv");
+    let mut app = App::new(&arg_vec, "test");
     app.init(
-        || cli_service::G_CLI_SERVICE.as_ref(),
+        || test_service::G_TEST_SERVICE.as_ref(),
         || {
-            cli_app_startup::exec(&cli_service::G_CLI_SERVICE);
+            app_startup::exec(&test_service::G_TEST_SERVICE);
         },
     );
     app.run();

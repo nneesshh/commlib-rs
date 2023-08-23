@@ -45,12 +45,18 @@ pub use service_signal::ServiceSignalRs;
 
 ///
 pub mod service_net;
-pub use service_net::{NetPacket, NetProxy, ServerCallbacks, ServiceNetRs};
+pub use service_net::{
+    connect_to_tcp_server, create_tcp_client, listen_tcp_addr, start_network, stop_network,
+};
+pub use service_net::{
+    ConnId, NetPacket, NetPacketGuard, NetProxy, ServiceNetRs, TcpClient, TcpHandler,
+    TcpListenerId, TcpServer,
+};
 
-///
+/// 全局变量
 pub mod globals;
 pub use globals::*;
 
-///
+/// 通用定义
 pub mod commlib_def;
 pub use commlib_def::*;

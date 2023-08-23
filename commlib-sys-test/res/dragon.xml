@@ -20,6 +20,16 @@
         <db id="1004" addr="127.0.0.1" port="20004"></db>
     </node>
 
+    <!-- cli -->
+    <node srv="1000" id="1000" name="clisrv">
+        <addr>127.0.0.1</addr>
+        <port>20001</port>
+        <acct>test</acct>
+        <num>1</num>
+        <thread_num>4</thread_num>
+        <!--<lua>LuaRobot/init.lua</lua>-->
+    </node>
+
     <!-- game -->
     <node srv="1003" id="1003" name="gamesrv">
         <addr>127.0.0.1</addr>

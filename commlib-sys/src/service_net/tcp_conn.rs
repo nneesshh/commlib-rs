@@ -1,10 +1,11 @@
-use crate::ServiceNetRs;
-use message_io::network::{Endpoint, NetworkController, ResourceId};
-use std::net::SocketAddr;
+use std::sync::Arc;
 
-use parking_lot::RwLock;
+use message_io::network::Endpoint;
+use message_io::node::NodeHandler;
 
-use super::{take_packet, Buffer, ConnId, NetPacketGuard, PacketReader, PacketType, TcpServer};
+use crate::ServiceRs;
+
+use super::{ConnId, NetPacketGuard, PacketReader, PacketType};
 
 /// Tcp connection
 #[repr(C)]
@@ -15,7 +16,13 @@ pub struct TcpConn {
 
     //
     pub endpoint: Endpoint,
-    pub netctrl_id: usize,
+    pub netctrl: NodeHandler<()>,
+
+    //
+    pub srv: Arc<dyn ServiceRs>,
+    pub conn_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
+    pub pkt_fn: Arc<dyn Fn(ConnId, NetPacketGuard) + Send + Sync>,
+    pub close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
 
     //
     pkt_reader: PacketReader,
@@ -23,15 +30,26 @@ pub struct TcpConn {
 
 impl TcpConn {
     ///
-    pub fn new(hd: ConnId, endpoint: Endpoint, netctrl: &NetworkController) -> TcpConn {
+    pub fn new(
+        hd: ConnId,
+        endpoint: Endpoint,
+        netctrl: &NodeHandler<()>,
+        srv: &Arc<dyn ServiceRs>,
+    ) -> TcpConn {
         let packet_type = PacketType::Server;
-        let netctrl_id = netctrl as *const NetworkController as usize;
 
         TcpConn {
             packet_type,
             hd,
+
             endpoint,
-            netctrl_id,
+            netctrl: netctrl.clone(),
+
+            srv: srv.clone(),
+            conn_fn: Arc::new(|_hd| {}),
+            pkt_fn: Arc::new(|_hd, _pkt| {}),
+            close_fn: Arc::new(|_hd| {}),
+
             pkt_reader: PacketReader::new(packet_type),
         }
     }
@@ -46,7 +64,6 @@ impl TcpConn {
     pub fn send(&self, data: &[u8]) {
         log::debug!("[hd={:?}] send data ...", self.hd);
 
-        let netctrl = unsafe { &*(self.netctrl_id as *const NetworkController) };
-        netctrl.send(self.endpoint, data);
+        self.netctrl.network().send(self.endpoint, data);
     }
 }

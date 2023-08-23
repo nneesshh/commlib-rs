@@ -32,3 +32,5 @@ app-helper = { path="../app-helper" }
 dunce = "1"
 miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
 
+[[example]]
+name = "test_server"

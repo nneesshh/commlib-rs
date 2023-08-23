@@ -1,6 +1,6 @@
 use commlib_sys::*;
 
-use crate::{with_conf_mut, Startup};
+use crate::with_conf_mut;
 
 /// App: 应用框架RwLock<
 pub struct App {
@@ -17,23 +17,35 @@ impl App {
         };
         app.config(arg_vec, app_name);
 
-        // attach default services
-        app.attach(|| G_SERVICE_SIGNAL.as_ref());
-        app.attach(|| G_SERVICE_NET.as_ref());
+        // attach default services -- signal
+        app.attach(
+            || G_SERVICE_SIGNAL.as_ref(),
+            || {
+                // do nothing
+            },
+        );
+
+        // attach default services -- net
+        app.attach(
+            || G_SERVICE_NET.as_ref(),
+            || {
+                start_network(&G_SERVICE_NET);
+            },
+        );
 
         app
     }
 
     /// App init
-    pub fn init<C, I>(&mut self, mut creator: C, mut initializer: I)
+    pub fn init<C, I>(&mut self, creator: C, initializer: I)
     where
         C: FnOnce() -> &'static dyn ServiceRs,
-        I: FnOnce(&'static dyn ServiceRs),
+        I: FnOnce() + Send + Sync + 'static,
     {
         log::info!("App({}) startup ...", self.app_name);
-        let srv = self.attach(creator);
-        initializer(srv);
+        self.attach(creator, initializer);
     }
+
     /// App  等待直至服务关闭
     pub fn run(self) {
         let cv = G_EXIT_CV.clone();
@@ -95,9 +107,10 @@ impl App {
         log::info!("App::add_service() ok, ID={}", id);
     }
 
-    fn attach<F>(&mut self, mut creator: F) -> &'static dyn ServiceRs
+    fn attach<C, I>(&mut self, creator: C, initializer: I) -> &'static dyn ServiceRs
     where
-        F: FnOnce() -> &'static dyn ServiceRs,
+        C: FnOnce() -> &'static dyn ServiceRs,
+        I: FnOnce() + Send + Sync + 'static,
     {
         let srv = creator();
 
@@ -119,7 +132,7 @@ impl App {
 
         //
         srv.conf();
-        let ready_pair = start_service(srv, srv.name());
+        let ready_pair = start_service(srv, srv.name(), initializer);
         wait_service_ready(srv, ready_pair);
 
         // add server to app

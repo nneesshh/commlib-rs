@@ -128,9 +128,6 @@ pub trait ServiceRs: Send + Sync {
     /// 配置 service
     fn conf(&self);
 
-    /// Init in-service （修改变量使用内部小粒度的局部锁，不能锁定整个 service）
-    fn init(&self) -> bool;
-
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>);
 
@@ -142,10 +139,14 @@ pub trait ServiceRs: Send + Sync {
 }
 
 /// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move
-pub fn start_service(
+pub fn start_service<I>(
     srv: &'static dyn ServiceRs,
     name_of_thread: &str,
-) -> (Option<JoinHandle<()>>, Option<Arc<(Mutex<u64>, Condvar)>>) {
+    initializer: I,
+) -> (Option<JoinHandle<()>>, Option<Arc<(Mutex<u64>, Condvar)>>)
+where
+    I: FnOnce() + Send + Sync + 'static,
+{
     {
         let handle = srv.get_handle().read();
         if handle.tid > 0u64 {
@@ -176,7 +177,7 @@ pub fn start_service(
             }
 
             // 服务线程初始化
-            srv.init();
+            (initializer)();
 
             // 服务线程就绪通知
             cvar.notify_all();

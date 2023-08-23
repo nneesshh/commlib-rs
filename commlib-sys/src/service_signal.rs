@@ -64,6 +64,7 @@ impl ServiceSignalRs {
 
                 // 事件触发时，将 f post 到工作线程执行
                 srv.run_in_service(Box::new(move || {
+                    // Notice: f() only works one time because using option trick, see "let f = f_opt.take()"
                     f();
                 }));
             });
@@ -116,11 +117,6 @@ impl ServiceRs for ServiceSignalRs {
         let cb3 = crate::SignalCallback(on_signal_usr2);
 
         crate::ffi_sig::init_signal_handlers(cb1, cb2, cb3);
-    }
-
-    /// Init in-service
-    fn init(&self) -> bool {
-        true
     }
 
     /// 在 service 线程中执行回调任务

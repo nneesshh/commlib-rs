@@ -1,22 +1,18 @@
-use message_io::network::{Endpoint, NetworkController, ResourceId};
-use parking_lot::RwLock;
-use std::net::SocketAddr;
-
-use crate::ServiceNetRs;
-
 use super::{
     net_packet::get_packet_leading_field_size, net_packet_pool::take_larget_packet,
-    net_packet_pool::SMALL_PACKET_MAX_SIZE, take_packet, Buffer, NetPacketGuard, PacketType,
-    TcpServer,
+    net_packet_pool::SMALL_PACKET_MAX_SIZE, take_packet,
 };
+use super::{NetPacketGuard, PacketType};
 
 const DEFAULT_PACKET_SIZE: usize = SMALL_PACKET_MAX_SIZE;
+const MAX_PACKET_SIZE: usize = 1024 * 1024 * 20; // 20M
 ///
 enum PacketReaderState {
     Leading,       // 包体前导长度
     Expand(usize), // 扩展包体缓冲区（pkt_full_len）
     Data(usize),   // 包体数据区（pkt_full_len）
     Complete,      // 完成 pkt 返回给外部，内部申请新 pkt
+    Abort(usize),  // 中止（pkt_full_len）
 }
 ///
 pub struct PacketReader {
@@ -64,18 +60,24 @@ impl PacketReader {
                     if buffer_raw_len >= leading_field_size {
                         // 查看取包体前导长度
                         let pkt_full_len = unsafe { (*pkt_ptr).peek_leading_field() };
-
-                        // 检查 pkt 容量是否足够
-                        let writable_bytes = unsafe { (*pkt_ptr).buffer_writable_bytes() };
-                        if writable_bytes < pkt_full_len {
-                            // 进入扩展包体缓冲区处理，重新申请 large pkt
+                        if pkt_full_len > MAX_PACKET_SIZE {
+                            // 中止
                             unsafe {
-                                (*state_ptr) = PacketReaderState::Expand(pkt_full_len);
+                                (*state_ptr) = PacketReaderState::Abort(pkt_full_len);
                             }
                         } else {
-                            // 进入包体数据处理
-                            unsafe {
-                                (*state_ptr) = PacketReaderState::Data(pkt_full_len);
+                            // 检查 pkt 容量是否足够
+                            let writable_bytes = unsafe { (*pkt_ptr).buffer_writable_bytes() };
+                            if writable_bytes < pkt_full_len {
+                                // 进入扩展包体缓冲区处理，重新申请 large pkt
+                                unsafe {
+                                    (*state_ptr) = PacketReaderState::Expand(pkt_full_len);
+                                }
+                            } else {
+                                // 进入包体数据处理
+                                unsafe {
+                                    (*state_ptr) = PacketReaderState::Data(pkt_full_len);
+                                }
                             }
                         }
                     } else {
@@ -174,8 +176,6 @@ impl PacketReader {
                     let state_ptr =
                         &self.state as *const PacketReaderState as *mut PacketReaderState;
 
-                    let buffer_raw_len = unsafe { (*pkt_ptr).buffer_raw_len() };
-
                     // 完成当前 pkt 读取，重新开始包体前导长度处理，并把剩余长度返回外部
                     unsafe {
                         (*state_ptr) = PacketReaderState::Leading;
@@ -188,6 +188,13 @@ impl PacketReader {
                         (*pkt_opt_ptr) = Some(new_pkt);
                         return (pkt_opt, remain);
                     }
+                }
+
+                PacketReaderState::Abort(pkt_full_len) => {
+                    log::error!("packet overflow!!! pkt_full_len={}", pkt_full_len);
+
+                    // 包体越界
+                    return (None, 0_usize);
                 }
             }
         }

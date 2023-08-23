@@ -1,13 +1,10 @@
-use crate::ServiceNetRs;
-use message_io::network::{Endpoint, NetworkController, ResourceId};
 use std::net::SocketAddr;
+use std::sync::Arc;
 
-use parking_lot::RwLock;
+use crate::{ServiceNetRs, ServiceRs};
+use message_io::network::ResourceId;
 
-use super::{
-    net_packet_pool::SMALL_PACKET_MAX_SIZE, take_packet, Buffer, NetPacketGuard, PacketType,
-    TcpServer,
-};
+use super::NetPacketGuard;
 
 /// Connection id
 #[derive(Debug, Copy, Clone, PartialEq, Eq, std::hash::Hash)]
@@ -20,7 +17,7 @@ pub struct ConnId {
 impl ConnId {
     ///
     #[inline(always)]
-    pub fn send(&self, srv_net: &'static ServiceNetRs, data: &[u8]) {
+    pub fn send(&self, srv_net: &Arc<ServiceNetRs>, data: &[u8]) {
         //
         {
             let conn_table = srv_net.conn_table.read();
@@ -34,7 +31,7 @@ impl ConnId {
 
     ///
     #[inline(always)]
-    pub fn send_proto<M>(&self, srv_net: &'static ServiceNetRs, msg: &M)
+    pub fn send_proto<M>(&self, srv_net: &Arc<ServiceNetRs>, msg: &M)
     where
         M: prost::Message,
     {
@@ -52,18 +49,91 @@ impl ConnId {
     }
 
     ///
-    pub fn to_socket_addr(&self, srv_net: &'static ServiceNetRs) -> Option<SocketAddr> {
+    pub fn to_socket_addr(&self, srv_net: &Arc<ServiceNetRs>) -> Option<SocketAddr> {
         //
         {
             let conn_table = srv_net.conn_table.read();
             if let Some(tcp_conn) = conn_table.get(self) {
-                let id = ResourceId::from(self.id);
                 Some(tcp_conn.endpoint.addr())
             } else {
                 log::error!("[hd={:?}] to_socket_addr failed -- hd not found!!!", *self);
                 None
             }
         }
+    }
+
+    /// call conn_fn
+    pub fn run_conn_fn(&self, srv: &Arc<dyn ServiceRs>, srv_net: &Arc<ServiceNetRs>) {
+        let hd = *self;
+
+        let f_opt = {
+            let conn_table = srv_net.conn_table.read();
+            if let Some(conn) = conn_table.get(&hd) {
+                Some(conn.close_fn.clone())
+            } else {
+                None
+            }
+        };
+
+        //
+        srv.run_in_service(Box::new(move || {
+            if let Some(f) = f_opt {
+                (f)(hd);
+            } else {
+                log::error!("[hd={:?}][run_conn_fn] failed!!!", hd);
+            }
+        }));
+    }
+
+    /// call pkt_fn
+    pub fn run_pkt_fn(
+        &self,
+        srv: &Arc<dyn ServiceRs>,
+        srv_net: &Arc<ServiceNetRs>,
+        pkt: NetPacketGuard,
+    ) {
+        let hd = *self;
+
+        let f_opt = {
+            let conn_table = srv_net.conn_table.read();
+            if let Some(conn) = conn_table.get(&hd) {
+                Some(conn.pkt_fn.clone())
+            } else {
+                None
+            }
+        };
+
+        //
+        srv.run_in_service(Box::new(move || {
+            if let Some(f) = f_opt {
+                (f)(hd, pkt);
+            } else {
+                log::error!("[hd={:?}][run_pkt_fn] failed!!!", hd);
+            }
+        }));
+    }
+
+    /// call close_fn
+    pub fn run_close_fn(&self, srv: &Arc<dyn ServiceRs>, srv_net: &Arc<ServiceNetRs>) {
+        let hd = *self;
+
+        let f_opt = {
+            let conn_table = srv_net.conn_table.read();
+            if let Some(conn) = conn_table.get(&hd) {
+                Some(conn.close_fn.clone())
+            } else {
+                None
+            }
+        };
+
+        //
+        srv.run_in_service(Box::new(move || {
+            if let Some(f) = f_opt {
+                (f)(hd);
+            } else {
+                log::error!("[hd={:?}][run_close_fn] failed!!!", hd);
+            }
+        }));
     }
 }
 
