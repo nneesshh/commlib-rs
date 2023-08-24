@@ -5,10 +5,10 @@ pub enum ClientStatus {
     Null = 0,
     Initializing = 1,
     Initialized = 2,
-    Starting = 3,
-    Running = 4,
-    Stopping = 5,
-    Stopped = 6,
+    Connecting = 3,
+    Connected = 4,
+    Disconnecting = 5,
+    Disconnected = 6,
 }
 
 impl ClientStatus {
@@ -18,33 +18,17 @@ impl ClientStatus {
             ClientStatus::Null => "kNull",
             ClientStatus::Initializing => "kInitializing",
             ClientStatus::Initialized => "kInitialized",
-            ClientStatus::Starting => "kStarting",
-            ClientStatus::Running => "kRunning",
-            ClientStatus::Stopping => "kStopping",
-            ClientStatus::Stopped => "kStopped",
+            ClientStatus::Connecting => "kConnecting",
+            ClientStatus::Connected => "kConnected",
+            ClientStatus::Disconnecting => "kDisconnecting",
+            ClientStatus::Disconnected => "kDisconnected",
         }
     }
 
     ///
-    pub fn is_running(&self) -> bool {
+    pub fn is_connected(&self) -> bool {
         match self {
-            ClientStatus::Running => true,
-            _ => false,
-        }
-    }
-
-    ///
-    pub fn is_stopped(&self) -> bool {
-        match self {
-            ClientStatus::Stopped => true,
-            _ => false,
-        }
-    }
-
-    ///
-    pub fn is_stopping(&self) -> bool {
-        match self {
-            ClientStatus::Stopping => true,
+            ClientStatus::Connected => true,
             _ => false,
         }
     }

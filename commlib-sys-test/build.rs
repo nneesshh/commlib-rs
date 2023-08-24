@@ -42,7 +42,15 @@ fn main() -> miette::Result<()> {
 
     // Re-run
     println!("cargo:rerun-if-changed=src/main.rs");
-    
+
+    // Protos
+    tonic_build::configure()
+        .build_client(false)
+        .build_server(false)
+        .build_transport(false)
+        .out_dir("protos/out")
+        .compile(&["protos/cmd.proto", "protos/base.proto"], &["protos"])
+        .unwrap();
 
     Ok(())
 }

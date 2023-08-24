@@ -9,6 +9,7 @@ pub enum ServerStatus {
     Running = 4,
     Stopping = 5,
     Stopped = 6,
+    Down = 7,
 }
 
 ///
@@ -31,6 +32,7 @@ impl ServerStatus {
             ServerStatus::Running => "kRunning",
             ServerStatus::Stopping => "kStopping",
             ServerStatus::Stopped => "kStopped",
+            ServerStatus::Down => "kDown",
         }
     }
 

@@ -27,7 +27,7 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
     }
 
     #[inline]
-    fn is_valid(&self, pkt: &NetPacket) -> bool {
+    fn is_valid(&self, _pkt: &NetPacket) -> bool {
         // you can optionally is_valid if object is good to be pushed back to the pool
         true
     }

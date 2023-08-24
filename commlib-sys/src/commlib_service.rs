@@ -2,12 +2,14 @@
 //! Common Library: service
 //!
 
-use crossbeam::channel;
-use parking_lot::{Condvar, Mutex, RwLock};
-use spdlog::get_current_tid;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+use crossbeam::channel;
+use parking_lot::RwLock;
+use spdlog::get_current_tid;
+
+use super::{Pinky, PinkySwear};
 ///
 #[derive(Debug, Copy, Clone)]
 #[repr(u32)]
@@ -143,22 +145,21 @@ pub fn start_service<I>(
     srv: &'static dyn ServiceRs,
     name_of_thread: &str,
     initializer: I,
-) -> (Option<JoinHandle<()>>, Option<Arc<(Mutex<u64>, Condvar)>>)
+) -> (Option<JoinHandle<()>>, u64)
 where
     I: FnOnce() + Send + Sync + 'static,
 {
+    let (tid_prms, tid_pinky) = PinkySwear::<u64>::new();
+
     {
         let handle = srv.get_handle().read();
         if handle.tid > 0u64 {
             log::error!("service already started!!! tid={}", handle.tid);
-            return (None, None);
+            return (None, 0);
         }
     }
 
     //
-    let tid_cv = Arc::new((Mutex::new(0u64), Condvar::new()));
-    let tid_ready = Arc::clone(&tid_cv);
-
     let exit_cv = Arc::clone(&crate::G_EXIT_CV);
 
     let tname = name_of_thread.to_owned();
@@ -169,18 +170,11 @@ where
             let tid = get_current_tid();
             log::info!("service({}) spawn on thread: {}", tname, tid);
 
-            let (lock, cvar) = &*tid_ready;
-            {
-                // release guard after value ok
-                let mut guard = lock.lock();
-                *guard = tid;
-            }
-
             // 服务线程初始化
             (initializer)();
 
             // 服务线程就绪通知
-            cvar.notify_all();
+            tid_pinky.swear(tid);
 
             // run
             run_service(srv, tname.as_str());
@@ -204,39 +198,37 @@ where
         .unwrap();
 
     //
-    (Some(join_handle), Some(tid_cv))
+    let tid = tid_prms.wait();
+    (Some(join_handle), tid)
 }
 
-/// 等待线程启动完成
-pub fn wait_service_ready(
+/// 线程启动完成，执行后续处理 (ThreadId.as_u64() is not stable yet, use ready_pair now)
+///    ready_pair: (join_handle_opt, tid)
+pub fn proc_service_ready(
     srv: &'static dyn ServiceRs,
-    ready_pair: (Option<JoinHandle<()>>, Option<Arc<(Mutex<u64>, Condvar)>>),
+    ready_pair: (Option<JoinHandle<()>>, u64),
 ) -> bool {
-    if let (join_handle_opt, Some(tid_cv)) = ready_pair {
-        //tid (ThreadId.as_u64() is not stable yet)
-        // wait ready
-        let (lock, cvar) = &*tid_cv;
-        let mut guard = lock.lock();
-        cvar.wait(&mut guard);
+    let (join_handle_opt, tid) = ready_pair;
 
+    if join_handle_opt.is_some() {
         // update tid
         {
             let mut handle_mut = srv.get_handle().write();
             handle_mut.join_handle_opt = join_handle_opt;
-            handle_mut.tid = *guard;
+            handle_mut.tid = tid;
         }
         true
     } else {
-        log::error!("[wait_service_ready] failed!!!");
+        log::error!("[proc_service_ready] failed!!! tid: {}", tid);
         false
     }
 }
 
 fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
-    // init
+    // run
     {
         let handle = srv.get_handle().read();
-        log::info!("[{}] init ... ID={}", service_name, handle.id);
+        log::info!("[{}] run ... ID={}", service_name, handle.id);
     }
 
     // loop until "NodeState::Closed"
@@ -293,7 +285,7 @@ fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
                             count -= 1;
                         }
                         Err(err) => {
-                            log::error!("service receive cb error:: {:?}", err);
+                            log::error!("service receive cb error: {:?}", err);
                         }
                     }
                 }
@@ -301,12 +293,12 @@ fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
                 // sleep by cost
                 let cost = sw.elapsed_and_reset();
                 if cost > 60_u128 {
-                    log::error!(
+                    /*log::error!(
                         "[{}] ID={} timeout cost: {}ms",
                         service_name,
                         handle.id,
                         cost
-                    );
+                    );*/
                 } else {
                     // sleep
                     const SLEEP_MS: std::time::Duration = std::time::Duration::from_millis(1);

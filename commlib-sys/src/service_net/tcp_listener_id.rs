@@ -6,7 +6,7 @@ use crate::{ServiceNetRs, ServiceRs};
 use super::{TcpConn, TcpServer};
 
 /// Tcp server id
-#[derive(Debug, Copy, Clone, PartialEq, Eq, std::hash::Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, std::hash::Hash)]
 #[repr(C)]
 pub struct TcpListenerId {
     pub id: usize,
@@ -52,18 +52,27 @@ impl TcpListenerId {
 
         //
         let listen_fn_opt = Some(tcp_server.listen_fn.clone());
+        let status = tcp_server.status();
         srv.run_in_service(Box::new(move || {
             if let Some(listen_fn) = listen_fn_opt {
-                listen_fn(sock_addr);
+                listen_fn(sock_addr, status);
             } else {
-                log::error!("[listen_id={:?}][run_listen_fn] failed!!!", listener_id);
+                log::error!("[listen_id={}][run_listen_fn] failed!!!", listener_id);
             }
         }));
     }
 }
 
 impl From<usize> for TcpListenerId {
+    #[inline(always)]
     fn from(raw: usize) -> Self {
         Self { id: raw }
+    }
+}
+
+impl std::fmt::Display for TcpListenerId {
+    #[inline(always)]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.id)
     }
 }

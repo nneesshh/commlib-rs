@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
+use crate::service_net::PacketType;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
-use super::{ConnId, OsSocketAddr, ServiceNetRs, TcpConn, TcpListenerId, TcpServer};
+use super::{ConnId, OsSocketAddr, ServiceNetRs, TcpClient, TcpConn, TcpListenerId, TcpServer};
 
 ///
-pub type OnListenFuncType =
-    extern "C" fn(*const Arc<ServiceNetRs>, *const TcpServer, TcpListenerId, OsSocketAddr);
+pub type OnListenFuncType = extern "C" fn(*const TcpServer, TcpListenerId, OsSocketAddr);
 
 ///
 pub type OnAcceptFuncType = extern "C" fn(
@@ -19,7 +19,7 @@ pub type OnAcceptFuncType = extern "C" fn(
 );
 
 ///
-pub type OnConnectFuncType = extern "C" fn(*const Arc<ServiceNetRs>, ConnId);
+pub type OnConnectedFuncType = extern "C" fn(*const TcpClient, ConnId, OsSocketAddr);
 
 ///
 pub type OnMessageFuncType = extern "C" fn(*const Arc<ServiceNetRs>, ConnId, *const u8, usize);
@@ -34,7 +34,7 @@ pub struct TcpHandler {
     pub on_listen: OnListenFuncType,
     pub on_accept: OnAcceptFuncType,
 
-    pub on_connect: OnConnectFuncType,
+    pub on_connected: OnConnectedFuncType,
 
     pub on_message: OnMessageFuncType,
     pub on_close: OnCloseFuncType,
@@ -47,7 +47,7 @@ impl TcpHandler {
             on_listen: on_listen_cb,
             on_accept: on_accept_cb,
 
-            on_connect: on_connect_cb,
+            on_connected: on_connected_cb,
 
             on_message: on_message_cb,
             on_close: on_close_cb,
@@ -57,12 +57,10 @@ impl TcpHandler {
 
 ///
 extern "C" fn on_listen_cb(
-    srv_net_ptr: *const Arc<ServiceNetRs>,
     tcp_server_ptr: *const TcpServer,
     listener_id: TcpListenerId,
     os_addr: OsSocketAddr,
 ) {
-    let srv_net = unsafe { &*srv_net_ptr };
     let tcp_server = unsafe { &mut *(tcp_server_ptr as *mut TcpServer) };
 
     // trigger listen_cb
@@ -88,7 +86,7 @@ extern "C" fn on_accept_cb(
 
     // insert new conn
     {
-        let mut conn = TcpConn::new(hd, endpoint, netctrl, &srv);
+        let mut conn = TcpConn::new(PacketType::Server, hd, endpoint, netctrl, &srv);
         listener_id.bind_callbacks(&mut conn, srv_net);
 
         {
@@ -101,7 +99,25 @@ extern "C" fn on_accept_cb(
     hd.run_conn_fn(&srv, srv_net);
 }
 
-extern "C" fn on_connect_cb(srv_net: *const Arc<ServiceNetRs>, hd: ConnId) {}
+extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_addr: OsSocketAddr) {
+    let tcp_client = unsafe { &mut *(tcp_client_ptr as *mut TcpClient) };
+
+    let srv_net = &tcp_client.srv_net;
+    let srv = &tcp_client.srv;
+
+    let id = ResourceId::from(hd.id);
+    let sock_addr = os_addr.into_addr().unwrap();
+    let endpoint = Endpoint::new(id, sock_addr);
+
+    // update inner hd for TcpClient
+    tcp_client.inner_hd = hd;
+
+    // bind new conn to tcp client
+    {
+        let netctrl = &tcp_client.mi_network.node_handler;
+        let conn = TcpConn::new(PacketType::Server, hd, endpoint, netctrl, srv);
+    }
+}
 
 extern "C" fn on_message_cb(
     srv_net_ptr: *const Arc<ServiceNetRs>,
@@ -116,26 +132,37 @@ extern "C" fn on_message_cb(
         let conn_table = srv_net.conn_table.read();
         if let Some(conn) = conn_table.get(&hd) {
             // conn 循环处理 input
-            let mut consumed = 0_usize;
-
+            let mut pos = 0_usize;
             loop {
-                let ptr = unsafe { input_data.offset(consumed as isize) };
-                let (pkt_opt, remain) = conn.handle_read(ptr, input_len - consumed);
-                if let Some(pkt) = pkt_opt {
-                    // trigger pkt_fn
-                    hd.run_pkt_fn(&conn.srv, srv_net, pkt);
+                let ptr = unsafe { input_data.offset(pos as isize) };
+                let len = input_len - pos;
+                match conn.handle_read(ptr, len) {
+                    Ok((Some(pkt), consumed)) => {
+                        // 收到一个 pkt trigger pkt_fn
+                        hd.run_pkt_fn(&conn.srv, srv_net, pkt);
+                        pos += consumed;
+                    }
+                    Ok((None, consumed)) => {
+                        // pkt 尚不完整,  continue
+                        pos += consumed;
+                    }
+                    Err(err) => {
+                        // disconnect
+                        log::error!("[on_message_cb] handle_read failed!!! error: {}", err);
+                        hd.disconnet(srv_net);
+                        break;
+                    }
                 }
 
                 //
-                consumed = input_len - remain;
-
-                if 0 == remain {
+                assert!(pos <= input_len);
+                if pos == input_len {
                     break;
                 }
             }
         } else {
             //
-            log::error!("[on_message_cb][hd={:?}] not found!!!", hd);
+            log::error!("[on_message_cb][hd={}] conn not found!!!", hd);
         }
     }
 }

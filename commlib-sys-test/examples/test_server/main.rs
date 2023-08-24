@@ -1,5 +1,9 @@
 use app_helper::App;
 
+pub mod proto {
+    include!("../../protos/out/proto.rs");
+}
+
 mod test_conf;
 mod test_service;
 

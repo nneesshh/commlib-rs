@@ -132,8 +132,10 @@ impl App {
 
         //
         srv.conf();
+
+        //
         let ready_pair = start_service(srv, srv.name(), initializer);
-        wait_service_ready(srv, ready_pair);
+        proc_service_ready(srv, ready_pair);
 
         // add server to app
         Self::add_service(&mut self.services, srv);

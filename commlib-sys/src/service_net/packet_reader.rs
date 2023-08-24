@@ -36,8 +36,12 @@ impl PacketReader {
         }
     }
 
-    ///
-    pub fn read(&self, input_data: *const u8, input_len: usize) -> (Option<NetPacketGuard>, usize) {
+    /// Ok 返回 (pkt, consumed), Err 返回错误信息
+    pub fn read(
+        &self,
+        input_data: *const u8,
+        input_len: usize,
+    ) -> Result<(Option<NetPacketGuard>, usize), String> {
         let mut consumed = 0_usize;
         let mut remain = input_len;
 
@@ -170,9 +174,9 @@ impl PacketReader {
                     let pkt_opt_ptr: *mut Option<NetPacketGuard> = &self.pkt_opt
                         as *const Option<NetPacketGuard>
                         as *mut Option<NetPacketGuard>;
-                    let pkt_ptr: *mut NetPacketGuard = self.pkt_opt.as_ref().unwrap()
-                        as *const NetPacketGuard
-                        as *mut NetPacketGuard;
+                    /*let pkt_ptr: *mut NetPacketGuard = self.pkt_opt.as_ref().unwrap()
+                    as *const NetPacketGuard
+                    as *mut NetPacketGuard;*/
                     let state_ptr =
                         &self.state as *const PacketReaderState as *mut PacketReaderState;
 
@@ -186,20 +190,20 @@ impl PacketReader {
                     unsafe {
                         let pkt_opt = (*pkt_opt_ptr).take();
                         (*pkt_opt_ptr) = Some(new_pkt);
-                        return (pkt_opt, remain);
+                        return Ok((pkt_opt, consumed));
                     }
                 }
 
                 PacketReaderState::Abort(pkt_full_len) => {
                     log::error!("packet overflow!!! pkt_full_len={}", pkt_full_len);
 
-                    // 包体越界
-                    return (None, 0_usize);
+                    // 包长度越界
+                    return Err("overflow".to_owned());
                 }
             }
         }
 
         // 包体不完整
-        (None, remain)
+        Ok((None, consumed))
     }
 }

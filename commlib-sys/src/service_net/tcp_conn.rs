@@ -31,14 +31,13 @@ pub struct TcpConn {
 impl TcpConn {
     ///
     pub fn new(
+        packet_type: PacketType,
         hd: ConnId,
         endpoint: Endpoint,
         netctrl: &NodeHandler<()>,
         srv: &Arc<dyn ServiceRs>,
     ) -> TcpConn {
-        let packet_type = PacketType::Server;
-
-        TcpConn {
+        Self {
             packet_type,
             hd,
 
@@ -56,13 +55,26 @@ impl TcpConn {
 
     ///
     #[inline(always)]
-    pub fn handle_read(&self, data: *const u8, len: usize) -> (Option<NetPacketGuard>, usize) {
+    pub fn handle_read(
+        &self,
+        data: *const u8,
+        len: usize,
+    ) -> Result<(Option<NetPacketGuard>, usize), String> {
         self.pkt_reader.read(data, len)
     }
 
     ///
+    #[inline(always)]
+    pub fn disconnect(&self) {
+        log::info!("[hd={}] disconnected", self.hd);
+
+        self.netctrl.network().remove(self.endpoint.resource_id());
+    }
+
+    ///
+    #[inline(always)]
     pub fn send(&self, data: &[u8]) {
-        log::debug!("[hd={:?}] send data ...", self.hd);
+        log::debug!("[hd={}] send data ...", self.hd);
 
         self.netctrl.network().send(self.endpoint, data);
     }

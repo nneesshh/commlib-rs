@@ -16,6 +16,10 @@ pub use rand_util::*;
 pub mod string_util;
 pub use string_util::*;
 
+/// util for promise blocking wait
+pub mod pinky_swear;
+pub use pinky_swear::{Pinky, PinkySwear};
+
 ///
 pub mod commlib_event;
 pub use commlib_event::*;

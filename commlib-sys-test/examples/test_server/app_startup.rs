@@ -22,7 +22,7 @@ use super::test_service::TestService;
 use super::test_service::G_TEST_SERVICE;
 
 use crate::test_conf::G_TEST_CONF;
-use crate::test_manager::G_TEST_MANAGER;
+use crate::test_manager::G_MAIN;
 
 thread_local! {
     ///
@@ -68,29 +68,29 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
     // TODO: let connection_limit: u32 = 0; // 0=no limit
 
     let conn_fn = |hd: ConnId| {
-        log::info!("[hd={:?}] conn_fn", hd);
+        log::info!("[hd={}] conn_fn", hd);
 
         hd.send(&G_SERVICE_NET, "hello, rust conn_fn".as_bytes());
     };
 
     let pkt_fn = |hd: ConnId, pkt: NetPacketGuard| {
-        log::info!("[hd={:?}] msg_fn", hd);
+        log::info!("[hd={}] msg_fn", hd);
 
-        G_TEST_MANAGER.with(|g| {
+        G_MAIN.with(|g| {
             let mut test_manager = g.borrow_mut();
             test_manager.server_proxy.on_net_packet(hd, pkt);
         });
     };
 
     let stopped_cb = |hd: ConnId| {
-        log::info!("[hd={:?}] stopped_cb", hd);
+        log::info!("[hd={}] stopped_cb", hd);
 
         hd.send(&G_SERVICE_NET, "bye, rust stopped_cb".as_bytes());
     };
 
     //
     app_helper::with_conf!(G_TEST_CONF, cfg, {
-        listen_tcp_addr(
+        let listener_id = listen_tcp_addr(
             srv,
             cfg.my.addr.clone(),
             cfg.my.port,
@@ -99,6 +99,7 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
             stopped_cb,
             &G_SERVICE_NET,
         );
+        log::info!("listener {} ready.", listener_id);
     });
 
     //

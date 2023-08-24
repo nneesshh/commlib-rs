@@ -49,17 +49,22 @@ use crate::{ServiceNetRs, ServiceRs};
 #[repr(C)]
 pub struct TcpServer {
     start: std::time::Instant,
-    status: RwLock<ServerStatus>,
-    substatus: RwLock<ServerSubStatus>,
+    status: ServerStatus,
 
     connection_limit: AtomicUsize,
     connection_num: AtomicUsize,
 
+    //
+    pub addr: String,
     pub listener_id: TcpListenerId,
-    pub listen_fn: Arc<dyn Fn(SocketAddr) + Send + Sync>,
+    pub listen_fn: Arc<dyn Fn(SocketAddr, ServerStatus) + Send + Sync>,
 
     //
     pub srv: Arc<dyn ServiceRs>,
+    pub mi_network: Arc<MessageIoNetwork>,
+    pub srv_net: Arc<ServiceNetRs>,
+
+    //
     pub conn_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
     pub pkt_fn: Arc<dyn Fn(ConnId, NetPacketGuard) + Send + Sync>,
     pub close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
@@ -67,22 +72,30 @@ pub struct TcpServer {
 
 impl TcpServer {
     ///
-    pub fn new<T>(srv: &Arc<T>) -> TcpServer
+    pub fn new<T>(
+        srv: &Arc<T>,
+        addr: &str,
+        mi_network: &Arc<MessageIoNetwork>,
+        srv_net: &Arc<ServiceNetRs>,
+    ) -> TcpServer
     where
         T: ServiceRs + 'static,
     {
         Self {
             start: std::time::Instant::now(),
-            status: RwLock::new(ServerStatus::Null),
-            substatus: RwLock::new(ServerSubStatus::SubStatusNull),
+            status: ServerStatus::Null,
 
             connection_limit: AtomicUsize::new(0),
             connection_num: AtomicUsize::new(0),
 
+            addr: addr.to_owned(),
             listener_id: TcpListenerId::from(0),
-            listen_fn: Arc::new(|_sock_addr| {}),
+            listen_fn: Arc::new(|_sock_addr, _status| {}),
 
             srv: srv.clone(),
+            mi_network: mi_network.clone(),
+            srv_net: srv_net.clone(),
+
             conn_fn: Arc::new(|_hd| {}),
             pkt_fn: Arc::new(|_hd, _pkt| {}),
             close_fn: Arc::new(|_hd| {}),
@@ -90,25 +103,28 @@ impl TcpServer {
     }
 
     /// Create a tcp server and listen on [ip:port]
-    pub fn listen(
-        &mut self,
-        ip: String,
-        port: u16,
-        network: &Arc<RwLock<MessageIoNetwork>>,
-        srv_net: &Arc<ServiceNetRs>,
-    ) {
-        let raddr = std::format!("{}:{}", ip, port);
-        log::info!("tcp server listen at raddr: {}", raddr);
+    pub fn listen(&mut self) {
+        log::info!(
+            "tcp server listen at addr: {} status: {}",
+            self.addr,
+            self.status.to_string()
+        );
 
-        self.listen_fn = Arc::new(|sock_addr| {
+        self.listen_fn = Arc::new(|sock_addr, status| {
             //
-            log::info!("listen success at {:?}", sock_addr);
+            log::info!(
+                "listen success at {:?} status:{}",
+                sock_addr,
+                status.to_string()
+            );
         });
 
         // inner server listen
-        {
-            let mut network_mut = network.write();
-            (*network_mut).listen(raddr.as_str(), self, srv_net);
+        let mi_network = self.mi_network.clone();
+        if (*mi_network).listen(self) {
+            self.set_status(ServerStatus::Running);
+        } else {
+            self.set_status(ServerStatus::Down);
         }
     }
 
@@ -139,5 +155,15 @@ impl TcpServer {
         F: Fn(ConnId) + Send + Sync + 'static,
     {
         self.close_fn = Arc::new(cb);
+    }
+
+    ///
+    #[inline(always)]
+    pub fn status(&self) -> ServerStatus {
+        self.status
+    }
+
+    fn set_status(&mut self, status: ServerStatus) {
+        self.status = status;
     }
 }

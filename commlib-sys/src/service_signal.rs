@@ -60,13 +60,16 @@ impl ServiceSignalRs {
 
             // 在 Service thread 中注册事件回调
             EventSignalInt::add_callback(move |_e| {
-                let f = f_opt.take().unwrap(); // use option trick to take "f" from FnMut() closure
-
-                // 事件触发时，将 f post 到工作线程执行
-                srv.run_in_service(Box::new(move || {
-                    // Notice: f() only works one time because using option trick, see "let f = f_opt.take()"
-                    f();
-                }));
+                // use option trick to take "f" from FnMut() closure
+                if let Some(f) = f_opt.take() {
+                    // 事件触发时，将 f post 到工作线程执行
+                    srv.run_in_service(Box::new(move || {
+                        // Notice: f() only works one time because using option trick, see "let f = f_opt.take()"
+                        f();
+                    }));
+                } else {
+                    log::error!("EventSignalInt: can't trigger more than one times!!!");
+                }
             });
         }));
     }

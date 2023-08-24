@@ -34,7 +34,7 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u32, log_to_co
         Ok(sink) => std::sync::Arc::new(sink),
         Err(err) => {
             println!(
-                "log_path_with_pattern={:?}, create file sink failed!!! {:?}",
+                "log_path_with_pattern={:?}, create file sink failed!!! error: {:?}",
                 log_path_with_pattern, err
             );
             std::panic!()
@@ -125,7 +125,7 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u32, log_to_co
     let log_dir = match std::fs::read_dir(&log_path) {
         Ok(dir) => dir,
         Err(err) => {
-            println!("log_path: {:?}, error={:?}!!!", log_path, err);
+            println!("log_path: {:?}, error: {:?}!!!", log_path, err);
             std::panic!();
         }
     };

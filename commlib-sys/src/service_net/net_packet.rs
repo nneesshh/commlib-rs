@@ -306,7 +306,7 @@ impl NetPacket {
                     if !self.check_packet() {
                         // TODO: 是不是直接 close 这个连接？？？
                         log::error!(
-                            "[decode_packet::PacketType::Client] received client data from [hd={:?}] error: check packet failed!!!",
+                            "[decode_packet::PacketType::Client] received client data from [hd={}] error: check packet failed!!!",
                             hd
                         );
 
@@ -318,7 +318,7 @@ impl NetPacket {
                         // TODO: 包序号检查
                         let client_no = self.client.no;
                         if !add_packet_no(encrypt, client_no) {
-                            log::error!("[decode_packet::PacketType::Client] received client data from [hd={:?}] error: packet no {} already exist!!!",
+                            log::error!("[decode_packet::PacketType::Client] received client data from [hd={}] error: packet no {} already exist!!!",
                                 hd, client_no
                             );
 
@@ -331,7 +331,7 @@ impl NetPacket {
                     }
                 } else {
                     log::error!(
-                        "[decode_packet::PacketType::Client] received client data from [hd={:?}] error: encrypt data not exist!!!",
+                        "[decode_packet::PacketType::Client] received client data from [hd={}] error: encrypt data not exist!!!",
                         hd
                     );
 
@@ -346,7 +346,7 @@ impl NetPacket {
                     if !self.check_packet() {
                         // TODO: 是不是直接 close 这个连接？？？
                         log::error!(
-                            "[decode_packet::PacketType::ClientWs] received client data from [hd={:?}] error: check packet failed!!!",
+                            "[decode_packet::PacketType::ClientWs] received client data from [hd={}] error: check packet failed!!!",
                             hd
                         );
 
@@ -358,7 +358,7 @@ impl NetPacket {
                         // TODO: 包序号检查
                         let client_no = self.client.no;
                         if !add_packet_no(encrypt, client_no) {
-                            log::error!("[decode_packet::PacketType::ClientWs] received client data from [hd={:?}] error: packet no {} already exist!!!",
+                            log::error!("[decode_packet::PacketType::ClientWs] received client data from [hd={}] error: packet no {} already exist!!!",
                                 hd, client_no);
 
                             //
@@ -370,7 +370,7 @@ impl NetPacket {
                     }
                 } else {
                     log::error!(
-                        "[decode_packet::PacketType::ClientWs] received client data from [hd={:?}] error: encrypt data not exist!!!",
+                        "[decode_packet::PacketType::ClientWs] received client data from [hd={}] error: encrypt data not exist!!!",
                         hd
                     );
 
@@ -415,7 +415,7 @@ impl NetPacket {
                     true
                 } else {
                     log::error!(
-                        "[encode_packet::PacketType::Robot] [hd={:?}] send packet error: encrypt data not exist!!!",
+                        "[encode_packet::PacketType::Robot] [hd={}] send packet error: encrypt data not exist!!!",
                         hd
                     );
 
@@ -436,7 +436,7 @@ impl NetPacket {
                     true
                 } else {
                     log::error!(
-                        "[encode_packet::PacketType::RobotWs] [hd={:?}] send packet error: encrypt data not exist!!!",
+                        "[encode_packet::PacketType::RobotWs] [hd={}] send packet error: encrypt data not exist!!!",
                         hd
                     );
 

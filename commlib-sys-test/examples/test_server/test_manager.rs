@@ -7,7 +7,7 @@ use commlib_sys::{NetProxy, ServiceRs};
 
 thread_local! {
     ///
-    pub static G_TEST_MANAGER: std::cell::RefCell<TestManager> = {
+    pub static G_MAIN: std::cell::RefCell<TestManager> = {
         std::cell::RefCell::new(TestManager::new())
     };
 }

@@ -1,7 +1,7 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-use crate::commlib_service::{NodeState, ServiceHandle, ServiceRs};
+use crate::{NodeState, Pinky, PinkySwear, ServiceHandle, ServiceRs, TcpListenerId};
 
 use super::{start_message_io_network_async, MessageIoNetwork};
 use super::{ConnId, NetPacketGuard, TcpClient, TcpConn, TcpServer};
@@ -16,7 +16,7 @@ pub struct ServiceNetRs {
     pub tcp_server_vec: RwLock<Vec<TcpServer>>,                  // TODO: remove lock?
 
     //
-    inner_network: Arc<RwLock<MessageIoNetwork>>,
+    inner_network: Arc<MessageIoNetwork>,
 }
 
 impl ServiceNetRs {
@@ -31,15 +31,15 @@ impl ServiceNetRs {
             tcp_server_vec: RwLock::new(Vec::new()),
 
             //
-            inner_network: Arc::new(RwLock::new(MessageIoNetwork::new())),
+            inner_network: Arc::new(MessageIoNetwork::new()),
         }
     }
 
     /// Send over tcp conn
     pub fn send(&self, hd: ConnId, data: &[u8]) {
         let conn_table = self.conn_table.read();
-        if let Some(tcp_conn) = conn_table.get(&hd) {
-            tcp_conn.send(data);
+        if let Some(conn) = conn_table.get(&hd) {
+            conn.send(data);
         }
     }
 }
@@ -101,8 +101,7 @@ pub fn stop_network(srv_net: &Arc<ServiceNetRs>) {
     log::info!("service net stop network ...");
 
     // inner server stop
-    let mut inner_network_mut = srv_net.inner_network.write();
-    (*inner_network_mut).stop();
+    srv_net.inner_network.stop();
 }
 
 /// Listen on [ip:port] over service net
@@ -114,7 +113,8 @@ pub fn listen_tcp_addr<T, C, P, S>(
     pkt_fn: P,
     stopped_cb: S,
     srv_net: &Arc<ServiceNetRs>,
-) where
+) -> TcpListenerId
+where
     T: ServiceRs + 'static,
     C: Fn(ConnId) + Send + Sync + 'static,
     P: Fn(ConnId, NetPacketGuard) + Send + Sync + 'static,
@@ -122,28 +122,53 @@ pub fn listen_tcp_addr<T, C, P, S>(
 {
     log::info!("service net listen {}:{}...", ip, port);
 
+    let (promise, pinky) = PinkySwear::<TcpListenerId>::new();
+
     //
     let srv_net2 = srv_net.clone();
     let srv2 = srv.clone();
     let cb = move || {
         //
-        let mut tcp_server = TcpServer::new(&srv2);
+        let addr = std::format!("{}:{}", ip, port);
+        let mut tcp_server =
+            TcpServer::new(&srv2, addr.as_str(), &srv_net2.inner_network, &srv_net2);
 
         //
         tcp_server.set_connection_callback(conn_fn);
         tcp_server.set_message_callback(pkt_fn);
         tcp_server.set_close_callback(stopped_cb);
 
-        // add tcp server
+        // listen
+        tcp_server.listen();
+
+        // add tcp server to serivce net
         {
             let mut tcp_server_vec_mut = srv_net2.tcp_server_vec.write();
             (*tcp_server_vec_mut).push(tcp_server);
+        }
 
-            //
-            let tail = tcp_server_vec_mut.len() - 1;
-            let tcp_server = &mut (*tcp_server_vec_mut)[tail];
-            tcp_server.listen(ip, port, &srv_net2.inner_network, &srv_net2);
+        // pinky for listener_id
+        {
+            let tcp_server_vec = srv_net2.tcp_server_vec.read();
+            let tcp_server = tcp_server_vec.last().unwrap();
+            pinky.swear(tcp_server.listener_id);
         }
     };
     srv_net.run_in_service(Box::new(cb));
+
+    //
+    promise.wait()
+}
+
+/// Create tcp client
+pub fn create_tcp_client<T>(
+    srv: &Arc<T>,
+    name: &str,
+    raddr: &str,
+    srv_net: &Arc<ServiceNetRs>,
+) -> TcpClient
+where
+    T: ServiceRs + 'static,
+{
+    TcpClient::new(srv, name, raddr, &srv_net.inner_network, srv_net)
 }

@@ -1,27 +1,27 @@
 //!
-//! TestManager
+//! CliManager
 //!
 
 use commlib_sys::service_net::PacketType;
-use commlib_sys::{NetProxy, ServiceRs, TcpCallbacks};
+use commlib_sys::{NetProxy, ServiceRs};
 
 thread_local! {
     ///
-    pub static G_TEST_MANAGER: std::cell::RefCell<TestManager> = {
-        std::cell::RefCell::new(TestManager::new())
+    pub static G_MAIN: std::cell::RefCell<CliManager> = {
+        std::cell::RefCell::new(CliManager::new())
     };
 }
 
 ///
-pub struct TestManager {
-    pub server_proxy: NetProxy,
+pub struct CliManager {
+    pub proxy: NetProxy,
 }
 
-impl TestManager {
+impl CliManager {
     ///
-    pub fn new() -> TestManager {
-        TestManager {
-            server_proxy: NetProxy::new(PacketType::Server),
+    pub fn new() -> CliManager {
+        CliManager {
+            proxy: NetProxy::new(PacketType::Server),
         }
     }
 }
