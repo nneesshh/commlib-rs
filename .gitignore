@@ -22,3 +22,5 @@ cpplibs/.vs/
 cpplibs/obj/
 
 cpplibs/libs/win/Release/
+
+commlib-sys-test/log/
