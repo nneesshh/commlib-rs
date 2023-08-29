@@ -13,7 +13,7 @@ use bytes::{BufMut, BytesMut};
 use std::sync::Arc;
 
 use commlib_sys::listen_tcp_addr;
-use commlib_sys::service_net::{ConnId, NetPacketGuard, PacketType};
+use commlib_sys::service_net::{CmdId, ConnId, NetPacketGuard, PacketType};
 use commlib_sys::{NodeState, ServiceRs};
 use commlib_sys::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
@@ -132,7 +132,7 @@ fn test_service_init(srv: &Arc<TestService>) -> bool {
 }
 
 fn send_encrypt_token(hd: ConnId) {
-    let code_buff = BytesMut::with_capacity(ENCRYPT_KEY_LEN + ENCRYPT_MAX_LEN);
+    let code_buff = Vec::<u8>::with_capacity(ENCRYPT_KEY_LEN + ENCRYPT_MAX_LEN);
 
     let msg = proto::S2cEncryptToken {
         token: Some(code_buff.to_vec()),
@@ -143,8 +143,11 @@ fn send_encrypt_token(hd: ConnId) {
         let mut test_manager = g.borrow_mut();
         test_manager.server_proxy.set_encrypt_key(hd, code_buff);
 
-        test_manager
-            .server_proxy
-            .send_proto(hd, proto::EnumMsgType::EncryptToken, msg);
+        test_manager.server_proxy.send_proto(
+            G_SERVICE_NET.as_ref(),
+            hd,
+            proto::EnumMsgType::EncryptToken as CmdId,
+            &msg,
+        );
     });
 }

@@ -1,6 +1,7 @@
+use atomic_enum::atomic_enum;
 use std::collections::LinkedList;
 
-use atomic_enum::atomic_enum;
+use crate::{rand_between_exclusive_i8, PlayerId};
 
 use super::{Buffer, ConnId};
 
@@ -110,17 +111,17 @@ impl NetPacket {
     }
 
     ///
-    #[inline(never)]
+    #[inline(always)]
     pub fn init(&mut self, _new_malloc: bool) {
         // 兼容内存池
     }
 
     ///
-    #[inline(never)]
+    #[inline(always)]
     pub fn release(&mut self) {
         self.body_size = 0;
         self.cmd = 0;
-        self.client.no = 0;
+        self.set_client_no(0);
         self.buffer.reset();
     }
 
@@ -201,6 +202,7 @@ impl NetPacket {
     }
 
     ///
+    #[inline(always)]
     pub fn set_cmd(&mut self, cmd: CmdId) {
         self.cmd = cmd;
     }
@@ -212,6 +214,7 @@ impl NetPacket {
     }
 
     ///
+    #[inline(always)]
     pub fn set_client_no(&mut self, client_no: i8) {
         self.client.no = client_no;
     }
@@ -229,6 +232,7 @@ impl NetPacket {
     }
 
     ///
+    #[inline(always)]
     pub fn set_body(&mut self, slice: &[u8]) {
         let len = slice.len();
         self.buffer.write_slice(slice);
@@ -236,6 +240,7 @@ impl NetPacket {
     }
 
     ///
+    #[inline(always)]
     pub fn set_msg<M>(&mut self, msg: &M)
     where
         M: prost::Message,
@@ -248,7 +253,8 @@ impl NetPacket {
     }
 
     ///
-    pub fn set_trans_msg<M>(&mut self, pid: crate::PlayerId, cmd: CmdId, msg: &M) -> bool
+    #[inline(always)]
+    pub fn set_trans_msg<M>(&mut self, pid: PlayerId, cmd: CmdId, msg: &M) -> bool
     where
         M: prost::Message,
     {
@@ -267,12 +273,8 @@ impl NetPacket {
     }
 
     ///
-    pub fn set_multi_trans_msg<M>(
-        &mut self,
-        pids: Vec<crate::PlayerId>,
-        cmd: CmdId,
-        msg: &mut M,
-    ) -> bool
+    #[inline(always)]
+    pub fn set_multi_trans_msg<M>(&mut self, pids: Vec<PlayerId>, cmd: CmdId, msg: &mut M) -> bool
     where
         M: prost::Message,
     {
@@ -296,6 +298,7 @@ impl NetPacket {
     }
 
     /// 包头长度校验
+    #[inline(always)]
     pub fn check_packet(&self) -> bool {
         match self.packet_type {
             PacketType::Server => self.buffer.length() >= SERVER_INNER_HEADER_SIZE,
@@ -331,7 +334,7 @@ impl NetPacket {
                         self.read_client_packet(encrypt.encrypt_key.as_str());
 
                         // TODO: 包序号检查
-                        let client_no = self.client.no;
+                        let client_no = self.client_no();
                         if !add_packet_no(encrypt, client_no) {
                             log::error!("[decode_packet::PacketType::Client] received client data from [hd={}] error: packet no {} already exist!!!",
                                 hd, client_no
@@ -371,7 +374,7 @@ impl NetPacket {
                         self.read_client_ws_packet(encrypt.encrypt_key.as_str());
 
                         // TODO: 包序号检查
-                        let client_no = self.client.no;
+                        let client_no = self.client_no();
                         if !add_packet_no(encrypt, client_no) {
                             log::error!("[decode_packet::PacketType::ClientWs] received client data from [hd={}] error: packet no {} already exist!!!",
                                 hd, client_no);
@@ -423,7 +426,7 @@ impl NetPacket {
                 if let Some(encrypt) = encrypt_table.get_mut(&hd) {
                     // 随机序号
                     let no = rand_packet_no(encrypt, hd);
-                    self.client.no = no;
+                    self.set_client_no(no);
                     self.write_robot_packet(encrypt.encrypt_key.as_str());
 
                     //
@@ -444,7 +447,7 @@ impl NetPacket {
                 if let Some(encrypt) = encrypt_table.get_mut(&hd) {
                     // 随机序号
                     let no = rand_packet_no(encrypt, hd);
-                    self.client.no = no;
+                    self.set_client_no(no);
                     self.write_robot_ws_packet(encrypt.encrypt_key.as_str());
 
                     //
@@ -478,6 +481,7 @@ impl NetPacket {
     }
 
     /* **** server **** */
+    #[inline(always)]
     fn write_server_packet(&mut self) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
@@ -488,6 +492,7 @@ impl NetPacket {
         self.buffer.prepend_u32(size as u32);
     }
 
+    #[inline(always)]
     fn read_server_packet(&mut self) {
         // MUST only one packet in buffer
 
@@ -500,6 +505,7 @@ impl NetPacket {
     }
 
     /* **** client **** */
+    #[inline(always)]
     fn write_client_packet(&mut self) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
@@ -510,6 +516,7 @@ impl NetPacket {
         self.buffer.prepend_u32(size as u32);
     }
 
+    #[inline(always)]
     fn read_client_packet(&mut self, key: &str) {
         // MUST only one packet in buffer
 
@@ -518,32 +525,45 @@ impl NetPacket {
         self.body_size = pkt_full_len - FROM_CLIENT_HEADER_SIZE;
 
         // 1 字节序号
-        self.client.no = self.buffer.read_u8() as i8;
+        let no = self.buffer.read_u8() as i8;
+        self.set_client_no(no);
 
         // 解密
-        decrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
+        decrypt_packet(
+            self.buffer.data_mut(),
+            self.body_size,
+            key,
+            self.client_no(),
+        );
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
     }
 
     /* **** robot **** */
+    #[inline(always)]
     fn write_robot_packet(&mut self, key: &str) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
 
         // 加密
-        encrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
+        encrypt_packet(
+            self.buffer.data_mut(),
+            self.body_size,
+            key,
+            self.client_no(),
+        );
 
         // 1 字节序号
-        self.buffer.prepend_u8(self.client.no as u8);
+        self.buffer.prepend_u8(self.client_no() as u8);
 
         // 2 字节包长度
         let size = FROM_CLIENT_HEADER_SIZE + self.body_size;
         self.buffer.prepend_u16(size as u16);
     }
 
+    #[inline(always)]
     fn read_robot_packet(&mut self) {
         // MUST only one packet in buffer
 
@@ -556,12 +576,14 @@ impl NetPacket {
     }
 
     /* **** client ws **** */
+    #[inline(always)]
     fn write_client_ws_packet(&mut self) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
     }
 
+    #[inline(always)]
     fn read_client_ws_packet(&mut self, key: &str) {
         // MUST only one packet in buffer
 
@@ -569,28 +591,41 @@ impl NetPacket {
         self.body_size = self.buffer_raw_len() - FROM_CLIENT_HEADER_SIZE_WS;
 
         // 1 字节序号
-        self.client.no = self.buffer.read_u8() as i8;
+        let no = self.buffer.read_u8() as i8;
+        self.set_client_no(no);
 
         // 解密
-        decrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
+        decrypt_packet(
+            self.buffer.data_mut(),
+            self.body_size,
+            key,
+            self.client_no(),
+        );
 
         // 2 字节 cmd
         self.cmd = self.buffer.read_u16();
     }
 
     /* **** robot ws **** */
+    #[inline(always)]
     fn write_robot_ws_packet(&mut self, key: &str) {
         // 组合最终包 (Notice: Prepend 是反向添加)
         // 2 字节 cmd
         self.buffer.prepend_u16(self.cmd);
 
         // 加密
-        encrypt_packet(self.buffer.data_mut(), self.body_size, key, self.client.no);
+        encrypt_packet(
+            self.buffer.data_mut(),
+            self.body_size,
+            key,
+            self.client_no(),
+        );
 
         // 1 字节序号
-        self.buffer.prepend_u8(self.client.no as u8);
+        self.buffer.prepend_u8(self.client_no() as u8);
     }
 
+    #[inline(always)]
     fn read_robot_ws_packet(&mut self) {
         // MUST only one packet in buffer
 
@@ -641,7 +676,7 @@ where
 #[inline(always)]
 pub fn rand_packet_no(encrypt: &mut EncryptData, _hd: ConnId) -> i8 {
     let no_list = &mut encrypt.no_list;
-    let no = crate::rand_between_exclusive_i8(0, (ENCRYPT_KEY_LEN - 1) as i8, no_list);
+    let no = rand_between_exclusive_i8(0, (ENCRYPT_KEY_LEN - 1) as i8, no_list);
 
     no_list.push_back(no);
 

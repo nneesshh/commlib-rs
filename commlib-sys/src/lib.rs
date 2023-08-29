@@ -5,6 +5,10 @@ include!("../ffi/signal.rs");
 include!("../ffi/net.rs");
 
 ///
+pub mod base64_util;
+pub use base64_util::Base64;
+
+///
 pub mod stop_watch;
 pub use stop_watch::*;
 

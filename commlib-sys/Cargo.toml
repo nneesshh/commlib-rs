@@ -50,6 +50,7 @@ log = "0.4"
 chrono = "0.4"
 bytes = "1"
 atomic_enum = { path="../atomic_enum" }
+base64 = { path="../rust-base64" }
 hashbrown = { path="../hashbrown" }
 message-io = { path="../message-io" }
 opool = { path="../opool" }

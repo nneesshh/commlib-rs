@@ -15,7 +15,7 @@ pub struct ConnId {
 impl ConnId {
     ///
     #[inline(always)]
-    pub fn send(&self, srv_net: &Arc<ServiceNetRs>, data: &[u8]) {
+    pub fn send(&self, srv_net: &ServiceNetRs, data: &[u8]) {
         let hd = *self;
 
         // 在当前线程中加 read 锁取出 conn，以便尽快发送
@@ -28,7 +28,7 @@ impl ConnId {
     }
 
     /// Drop the tcp conn, and check if auto reconnect
-    pub fn close(self, srv_net: &Arc<ServiceNetRs>) {
+    pub fn close(self, srv_net: &ServiceNetRs) {
         let hd = self;
         log::info!("[hd={}] close ...", hd);
 
@@ -46,7 +46,7 @@ impl ConnId {
     }
 
     ///
-    pub fn to_socket_addr(&self, srv_net: &Arc<ServiceNetRs>) -> Option<SocketAddr> {
+    pub fn to_socket_addr(&self, srv_net: &ServiceNetRs) -> Option<SocketAddr> {
         let hd = *self;
 
         // 在当前线程中加 read 锁取出 conn，这样方便返回数值
@@ -59,7 +59,7 @@ impl ConnId {
     }
 
     ///
-    pub fn set_packet_type(&self, srv_net: &Arc<ServiceNetRs>, packet_type: PacketType) {
+    pub fn set_packet_type(&self, srv_net: &ServiceNetRs, packet_type: PacketType) {
         let hd = *self;
 
         // 在当前线程中加 read 锁取出 conn
