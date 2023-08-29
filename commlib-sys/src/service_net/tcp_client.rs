@@ -10,22 +10,27 @@
 //!
 
 use parking_lot::RwLock;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use crate::{ServiceNetRs, ServiceRs};
+use message_io::network::Endpoint;
+use message_io::node::NodeHandler;
 
-use super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, TcpConn};
+use crate::{Clock, ServiceNetRs, ServiceRs};
+
+use super::{
+    AtomicClientStatus, ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, PacketReader,
+    PacketType, TcpConn,
+};
 
 ///
 #[repr(C)]
 pub struct TcpClient {
     start: std::time::Instant,
-    status: ClientStatus,
+    status: AtomicClientStatus,
 
     //
-    pub conn_opt: Option<TcpConn>,
-
-    //
+    pub id: uuid::Uuid,
     pub name: String,
     pub raddr: String,
 
@@ -46,21 +51,27 @@ pub struct TcpClient {
 
 impl TcpClient {
     ///
-    pub fn new<T>(
+    pub fn new<T, C, P, S>(
         srv: &Arc<T>,
         name: &str,
         raddr: &str,
         mi_network: &Arc<MessageIoNetwork>,
+        conn_fn: C,
+        pkt_fn: P,
+        close_fn: S,
         srv_net: &Arc<ServiceNetRs>,
     ) -> TcpClient
     where
         T: ServiceRs + 'static,
+        C: Fn(ConnId) + Send + Sync + 'static,
+        P: Fn(ConnId, NetPacketGuard) + Send + Sync + 'static,
+        S: Fn(ConnId) + Send + Sync + 'static,
     {
         Self {
             start: std::time::Instant::now(),
-            status: ClientStatus::Null,
+            status: ClientStatus::Null.into(),
 
-            conn_opt: None,
+            id: uuid::Uuid::new_v4(),
 
             name: name.to_owned(),
             raddr: raddr.to_owned(),
@@ -70,20 +81,23 @@ impl TcpClient {
             srv_net: srv_net.clone(),
             auto_reconnect: true,
 
-            conn_fn: Arc::new(|_hd| {}),
-            pkt_fn: Arc::new(|_hd, _pkt| {}),
-            close_fn: Arc::new(|_hd| {}),
+            conn_fn: Arc::new(conn_fn),
+            pkt_fn: Arc::new(pkt_fn),
+            close_fn: Arc::new(close_fn),
 
             inner_hd: ConnId::from(0),
         }
     }
 
     /// Connect to [ip:port]
-    pub fn connect(&mut self) -> Result<ConnId, String> {
+    pub fn connect(&self) -> Result<ConnId, String> {
         log::info!(
-            "tcp client connect to raddr: {} status: {}",
+            "[hd={}]({}) start connect to raddr: {} status: {} -- id<{}>",
+            self.inner_hd,
+            self.name,
             self.raddr,
-            self.status.to_string()
+            self.status().to_string(),
+            self.id,
         );
 
         // status: Connecting
@@ -91,54 +105,257 @@ impl TcpClient {
 
         // inner connect
         let mi_network = self.mi_network.clone();
-        match (*mi_network).connect(self) {
+        match mi_network.connect(self) {
             Ok(hd) => {
                 self.set_status(ClientStatus::Connected);
                 Ok(hd)
             }
             Err(err) => {
                 self.set_status(ClientStatus::Disconnected);
+
+                // check auto reconnect
+                self.check_auto_reconnect();
                 Err(err)
             }
         }
     }
 
     /// Reonnect to [ip:port]
-    pub fn reconnect(&mut self) -> Result<ConnId, String> {
+    pub fn reconnect(&self) -> Result<(), String> {
         log::info!(
-            "tcp client reconnect to raddr: {} status: {}",
+            "[hd={}]({}) start reconnect to raddr: {} status: {} -- id<{}>",
+            self.inner_hd,
+            self.name,
             self.raddr,
-            self.status.to_string()
+            self.status().to_string(),
+            self.id,
         );
 
-        //self.srv_net.clock();
-
-        // inner connect
-        let mi_network = self.mi_network.clone();
-        match (*mi_network).connect(self) {
-            Ok(hd) => {
-                self.set_status(ClientStatus::Connected);
-                Ok(hd)
-            }
-            Err(err) => {
-                self.set_status(ClientStatus::Disconnected);
-                Err(err)
-            }
+        // client 必须处于空闲状态
+        if !self.status().is_idle() {
+            let errmsg = "wrong status".to_owned();
+            log::error!(
+                "tcp client reconnect to raddr: {} status: {} -- id<{}> falied: {}!!!",
+                self.raddr,
+                self.status().to_string(),
+                self.id,
+                errmsg,
+            );
+            return Err(errmsg);
         }
+
+        //
+        const DELAY_MS: u64 = 5000_u64; // ms
+        log::info!(
+            "[hd={}]({}) try to reconnect after {}ms -- id<{}> ...",
+            self.inner_hd,
+            self.name,
+            DELAY_MS,
+            self.id
+        );
+
+        let hd = self.inner_hd;
+        let name = self.name.clone();
+        let cli_id = self.id.clone();
+        let srv_net2 = self.srv_net.clone();
+
+        //
+        Clock::set_timeout(self.srv_net.as_ref(), DELAY_MS, move || {
+            log::info!("[hd={}]({}) reconnect -- id<{}> ...", hd, name, cli_id);
+            {
+                let client_opt = srv_net2.get_client(&cli_id);
+                if let Some(cli) = client_opt {
+                    if cli.status().is_connected() {
+                        log::error!(
+                            "[hd={}]({}) reconnect failed -- id<{}>!!! already connected!!!",
+                            hd,
+                            name,
+                            cli_id
+                        );
+                    } else {
+                        match cli.connect() {
+                            Ok(hd) => {
+                                log::info!(
+                                    "[hd={}]({}) reconnect success -- id<{}>.",
+                                    hd,
+                                    name,
+                                    cli_id
+                                );
+                            }
+                            Err(err) => {
+                                log::error!(
+                                    "[hd={}]({}) reconnect failed -- id<{}>!!! error: {}!!!",
+                                    hd,
+                                    name,
+                                    cli_id,
+                                    err
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    log::error!(
+                        "[hd={}]({}) reconnect failed -- id<{}>!!! client not exist!!!",
+                        hd,
+                        name,
+                        cli_id
+                    );
+                }
+            }
+        });
+
+        //
+        Ok(())
     }
 
     /// Disconnect client
-    pub fn disconnect(&mut self) {
+    pub fn disconnect<F>(&mut self, disconneced_cb: F) -> Result<(), String>
+    where
+        F: Fn(ConnId) + Send + Sync + 'static,
+    {
+        log::info!(
+            "[hd={}]({}) start disconnect from raddr: {} status: {} -- id<{}>",
+            self.inner_hd,
+            self.name,
+            self.raddr,
+            self.status().to_string(),
+            self.id,
+        );
+
+        // client 必须处于连接状态
+        if !self.status().is_connected() {
+            let errmsg = "wrong status".to_owned();
+            log::error!(
+                "tcp client disconnect from raddr: {} status: {} -- id<{}> falied: {}!!!",
+                self.raddr,
+                self.status().to_string(),
+                self.id,
+                errmsg,
+            );
+            return Err(errmsg);
+        }
+
         // remove inner TcpConn by hd
         self.set_status(ClientStatus::Disconnecting);
-        log::info!("[hd={}] disconnecting", self.inner_hd);
+        log::info!(
+            "[hd={}]({}) disconnecting from raddr: {} status: {} -- id<{}>",
+            self.inner_hd,
+            self.name,
+            self.raddr,
+            self.status().to_string(),
+            self.id,
+        );
 
-        self.inner_hd.disconnet(&self.srv_net);
+        let cb = Arc::new(move |hd| {
+            log::info!("[hd={}] disconnect over.", hd);
+            disconneced_cb(hd);
+        });
 
-        self.set_status(ClientStatus::Disconnecting);
-        log::info!("[hd={}] disconnecting", self.inner_hd);
+        // 在当前线程中加 write 锁
+        let mut is_conn_closed = false;
+        if let Some(conn) = self.srv_net.get_conn(self.inner_hd) {
+            if conn.closed.load(Ordering::Relaxed) {
+                is_conn_closed = true;
+            } else {
+                // 修改 close_fn，运行 disconneced_cb
+                let mut close_fn_mut = conn.close_fn.write();
+                (*close_fn_mut) = cb.clone();
 
-        self.inner_hd = ConnId::from(0);
+                // low level close
+                conn.close();
+            }
+        } else {
+            log::error!(
+                "[hd={}]({}) disconnect failed -- id<{}>!!! client not found!!!",
+                self.inner_hd,
+                self.name,
+                self.id,
+            );
+            is_conn_closed = true;
+        }
+
+        // 连接已经关闭，立即回调
+        if is_conn_closed {
+            let hd = self.inner_hd;
+            self.srv.run_in_service(Box::new(move || {
+                (cb)(hd);
+            }));
+        }
+
+        //
+        Ok(())
+    }
+
+    /// Make conn with callbacks from tcp client
+    pub fn make_new_conn(
+        &self,
+        packet_type: PacketType,
+        hd: ConnId,
+        endpoint: Endpoint,
+        netctrl: &NodeHandler<()>,
+    ) -> bool {
+        //
+        let cli_conn_fn = self.conn_fn.clone();
+        let cli_pkt_fn = self.pkt_fn.clone();
+        let cli_close_fn = self.close_fn.clone();
+
+        let conn_fn = Arc::new(move |hd| {
+            (*cli_conn_fn)(hd);
+        });
+        let pkt_fn = Arc::new(move |hd, pkt| {
+            (*cli_pkt_fn)(hd, pkt);
+        });
+
+        let cli_id = self.id.clone();
+        let srv_net = self.srv_net.clone();
+        let close_fn = Arc::new(move |hd| {
+            (*cli_close_fn)(hd);
+
+            // close tcp client
+            let cli_opt = srv_net.get_client(&cli_id);
+            if let Some(cli) = cli_opt {
+                cli.set_status(ClientStatus::Disconnected);
+                log::info!(
+                    "[hd={}] disconnect_cb ok -- id<{}> [inner_hd={}]({})",
+                    hd,
+                    cli_id,
+                    cli.inner_hd,
+                    cli.name,
+                );
+
+                // check auto reconnect
+                cli.check_auto_reconnect();
+            }
+        });
+
+        let conn = Arc::new(TcpConn {
+            //
+            packet_type: PacketType::Server.into(),
+            hd,
+
+            //
+            endpoint,
+            netctrl: netctrl.clone(),
+
+            //
+            closed: false.into(),
+
+            //
+            srv: self.srv.clone(),
+            srv_net: self.srv_net.clone(),
+
+            //
+            conn_fn,
+            pkt_fn,
+            close_fn: RwLock::new(close_fn),
+
+            //
+            pkt_reader: PacketReader::new(packet_type),
+        });
+
+        // add conn to service net
+        self.srv_net.insert_conn(conn.hd, &conn);
+        true
     }
 
     ///
@@ -168,11 +385,36 @@ impl TcpClient {
     ///
     #[inline(always)]
     pub fn status(&self) -> ClientStatus {
-        self.status
+        self.status.load(Ordering::Relaxed)
     }
 
     #[inline(always)]
-    fn set_status(&mut self, status: ClientStatus) {
-        self.status = status;
+    fn set_status(&self, status: ClientStatus) {
+        self.status.store(status, Ordering::Relaxed);
+    }
+
+    fn check_auto_reconnect(&self) {
+        if self.auto_reconnect {
+            //
+            match self.reconnect() {
+                Ok(_) => {
+                    log::error!(
+                        "[hd={}]({}) auto reconnect start -- id<{}> ...",
+                        self.inner_hd,
+                        self.name,
+                        self.id,
+                    );
+                }
+                Err(err) => {
+                    log::error!(
+                        "[hd={}]({}) auto reconnect -- id<{}> failed: {}!!!",
+                        self.inner_hd,
+                        self.name,
+                        self.id,
+                        err
+                    );
+                }
+            }
+        }
     }
 }

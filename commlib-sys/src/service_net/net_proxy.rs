@@ -1,3 +1,4 @@
+use bytes::BytesMut;
 use super::{take_packet, CmdId, ConnId, EncryptData, NetPacketGuard, PacketType};
 
 ///
@@ -53,9 +54,20 @@ impl NetProxy {
         self.packet_type
     }
 
+    ///
+    pub fn set_encrypt_key(&mut self, hd: ConnId, key: BytesMut) {
+        let encrypt_opt = self.hd_encrypt_table.get(&hd);
+        if let Some(encrypt) = encrypt_opt {
+            let old_encrypt = encrypt;
+            log::error!("set [hd={}] encrypt key error!!! already exists {}!!!",
+            hd, base64
+        }
+    }
+
     /// 发送接口线程安全,
     pub fn send_raw(&mut self, hd: ConnId, cmd: CmdId, slice: &[u8]) {
         let mut pkt = take_packet(slice.len(), self.packet_type);
+        pkt.set_cmd(cmd);
         pkt.set_body(slice);
         self.send_packet(hd, pkt);
     }

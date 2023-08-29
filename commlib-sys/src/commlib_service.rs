@@ -2,17 +2,20 @@
 //! Common Library: service
 //!
 
+use parking_lot::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+use atomic_enum::atomic_enum;
 use crossbeam::channel;
-use parking_lot::RwLock;
 use spdlog::get_current_tid;
 
-use super::{Pinky, PinkySwear};
-///
-#[derive(Debug, Copy, Clone)]
-#[repr(u32)]
+use super::G_EXIT_CV;
+use super::{Clock, PinkySwear, StopWatch, XmlReader};
+
+#[atomic_enum]
+#[derive(PartialEq, PartialOrd)]
 pub enum NodeState {
     Idle = 0,  // 空闲
     Init,      // 初始化
@@ -30,16 +33,18 @@ pub type ServiceFuncType = dyn FnOnce() + Send + Sync; // Note: tait object is a
 /// Service handle
 pub struct ServiceHandle {
     pub id: u64,
-    pub state: NodeState,
+    pub state: AtomicNodeState,
 
     pub tx: channel::Sender<Box<ServiceFuncType>>,
     pub rx: channel::Receiver<Box<ServiceFuncType>>,
 
-    pub tid: u64,
-    join_handle_opt: Option<JoinHandle<()>>,
+    pub clock: Clock,
 
-    pub clock: crate::Clock,
-    pub xml_config: crate::XmlReader,
+    pub xml_config: RwLock<XmlReader>,
+
+    //
+    pub tid: AtomicU64,
+    pub join_handle_opt: RwLock<Option<JoinHandle<()>>>,
 }
 
 impl ServiceHandle {
@@ -49,54 +54,63 @@ impl ServiceHandle {
 
         Self {
             id,
-            state,
+            state: state.into(),
+
             tx,
             rx,
-            tid: 0u64,
-            join_handle_opt: None,
-            clock: crate::Clock::new(),
-            xml_config: crate::XmlReader::new(),
+
+            clock: Clock::new(),
+
+            xml_config: RwLock::new(XmlReader::new()),
+
+            tid: 0u64.into(),
+            join_handle_opt: RwLock::new(None),
         }
     }
 
     ///
+    #[inline(always)]
     pub fn id(&self) -> u64 {
         self.id
     }
 
     ///
+    #[inline(always)]
     pub fn state(&self) -> NodeState {
-        self.state
+        self.state.load(Ordering::Relaxed)
     }
 
     ///
-    pub fn set_state(&mut self, state: NodeState) {
-        self.state = state;
+    #[inline(always)]
+    pub fn set_state(&self, state: NodeState) {
+        self.state.store(state, Ordering::Relaxed);
     }
 
     ///
-    pub fn clock(&self) -> &crate::Clock {
-        &self.clock
-    }
-
-    ///
-    pub fn xml_config(&self) -> &crate::XmlReader {
+    #[inline(always)]
+    pub fn xml_config(&self) -> &RwLock<XmlReader> {
         &self.xml_config
     }
 
     ///
-    pub fn set_xml_config(&mut self, xml_config: crate::XmlReader) {
-        self.xml_config = xml_config;
+    pub fn set_xml_config(&self, xml_config: XmlReader) {
+        let mut xml_config_mut = self.xml_config.write();
+        (*xml_config_mut) = xml_config;
     }
 
     ///
-    pub fn quit_service(&mut self) {
-        if (self.state as u32) < (NodeState::Closed as u32) {
-            self.state = NodeState::Closed;
-        }
+    #[inline(always)]
+    pub fn tid(&self) -> u64 {
+        self.tid.load(Ordering::Relaxed)
+    }
+
+    ///
+    pub fn set_tid(&self, tid: u64) {
+        self.tid.store(tid, Ordering::Relaxed);
     }
 
     /// 在 service 线程中执行回调任务
+    #[inline(always)]
     pub fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
         if self.is_in_service_thread() {
             cb();
@@ -106,14 +120,23 @@ impl ServiceHandle {
     }
 
     /// 当前代码是否运行于 service 线程中
+    #[inline(always)]
     pub fn is_in_service_thread(&self) -> bool {
         let tid = get_current_tid();
-        tid == self.tid
+        self.tid() == tid
+    }
+
+    /// 发送 close 信号
+    pub fn quit_service(&self) {
+        if self.state() < NodeState::Closed {
+            self.set_state(NodeState::Closed);
+        }
     }
 
     /// 等待线程结束
-    pub fn join_service(&mut self) {
-        if let Some(join_handle) = self.join_handle_opt.take() {
+    pub fn join_service(&self) {
+        let mut join_handle_opt_mut = self.join_handle_opt.write();
+        if let Some(join_handle) = join_handle_opt_mut.take() {
             join_handle.join().unwrap();
         }
     }
@@ -125,7 +148,7 @@ pub trait ServiceRs: Send + Sync {
     fn name(&self) -> &str;
 
     /// 获取 service 句柄
-    fn get_handle(&self) -> &RwLock<ServiceHandle>;
+    fn get_handle(&self) -> &ServiceHandle;
 
     /// 配置 service
     fn conf(&self);
@@ -152,20 +175,23 @@ where
     let (tid_prms, tid_pinky) = PinkySwear::<u64>::new();
 
     {
-        let handle = srv.get_handle().read();
-        if handle.tid > 0u64 {
-            log::error!("service already started!!! tid={}", handle.tid);
+        let handle = srv.get_handle();
+        let tid = handle.tid();
+        if tid > 0u64 {
+            log::error!("service already started!!! tid={}", tid);
             return (None, 0);
         }
     }
 
     //
-    let exit_cv = Arc::clone(&crate::G_EXIT_CV);
+    let exit_cv = Arc::clone(&G_EXIT_CV);
 
     let tname = name_of_thread.to_owned();
     let join_handle = std::thread::Builder::new()
         .name(tname.to_owned())
         .spawn(move || {
+            let handle = srv.get_handle();
+
             // notify ready
             let tid = get_current_tid();
             log::info!("service({}) spawn on thread: {}", tname, tid);
@@ -181,18 +207,12 @@ where
 
             // exit
             {
-                let mut handle_mut = srv.get_handle().write();
-
                 // mark closed
-                handle_mut.state = NodeState::Closed;
+                handle.set_state(NodeState::Closed);
 
                 // notify exit
                 (&*exit_cv).1.notify_all();
-                log::info!(
-                    "service exit: ID={} state={:?}",
-                    handle_mut.id,
-                    handle_mut.state
-                );
+                log::info!("service exit: ID={} state={:?}", handle.id, handle.state());
             }
         })
         .unwrap();
@@ -212,10 +232,13 @@ pub fn proc_service_ready(
 
     if join_handle_opt.is_some() {
         // update tid
+        let handle = srv.get_handle();
+        handle.set_tid(tid);
+
+        // update join_handle
         {
-            let mut handle_mut = srv.get_handle().write();
-            handle_mut.join_handle_opt = join_handle_opt;
-            handle_mut.tid = tid;
+            let mut join_handle_opt_mut = handle.join_handle_opt.write();
+            (*join_handle_opt_mut) = join_handle_opt;
         }
         true
     } else {
@@ -225,21 +248,18 @@ pub fn proc_service_ready(
 }
 
 fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
-    // run
-    {
-        let handle = srv.get_handle().read();
-        log::info!("[{}] run ... ID={}", service_name, handle.id);
-    }
+    let handle = srv.get_handle();
+    log::info!("[{}] run ... ID={}", service_name, handle.id);
 
     // loop until "NodeState::Closed"
-    let mut sw = crate::StopWatch::new();
+    let mut sw = StopWatch::new();
     loop {
         // check run
         let run = {
-            let handle = srv.get_handle().read();
-            if (NodeState::Closed as u32) == (handle.state as u32) {
+            let state = handle.state();
+            if NodeState::Closed == state {
                 false
-            } else if (NodeState::Closing as u32) == (handle.state as u32) {
+            } else if NodeState::Closing == state {
                 if handle.rx.is_empty() {
                     false
                 } else {
@@ -253,57 +273,42 @@ fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
 
         // run or quit ?
         if !run {
-            // handle for write
-            {
-                let mut handle_mut = srv.get_handle().write();
-
-                // mark service quit
-                handle_mut.quit_service();
-            }
+            // mark service quit
+            handle.quit_service();
             break;
         } else {
-            // handle for write
-            {
-                let mut handle_mut = srv.get_handle().write();
+            // update clock
+            Clock::update();
 
-                // update clock
-                handle_mut.clock.update();
-            }
-
-            // handle for read
-            {
-                let handle = srv.get_handle().read();
-
-                // dispatch cb -- process async tasks
-                let mut count = 4096_i32;
-                while count > 0 && !handle.rx.is_empty() {
-                    match handle.rx.try_recv() {
-                        Ok(cb) => {
-                            log::info!("Dequeued item ID={}", handle.id);
-                            println!("Dequeued item ID={}", handle.id);
-                            cb();
-                            count -= 1;
-                        }
-                        Err(err) => {
-                            log::error!("service receive cb error: {:?}", err);
-                        }
+            // dispatch cb -- process async tasks
+            let mut count = 4096_i32;
+            while count > 0 && !handle.rx.is_empty() {
+                match handle.rx.try_recv() {
+                    Ok(cb) => {
+                        log::info!("Dequeued item ID={}", handle.id);
+                        println!("Dequeued item ID={}", handle.id);
+                        cb();
+                        count -= 1;
+                    }
+                    Err(err) => {
+                        log::error!("service receive cb error: {:?}", err);
                     }
                 }
+            }
 
-                // sleep by cost
-                let cost = sw.elapsed_and_reset();
-                if cost > 60_u128 {
-                    /*log::error!(
-                        "[{}] ID={} timeout cost: {}ms",
-                        service_name,
-                        handle.id,
-                        cost
-                    );*/
-                } else {
-                    // sleep
-                    const SLEEP_MS: std::time::Duration = std::time::Duration::from_millis(1);
-                    std::thread::sleep(SLEEP_MS);
-                }
+            // sleep by cost
+            let cost = sw.elapsed_and_reset();
+            if cost > 60_u128 {
+                /*log::error!(
+                    "[{}] ID={} timeout cost: {}ms",
+                    service_name,
+                    handle.id,
+                    cost
+                );*/
+            } else {
+                // sleep
+                const SLEEP_MS: std::time::Duration = std::time::Duration::from_millis(1);
+                std::thread::sleep(SLEEP_MS);
             }
         }
     }

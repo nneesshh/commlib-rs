@@ -5,7 +5,7 @@
 type SinkVec = Vec<std::sync::Arc<dyn spdlog::sink::Sink>>;
 
 /// Initialize logger
-pub fn init_logger(path: &std::path::PathBuf, name: &str, level: u32, log_to_console: bool) {
+pub fn init_logger(path: &std::path::PathBuf, name: &str, level: u16, log_to_console: bool) {
     static INIT: std::sync::Once = std::sync::Once::new();
 
     INIT.call_once(|| {
@@ -14,7 +14,7 @@ pub fn init_logger(path: &std::path::PathBuf, name: &str, level: u32, log_to_con
     });
 }
 
-fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u32, log_to_console: bool) {
+fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u16, log_to_console: bool) {
     let log_path: std::path::PathBuf = std::env::current_exe()
         .unwrap()
         .parent()
@@ -64,7 +64,7 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u32, log_to_co
 
         // Log level filter
         let mut log_level = spdlog::Level::Info;
-        if spdlog::Level::Critical as u32 <= level && level < spdlog::Level::Trace as u32 {
+        if spdlog::Level::Critical as u16 <= level && level < spdlog::Level::Trace as u16 {
             log_level = spdlog::Level::from_usize(level as usize).unwrap();
         }
         logger.set_level_filter(spdlog::LevelFilter::MoreSevereEqual(log_level));
@@ -101,7 +101,7 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u32, log_to_co
 
         // Log level filter
         let mut log_level = spdlog::Level::Info;
-        if spdlog::Level::Critical as u32 <= level && level < spdlog::Level::Trace as u32 {
+        if spdlog::Level::Critical as u16 <= level && level < spdlog::Level::Trace as u16 {
             log_level = spdlog::Level::from_usize(level as usize).unwrap();
         }
         logger.set_level_filter(spdlog::LevelFilter::MoreSevereEqual(log_level));
@@ -174,6 +174,6 @@ mod tests {
     #[test]
     fn format() {
         let log_path = std::path::PathBuf::from("log");
-        init_logger(&log_path, "auto-dragon", Level::Info as u32, true);
+        init_logger(&log_path, "auto-dragon", Level::Info as u16, true);
     }
 }

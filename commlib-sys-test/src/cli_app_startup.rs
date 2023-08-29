@@ -11,10 +11,8 @@
 
 use std::sync::Arc;
 
-use commlib_sys::service_net::{ConnId, NetPacketGuard};
-use commlib_sys::{connect_to_tcp_server, create_tcp_client};
-use commlib_sys::{NodeState, ServiceRs};
-use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
+use commlib_sys::{connect_to_tcp_server, G_SERVICE_NET, G_SERVICE_SIGNAL};
+use commlib_sys::{ConnId, NetPacketGuard, NodeState, ServiceRs};
 
 use app_helper::Startup;
 
@@ -62,7 +60,7 @@ pub fn exec(srv: &Arc<CliService>) {
 
 /// Init in-service
 fn cli_service_init(srv: &Arc<CliService>) -> bool {
-    let mut handle_mut = srv.get_handle().write();
+    let handle = srv.get_handle();
 
     // ctrl-c stop, DEBUG ONLY
     G_SERVICE_SIGNAL.listen_sig_int(G_CLI_SERVICE.as_ref(), || {
@@ -71,17 +69,17 @@ fn cli_service_init(srv: &Arc<CliService>) -> bool {
     log::info!("\nGAME init ...\n");
 
     //
-    app_helper::with_conf_mut!(G_CLI_CONF, cfg, { cfg.init(handle_mut.xml_config()) });
+    app_helper::with_conf_mut!(G_CLI_CONF, cfg, { cfg.init(handle.xml_config()) });
 
     //
-    handle_mut.set_state(NodeState::Start);
+    handle.set_state(NodeState::Start);
     true
 }
 
 ///
 pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
     //
-    let mut raddr = app_helper::with_conf!(G_CLI_CONF, cfg, {
+    let raddr = app_helper::with_conf!(G_CLI_CONF, cfg, {
         std::format!("{}:{}", cfg.remote.addr, cfg.remote.port)
     });
 
@@ -100,20 +98,20 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
         });
     };
 
-    let stopped_cb = |hd: ConnId| {
-        log::info!("[hd={}] stopped_cb", hd);
+    let close_fn = |hd: ConnId| {
+        log::info!("[hd={}] close_fn", hd);
 
-        hd.send(&G_SERVICE_NET, "bye, rust stopped_cb".as_bytes());
+        hd.send(&G_SERVICE_NET, "bye, rust close_fn".as_bytes());
     };
 
     //
     connect_to_tcp_server(
         srv,
-        "",
+        "cli",
         raddr.as_str(),
         conn_fn,
         pkt_fn,
-        stopped_cb,
+        close_fn,
         &G_SERVICE_NET,
     );
 

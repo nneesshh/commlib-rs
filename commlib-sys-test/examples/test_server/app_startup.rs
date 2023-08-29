@@ -9,20 +9,23 @@
 //!     });
 //! '''
 
+use bytes::{BufMut, BytesMut};
 use std::sync::Arc;
 
 use commlib_sys::listen_tcp_addr;
-use commlib_sys::service_net::{ConnId, NetPacketGuard};
+use commlib_sys::service_net::{ConnId, NetPacketGuard, PacketType};
 use commlib_sys::{NodeState, ServiceRs};
+use commlib_sys::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
 use app_helper::Startup;
 
-use super::test_service::TestService;
-use super::test_service::G_TEST_SERVICE;
-
+use crate::proto;
 use crate::test_conf::G_TEST_CONF;
 use crate::test_manager::G_MAIN;
+
+use super::test_service::TestService;
+use super::test_service::G_TEST_SERVICE;
 
 thread_local! {
     ///
@@ -70,7 +73,11 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
     let conn_fn = |hd: ConnId| {
         log::info!("[hd={}] conn_fn", hd);
 
-        hd.send(&G_SERVICE_NET, "hello, rust conn_fn".as_bytes());
+        //
+        hd.set_packet_type(&G_SERVICE_NET, PacketType::Client);
+
+        // 发送 EncryptToken
+        send_encrypt_token(hd);
     };
 
     let pkt_fn = |hd: ConnId, pkt: NetPacketGuard| {
@@ -82,10 +89,10 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
         });
     };
 
-    let stopped_cb = |hd: ConnId| {
-        log::info!("[hd={}] stopped_cb", hd);
+    let close_fn = |hd: ConnId| {
+        log::info!("[hd={}] close_fn", hd);
 
-        hd.send(&G_SERVICE_NET, "bye, rust stopped_cb".as_bytes());
+        hd.send(&G_SERVICE_NET, "bye, rust close_fn".as_bytes());
     };
 
     //
@@ -96,7 +103,7 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
             cfg.my.port,
             conn_fn,
             pkt_fn,
-            stopped_cb,
+            close_fn,
             &G_SERVICE_NET,
         );
         log::info!("listener {} ready.", listener_id);
@@ -108,7 +115,7 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
 
 /// 初始化
 fn test_service_init(srv: &Arc<TestService>) -> bool {
-    let mut handle_mut = srv.get_handle().write();
+    let handle = srv.get_handle();
 
     // ctrl-c stop, DEBUG ONLY
     G_SERVICE_SIGNAL.listen_sig_int(G_TEST_SERVICE.as_ref(), || {
@@ -117,9 +124,27 @@ fn test_service_init(srv: &Arc<TestService>) -> bool {
     log::info!("\nTest init ...\n");
 
     //
-    app_helper::with_conf_mut!(G_TEST_CONF, cfg, { cfg.init(handle_mut.xml_config()) });
+    app_helper::with_conf_mut!(G_TEST_CONF, cfg, { cfg.init(handle.xml_config()) });
 
     //
-    handle_mut.set_state(NodeState::Start);
+    handle.set_state(NodeState::Start);
     true
+}
+
+fn send_encrypt_token(hd: ConnId) {
+    let code_buff = BytesMut::with_capacity(ENCRYPT_KEY_LEN + ENCRYPT_MAX_LEN);
+
+    let msg = proto::S2cEncryptToken {
+        token: Some(code_buff.to_vec()),
+    };
+
+    // set encrypt key
+    G_MAIN.with(|g| {
+        let mut test_manager = g.borrow_mut();
+        test_manager.server_proxy.set_encrypt_key(hd, code_buff);
+
+        test_manager
+            .server_proxy
+            .send_proto(hd, proto::EnumMsgType::EncryptToken, msg);
+    });
 }

@@ -1,31 +1,30 @@
-//!
-//! Common Library: service-signal
-//!
-use parking_lot::RwLock;
-
-use super::commlib_service::*;
-use crate::commlib_event::*;
+use crate::ffi_sig::init_signal_handlers;
+use crate::impl_event_for;
+use crate::G_SERVICE_SIGNAL;
+use crate::{
+    Event, EventHandler, EventListener, NodeState, ServiceHandle, ServiceRs, SignalCallback,
+};
 
 /// Event
 pub struct EventSignalInt();
-crate::impl_event_for!(ServiceSignalRs, EventSignalInt);
+impl_event_for!(ServiceSignalRs, EventSignalInt);
 
 pub struct EventSignalUsr1();
-crate::impl_event_for!(ServiceSignalRs, EventSignalUsr1);
+impl_event_for!(ServiceSignalRs, EventSignalUsr1);
 
 pub struct EventSignalUsr2();
-crate::impl_event_for!(ServiceSignalRs, EventSignalUsr2);
+impl_event_for!(ServiceSignalRs, EventSignalUsr2);
 
 /// ServiceSignal
 pub struct ServiceSignalRs {
-    pub handle: RwLock<ServiceHandle>,
+    pub handle: ServiceHandle,
 }
 
 impl ServiceSignalRs {
     ///
     pub fn new(id: u64) -> ServiceSignalRs {
         Self {
-            handle: RwLock::new(ServiceHandle::new(id, NodeState::Idle)),
+            handle: ServiceHandle::new(id, NodeState::Idle),
         }
     }
 
@@ -77,12 +76,14 @@ impl ServiceSignalRs {
 
 impl ServiceRs for ServiceSignalRs {
     /// 获取 service nmae
+    #[inline(always)]
     fn name(&self) -> &str {
         "service_signal"
     }
 
     /// 获取 service 句柄
-    fn get_handle(&self) -> &RwLock<ServiceHandle> {
+    #[inline(always)]
+    fn get_handle(&self) -> &ServiceHandle {
         &self.handle
     }
 
@@ -92,50 +93,46 @@ impl ServiceRs for ServiceSignalRs {
             log::info!("Recive int signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_int
-            let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.on_sig_int());
-            srv.run_in_service(cb);
+            let cb = Box::new(|| G_SERVICE_SIGNAL.on_sig_int());
+            G_SERVICE_SIGNAL.run_in_service(cb);
         }
 
         extern "C" fn on_signal_usr1(sig: i32) {
             log::info!("Recive usr1 signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_usr1
-            let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.on_sig_usr1());
-            srv.run_in_service(cb);
+            let cb = Box::new(|| G_SERVICE_SIGNAL.on_sig_usr1());
+            G_SERVICE_SIGNAL.run_in_service(cb);
         }
 
         extern "C" fn on_signal_usr2(sig: i32) {
             log::info!("Recive usr2 signal in Rust! Value={}", sig);
 
             // Post event callback to service thread: sig_usr2
-            let srv = &crate::globals::G_SERVICE_SIGNAL;
-            let cb = Box::new(|| srv.on_sig_usr2());
-            srv.run_in_service(cb);
+            let cb = Box::new(|| G_SERVICE_SIGNAL.on_sig_usr2());
+            G_SERVICE_SIGNAL.run_in_service(cb);
         }
 
-        let cb1 = crate::SignalCallback(on_signal_int);
-        let cb2 = crate::SignalCallback(on_signal_usr1);
-        let cb3 = crate::SignalCallback(on_signal_usr2);
+        let cb1 = SignalCallback(on_signal_int);
+        let cb2 = SignalCallback(on_signal_usr1);
+        let cb3 = SignalCallback(on_signal_usr2);
 
-        crate::ffi_sig::init_signal_handlers(cb1, cb2, cb3);
+        init_signal_handlers(cb1, cb2, cb3);
     }
 
     /// 在 service 线程中执行回调任务
+    #[inline(always)]
     fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
-        let handle = self.get_handle().read();
-        handle.run_in_service(cb);
+        self.get_handle().run_in_service(cb);
     }
 
     /// 当前代码是否运行于 service 线程中
+    #[inline(always)]
     fn is_in_service_thread(&self) -> bool {
-        let handle = self.get_handle().read();
-        handle.is_in_service_thread()
+        self.get_handle().is_in_service_thread()
     }
 
     fn join(&self) {
-        let mut handle_mut = self.get_handle().write();
-        handle_mut.join_service();
+        self.get_handle().join_service();
     }
 }

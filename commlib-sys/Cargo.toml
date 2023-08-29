@@ -49,14 +49,15 @@ paste = "1"
 log = "0.4"
 chrono = "0.4"
 bytes = "1"
+atomic_enum = { path="../atomic_enum" }
 hashbrown = { path="../hashbrown" }
+message-io = { path="../message-io" }
+opool = { path="../opool" }
 parking_lot = { path="../parking_lot" }
+prost = { path="../prost" }
 rand = { path = "../rand", features = ["small_rng"]}
 roxmltree = { path="../roxmltree" }
 spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
-message-io = { path="../message-io" }
-opool = { path="../opool" }
-prost = { path="../prost" }
 
 [build-dependencies]
 cxx-build = "1"

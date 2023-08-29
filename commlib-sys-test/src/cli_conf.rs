@@ -2,8 +2,11 @@
 //! CliConf
 //!
 
-use commlib_sys::{NodeConf, XmlReader};
+use parking_lot::RwLock;
 use std::cell::UnsafeCell;
+use std::sync::Arc;
+
+use commlib_sys::{NodeConf, XmlReader};
 
 thread_local! {
     ///
@@ -24,7 +27,8 @@ impl CliConf {
     }
 
     ///
-    pub fn init(&mut self, xr: &XmlReader) {
+    pub fn init(&mut self, xr: &RwLock<XmlReader>) {
+        let xr = xr.read();
         self.remote.id = xr.get_u64(vec!["id"], 0);
         self.remote.addr = xr.get_string(vec!["addr"], "");
         self.remote.port = xr.get_u64(vec!["port"], 0) as u16;

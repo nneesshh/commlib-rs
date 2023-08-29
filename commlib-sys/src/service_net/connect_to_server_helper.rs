@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{ServiceNetRs, ServiceRs};
 
 use super::create_tcp_client;
-use super::{ConnId, NetPacketGuard, TcpClient};
+use super::{ConnId, NetPacketGuard};
 
 ///
 pub fn connect_to_tcp_server<T, C, P, S>(
@@ -12,7 +12,7 @@ pub fn connect_to_tcp_server<T, C, P, S>(
     raddr: &str,
     conn_fn: C,
     pkt_fn: P,
-    stopped_cb: S,
+    close_fn: S,
     srv_net: &Arc<ServiceNetRs>,
 ) -> Option<ConnId>
 where
@@ -21,25 +21,17 @@ where
     P: Fn(ConnId, NetPacketGuard) + Send + Sync + 'static,
     S: Fn(ConnId) + Send + Sync + 'static,
 {
-    let mut cli = create_tcp_client(srv, name, raddr, srv_net);
-
     //
-    cli.set_connection_callback(conn_fn);
-    cli.set_message_callback(pkt_fn);
-    cli.set_close_callback(stopped_cb);
-
-    //
-    log::info!("[connect_to_tcp_server] start connect to {} ...", raddr);
+    let cli = create_tcp_client(srv, name, raddr, conn_fn, pkt_fn, close_fn, srv_net);
+    log::info!(
+        "[connect_to_tcp_server] start connect to {} -- id<{}> ... ",
+        cli.id,
+        raddr
+    );
 
     //
     match cli.connect() {
         Ok(hd) => {
-            // add client to srv_net
-            {
-                let mut client_table_mut = srv_net.client_table.write();
-                client_table_mut.insert(hd, cli);
-            }
-
             log::info!(
                 "[connect_to_tcp_server][hd={}] client added to service net.",
                 hd

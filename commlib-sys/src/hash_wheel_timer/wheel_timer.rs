@@ -36,17 +36,24 @@
 //! let guard = barrier.lock().unwrap();
 //! assert_eq!(*guard, true);
 //! ```
-use super::wheels::{cancellable::*, *};
-use super::*;
 
 use std::{
     fmt::Debug,
     hash::Hash,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
+use super::wheels::{cancellable::QuadWheelWithOverflow, Skip};
+use super::{
+    CancellableTimerEntry, OneShotClosureState, OneshotState, PeriodicClosureState, PeriodicState,
+    Timer, TimerError, TimerReturn,
+};
+
+pub use super::timers::TimerEntry;
+
 // Almost the same as `TimerEntry`, but not storing unnecessary things
-impl<I, O, P> timers::TimerEntry<I, O, P>
+impl<I, O, P> TimerEntry<I, O, P>
 where
     I: Hash + Clone + Eq + Debug + Send + Sync,
     O: OneshotState<Id = I> + Debug + Send + Sync,
@@ -76,14 +83,11 @@ where
         }
     }
 
-    fn execute_unique_ref(
-        unique_ref: std::sync::Arc<Self>,
-    ) -> Option<(std::sync::Arc<Self>, Duration)> {
-        let unique = std::sync::Arc::try_unwrap(unique_ref)
-            .expect("shouldn't hold on to these refs anywhere");
+    fn execute_unique_ref(unique_ref: Arc<Self>) -> Option<(Arc<Self>, Duration)> {
+        let unique = Arc::try_unwrap(unique_ref).expect("shouldn't hold on to these refs anywhere");
         unique.execute().map(|t| {
             let (new_unique, delay) = t;
-            (std::sync::Arc::new(new_unique), delay)
+            (Arc::new(new_unique), delay)
         })
     }
 }
@@ -146,63 +150,39 @@ where
         self.time
     }
 
-    /// Advance the virtual time
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> WheelTimerSimStep {
-        loop {
-            match self.timer.can_skip() {
-                Skip::Empty => return WheelTimerSimStep::Finished,
-                Skip::None => {
-                    let res = self.timer.tick();
-                    self.time += 1u128;
-                    if !res.is_empty() {
-                        for e in res {
-                            self.trigger_entry(e);
-                        }
-                        return WheelTimerSimStep::Ok;
-                    }
-                }
-                Skip::Millis(ms) => {
-                    self.timer.skip(ms);
-                    self.time += ms as u128;
-                    let res = self.timer.tick();
-                    self.time += 1u128;
-                    if !res.is_empty() {
-                        for e in res {
-                            self.trigger_entry(e);
-                        }
-                        return WheelTimerSimStep::Ok;
-                    }
-                }
-            }
-        }
+    /// Update by ms
+    pub fn update(&mut self, d: std::time::Duration) {
+        let expired_vec = self.collect_expired(d);
+        let to_reschedule_vec = Self::trigger_expired(expired_vec);
+        self.reschedule(to_reschedule_vec);
     }
 
-    /// Update by ms
-    #[allow(clippy::should_implement_trait)]
-    pub fn update(&mut self, d: std::time::Duration) {
+    // Update: collect expired
+    fn collect_expired(&mut self, d: std::time::Duration) -> Vec<Arc<TimerEntry<I, O, P>>> {
+        let mut expired_vec: Vec<Arc<TimerEntry<I, O, P>>> = Vec::with_capacity(256);
+
         let mut delta = d.as_millis() as u32;
         while delta > 0 {
             match self.timer.can_skip() {
                 Skip::Empty => {
-                    // Wheel is empty, do nothing
+                    // Wheel is empty, or , do nothing
                     break;
                 }
                 Skip::None => {
-                    // tick 1 ms
+                    // current tick has expiring timers, tick it (juts 1 ms)
                     delta -= 1u32;
 
                     let res = self.timer.tick();
                     self.time += 1u128;
-                    if !res.is_empty() {
-                        for e in res {
-                            self.trigger_entry(e);
-                        }
+
+                    // collect
+                    for e in res {
+                        expired_vec.push(e);
                     }
                 }
                 Skip::Millis(ms) => {
                     // skip n ms
-                    let n = if ms < delta { delta - ms } else { delta };
+                    let n = std::cmp::min(ms, delta);
                     delta -= n;
 
                     self.timer.skip(n);
@@ -210,10 +190,27 @@ where
                 }
             }
         }
+
+        //
+        expired_vec
     }
 
-    fn trigger_entry(&mut self, e: std::sync::Arc<TimerEntry<I, O, P>>) {
-        if let Some((new_e, delay)) = TimerEntry::execute_unique_ref(e) {
+    // Update: trigger expired
+    fn trigger_expired(
+        expired_vec: Vec<Arc<TimerEntry<I, O, P>>>,
+    ) -> Vec<(Arc<TimerEntry<I, O, P>>, Duration)> {
+        let mut to_reschedule_vec = Vec::with_capacity(expired_vec.len());
+        for e in expired_vec {
+            if let Some(pair) = TimerEntry::execute_unique_ref(e) {
+                to_reschedule_vec.push(pair);
+            }
+        }
+        to_reschedule_vec
+    }
+
+    // Update: reschedule
+    fn reschedule(&mut self, to_reschedule_vec: Vec<(Arc<TimerEntry<I, O, P>>, Duration)>) {
+        for (new_e, delay) in to_reschedule_vec {
             match self.timer.insert_ref_with_delay(new_e, delay) {
                 Ok(_) => (), // ok
                 Err(TimerError::Expired(e)) => panic!(
@@ -279,10 +276,7 @@ where
 
     fn schedule_once(&mut self, timeout: Duration, state: Self::OneshotState) {
         let e = TimerEntry::OneShot { timeout, state };
-        match self
-            .timer
-            .insert_ref_with_delay(std::sync::Arc::new(e), timeout)
-        {
+        match self.timer.insert_ref_with_delay(Arc::new(e), timeout) {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if TimerEntry::execute_unique_ref(e).is_none() {
@@ -302,10 +296,7 @@ where
             period,
             state,
         };
-        match self
-            .timer
-            .insert_ref_with_delay(std::sync::Arc::new(e), delay)
-        {
+        match self.timer.insert_ref_with_delay(Arc::new(e), delay) {
             Ok(_) => (), // ok
             Err(TimerError::Expired(e)) => {
                 if let Some((new_e, delay)) = TimerEntry::execute_unique_ref(e) {
@@ -337,8 +328,8 @@ mod tests {
     use crate::hash_wheel_timer::test_helpers::*;
     use crate::hash_wheel_timer::wheel_timer::*;
     use parking_lot::{Condvar, Mutex, RwLock};
-    use std::sync::Arc;
     use uuid::Uuid;
+    use Arc;
 
     #[test]
     fn simple_simulation() {

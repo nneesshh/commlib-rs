@@ -6,6 +6,12 @@ use super::{NetPacketGuard, PacketType};
 
 const DEFAULT_PACKET_SIZE: usize = SMALL_PACKET_MAX_SIZE;
 const MAX_PACKET_SIZE: usize = 1024 * 1024 * 20; // 20M
+
+pub enum PacketResult {
+    Ready((NetPacketGuard, usize)), // (pkt, consumed)
+    Suspend(usize),                 // consumed
+    Abort(String),
+}
 ///
 enum PacketReaderState {
     Leading,       // 包体前导长度
@@ -37,11 +43,7 @@ impl PacketReader {
     }
 
     /// Ok 返回 (pkt, consumed), Err 返回错误信息
-    pub fn read(
-        &self,
-        input_data: *const u8,
-        input_len: usize,
-    ) -> Result<(Option<NetPacketGuard>, usize), String> {
+    pub fn read(&self, input_data: *const u8, input_len: usize) -> PacketResult {
         let mut consumed = 0_usize;
         let mut remain = input_len;
 
@@ -188,9 +190,9 @@ impl PacketReader {
                     // 将完整的 pkt 返回到外部使用，内部补充新的 pkt
                     let new_pkt = take_packet(DEFAULT_PACKET_SIZE, packet_type);
                     unsafe {
-                        let pkt_opt = (*pkt_opt_ptr).take();
+                        let old_pkt = (*pkt_opt_ptr).take().unwrap();
                         (*pkt_opt_ptr) = Some(new_pkt);
-                        return Ok((pkt_opt, consumed));
+                        return PacketResult::Ready((old_pkt, consumed));
                     }
                 }
 
@@ -198,12 +200,12 @@ impl PacketReader {
                     log::error!("packet overflow!!! pkt_full_len={}", pkt_full_len);
 
                     // 包长度越界
-                    return Err("overflow".to_owned());
+                    return PacketResult::Abort("overflow".to_owned());
                 }
             }
         }
 
         // 包体不完整
-        Ok((None, consumed))
+        PacketResult::Suspend(consumed)
     }
 }

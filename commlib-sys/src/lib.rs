@@ -56,6 +56,7 @@ pub use service_net::{
     ConnId, NetPacket, NetPacketGuard, NetProxy, ServiceNetRs, TcpClient, TcpHandler,
     TcpListenerId, TcpServer,
 };
+pub use service_net::{ENCRYPT_MAX_LEN, ENCRYPT_KEY_LEN};
 
 /// 全局变量
 pub mod globals;

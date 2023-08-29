@@ -1,9 +1,8 @@
+use crate::service_net::PacketType;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{ServiceNetRs, ServiceRs};
-
-use super::NetPacketGuard;
+use crate::ServiceNetRs;
 
 /// Connection id
 #[derive(Copy, Clone, PartialEq, Eq, std::hash::Hash)]
@@ -14,57 +13,35 @@ pub struct ConnId {
 }
 
 impl ConnId {
-    /// disconnect - drop the TcpConn
-    pub fn disconnet(self, srv_net: &Arc<ServiceNetRs>) {
-        let hd = self;
-        log::info!("[hd={}] disconnect ...", hd);
-
-        //
-        let srv_net2 = srv_net.clone();
-        srv_net.run_in_service(Box::new(move || {
-            let mut conn_table = srv_net2.conn_table.write();
-            if let Some(conn) = conn_table.get_mut(&hd) {
-                conn.disconnect();
-            } else {
-                log::error!("[hd={}] send failed -- hd not found!!!", hd);
-            }
-            conn_table.remove(&hd);
-        }));
-    }
-
     ///
     #[inline(always)]
     pub fn send(&self, srv_net: &Arc<ServiceNetRs>, data: &[u8]) {
         let hd = *self;
 
-        //
-        {
-            let conn_table = srv_net.conn_table.read();
-            if let Some(conn) = conn_table.get(&hd) {
-                conn.send(data);
-            } else {
-                log::error!("[hd={}] send failed -- hd not found!!!", hd);
-            }
+        // 在当前线程中加 read 锁取出 conn，以便尽快发送
+        let conn_opt = srv_net.get_conn(hd);
+        if let Some(conn) = conn_opt {
+            conn.send(data);
+        } else {
+            log::error!("[hd={}] send failed!!!", hd);
         }
     }
 
-    ///
-    #[inline(always)]
-    pub fn send_proto<M>(&self, srv_net: &Arc<ServiceNetRs>, msg: &M)
-    where
-        M: prost::Message,
-    {
-        let hd = *self;
-        let vec = msg.encode_to_vec();
+    /// Drop the tcp conn, and check if auto reconnect
+    pub fn close(self, srv_net: &Arc<ServiceNetRs>) {
+        let hd = self;
+        log::info!("[hd={}] close ...", hd);
 
-        //
-        {
-            let conn_table = srv_net.conn_table.read();
-            if let Some(conn) = conn_table.get(&hd) {
-                conn.send(vec.as_slice());
-            } else {
-                log::error!("[hd={}] send_proto failed -- hd not found!!!", hd);
-            }
+        // 在当前线程中加 write 锁取出 conn
+        let conn_opt = srv_net.get_conn(hd);
+        if let Some(conn) = conn_opt {
+            // low level close
+            conn.close();
+
+            // remove conn at once
+            srv_net.remove_conn(hd);
+        } else {
+            log::error!("[hd={}] close failed!!!", hd);
         }
     }
 
@@ -72,97 +49,26 @@ impl ConnId {
     pub fn to_socket_addr(&self, srv_net: &Arc<ServiceNetRs>) -> Option<SocketAddr> {
         let hd = *self;
 
-        //
-        {
-            let conn_table = srv_net.conn_table.read();
-            if let Some(conn) = conn_table.get(&hd) {
-                Some(conn.endpoint.addr())
-            } else {
-                log::error!("[hd={}] to_socket_addr failed -- hd not found!!!", hd);
-                None
-            }
+        // 在当前线程中加 read 锁取出 conn，这样方便返回数值
+        let conn_opt = srv_net.get_conn(hd);
+        if let Some(conn) = conn_opt {
+            Some(conn.endpoint.addr())
+        } else {
+            None
         }
     }
 
-    /// call conn_fn
-    pub fn run_conn_fn(&self, srv: &Arc<dyn ServiceRs>, srv_net: &Arc<ServiceNetRs>) {
+    ///
+    pub fn set_packet_type(&self, srv_net: &Arc<ServiceNetRs>, packet_type: PacketType) {
         let hd = *self;
 
-        //
-        let f_opt = {
-            let conn_table = srv_net.conn_table.read();
-            if let Some(conn) = conn_table.get(&hd) {
-                Some(conn.conn_fn.clone())
-            } else {
-                None
-            }
-        };
-
-        //
-        srv.run_in_service(Box::new(move || {
-            if let Some(f) = f_opt {
-                (f)(hd);
-            } else {
-                log::error!("[hd={}][run_conn_fn] failed!!!", hd);
-            }
-        }));
-    }
-
-    /// call pkt_fn
-    pub fn run_pkt_fn(
-        &self,
-        srv: &Arc<dyn ServiceRs>,
-        srv_net: &Arc<ServiceNetRs>,
-        pkt: NetPacketGuard,
-    ) {
-        let hd = *self;
-
-        //
-        let f_opt = {
-            let conn_table = srv_net.conn_table.read();
-            if let Some(conn) = conn_table.get(&hd) {
-                Some(conn.pkt_fn.clone())
-            } else {
-                None
-            }
-        };
-
-        //
-        srv.run_in_service(Box::new(move || {
-            if let Some(f) = f_opt {
-                (f)(hd, pkt);
-            } else {
-                log::error!("[hd={}][run_pkt_fn] failed!!!", hd);
-            }
-        }));
-    }
-
-    /// call close_fn
-    pub fn run_close_fn(&self, srv: &Arc<dyn ServiceRs>, srv_net: &Arc<ServiceNetRs>) {
-        let hd = *self;
-
-        //
-        let f_opt = {
-            let conn_table = srv_net.conn_table.read();
-            if let Some(conn) = conn_table.get(&hd) {
-                Some(conn.close_fn.clone())
-            } else {
-                None
-            }
-        };
-
-        //
-        let srv_net2 = srv_net.clone();
-        srv.run_in_service(Box::new(move || {
-            if let Some(f) = f_opt {
-                (f)(hd);
-            } else {
-                log::error!("[hd={}][run_close_fn] failed!!!", hd);
-            }
-
-            // disconnect - drop the connection
-            hd.disconnet(&srv_net2);
-        }));
+        // 在当前线程中加 read 锁取出 conn
+        let conn_opt = srv_net.get_conn(hd);
+        if let Some(conn) = conn_opt {
+            conn.set_packet_type(packet_type);
+        } else {
+            log::error!("[hd={}] change pakcet type failed!!!", hd);
+        }
     }
 }
 

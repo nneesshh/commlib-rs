@@ -1,9 +1,13 @@
+use parking_lot::RwLock;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{ServiceNetRs, ServiceRs};
+use message_io::network::Endpoint;
+use message_io::node::NodeHandler;
 
-use super::{TcpConn, TcpServer};
+use crate::ServiceNetRs;
+
+use super::{ConnId, PacketReader, PacketType, ServerStatus, TcpConn, TcpServer};
 
 /// Tcp server id
 #[derive(Copy, Clone, PartialEq, Eq, std::hash::Hash)]
@@ -14,41 +18,77 @@ pub struct TcpListenerId {
 }
 
 impl TcpListenerId {
-    /// call listen_fn of tcp server
-    pub fn service(&self, srv_net: &Arc<ServiceNetRs>) -> Option<Arc<dyn ServiceRs>> {
-        let listener_id = *self;
-        let tcp_server_vec = srv_net.tcp_server_vec.read();
-        for tcp_server in &(*tcp_server_vec) {
-            if tcp_server.listener_id == listener_id {
-                return Some(tcp_server.srv.clone());
-            }
-        }
-        None
-    }
-
-    /// make conn callbacks from tcp server
-    pub fn bind_callbacks(&self, conn: &mut TcpConn, srv_net: &Arc<ServiceNetRs>) {
+    /// Make conn with callbacks from tcp server
+    pub fn make_new_conn(
+        &self,
+        packet_type: PacketType,
+        hd: ConnId,
+        endpoint: Endpoint,
+        netctrl: &NodeHandler<()>,
+        srv_net: &Arc<ServiceNetRs>,
+    ) -> bool {
         let listener_id = *self;
 
         //
         let tcp_server_vec = srv_net.tcp_server_vec.read();
         for tcp_server in &*tcp_server_vec {
             if tcp_server.listener_id == listener_id {
+                assert!(std::ptr::eq(&*tcp_server.srv_net, &**srv_net));
+
                 //
-                conn.conn_fn = tcp_server.conn_fn.clone();
-                conn.pkt_fn = tcp_server.pkt_fn.clone();
-                conn.close_fn = tcp_server.close_fn.clone();
-            };
+                let srv = tcp_server.srv.clone();
+                let srv_net = tcp_server.srv_net.clone();
+
+                //
+                let conn_fn = tcp_server.conn_fn.clone();
+                let pkt_fn = tcp_server.pkt_fn.clone();
+                let close_fn = tcp_server.close_fn.clone();
+
+                let conn = Arc::new(TcpConn {
+                    //
+                    packet_type: PacketType::Server.into(),
+                    hd,
+
+                    //
+                    endpoint,
+                    netctrl: netctrl.clone(),
+
+                    //
+                    closed: false.into(),
+
+                    //
+                    srv: srv.clone(),
+                    srv_net: srv_net.clone(),
+
+                    //
+                    conn_fn,
+                    pkt_fn,
+                    close_fn: RwLock::new(close_fn),
+
+                    //
+                    pkt_reader: PacketReader::new(packet_type),
+                });
+
+                // add conn to service net
+                srv_net.insert_conn(conn.hd, &conn);
+                return true;
+            }
         }
+
+        //
+        false
     }
 
-    /// trigger listen_fn of tcp server
+    /// Trigger listen_fn of tcp server
     pub fn run_listen_fn(&self, tcp_server: &mut TcpServer, sock_addr: SocketAddr) {
         let srv = tcp_server.srv.as_ref();
         let listener_id = *self;
 
         // update listener id
         tcp_server.listener_id = listener_id;
+
+        // 状态：Running
+        tcp_server.set_status(ServerStatus::Running);
 
         //
         let listen_fn_opt = Some(tcp_server.listen_fn.clone());

@@ -8,7 +8,8 @@ pub use buffer::Buffer;
 
 ///
 pub mod net_packet;
-pub use net_packet::{CmdId, EncryptData, NetPacket, PacketType};
+pub use net_packet::{AtomicPacketType, CmdId, EncryptData, NetPacket, PacketType};
+pub use net_packet::{ENCRYPT_MAX_LEN, ENCRYPT_KEY_LEN};
 
 ///
 pub mod net_packet_pool;
@@ -48,11 +49,11 @@ pub use tcp_client::TcpClient;
 
 ///
 pub mod server_status;
-pub use server_status::{ServerStatus, ServerSubStatus};
+pub use server_status::{AtomicServerStatus, ServerStatus};
 
 ///
 pub mod client_status;
-pub use client_status::ClientStatus;
+pub use client_status::{AtomicClientStatus, ClientStatus};
 
 pub mod os_socket_addr;
 pub use os_socket_addr::OsSocketAddr;

@@ -1,6 +1,8 @@
 //! Commlib: RandUtil
 
+use std::cell::UnsafeCell;
 use std::collections::LinkedList;
+
 //use rand::distributions::uniform::SampleUniform;
 use rand::rngs::{Mt64, SmallRng};
 use rand::{seq::SliceRandom, Rng, SeedableRng};
@@ -17,10 +19,10 @@ pub fn create_small_rng(seed: u64) -> SmallRng {
 }
 
 thread_local! {
-    /// 全局生成器
-    static G_SMALL_RNG: std::cell::UnsafeCell<SmallRng> = {
+    /// tls 生成器
+    static G_SMALL_RNG: UnsafeCell<SmallRng> = {
         let now_in_secs = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-        std::cell::UnsafeCell::new(create_small_rng(now_in_secs))
+        UnsafeCell::new(create_small_rng(now_in_secs))
     };
 }
 

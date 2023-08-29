@@ -35,13 +35,12 @@
 //! //</code>
 //!
 
-use parking_lot::RwLock;
 use std::net::SocketAddr;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use super::MessageIoNetwork;
-use super::{ConnId, NetPacketGuard, ServerStatus, ServerSubStatus, TcpListenerId};
+use super::{AtomicServerStatus, ConnId, NetPacketGuard, ServerStatus, TcpListenerId};
 
 use crate::{ServiceNetRs, ServiceRs};
 
@@ -49,7 +48,7 @@ use crate::{ServiceNetRs, ServiceRs};
 #[repr(C)]
 pub struct TcpServer {
     start: std::time::Instant,
-    status: ServerStatus,
+    status: AtomicServerStatus,
 
     connection_limit: AtomicUsize,
     connection_num: AtomicUsize,
@@ -83,7 +82,7 @@ impl TcpServer {
     {
         Self {
             start: std::time::Instant::now(),
-            status: ServerStatus::Null,
+            status: ServerStatus::Null.into(),
 
             connection_limit: AtomicUsize::new(0),
             connection_num: AtomicUsize::new(0),
@@ -104,16 +103,17 @@ impl TcpServer {
 
     /// Create a tcp server and listen on [ip:port]
     pub fn listen(&mut self) {
+        self.set_status(ServerStatus::Starting);
         log::info!(
-            "tcp server listen at addr: {} status: {}",
+            "tcp server start listen at addr: {}, status: {}",
             self.addr,
-            self.status.to_string()
+            self.status().to_string()
         );
 
         self.listen_fn = Arc::new(|sock_addr, status| {
             //
             log::info!(
-                "listen success at {:?} status:{}",
+                "tcp server listen at {:?} success, status:{}",
                 sock_addr,
                 status.to_string()
             );
@@ -121,10 +121,15 @@ impl TcpServer {
 
         // inner server listen
         let mi_network = self.mi_network.clone();
-        if (*mi_network).listen(self) {
-            self.set_status(ServerStatus::Running);
-        } else {
+        if !mi_network.listen(self) {
             self.set_status(ServerStatus::Down);
+
+            //
+            log::info!(
+                "tcp server listen at {:?} failed!!! status:{}!!!",
+                self.addr,
+                self.status().to_string()
+            );
         }
     }
 
@@ -160,10 +165,12 @@ impl TcpServer {
     ///
     #[inline(always)]
     pub fn status(&self) -> ServerStatus {
-        self.status
+        self.status.load(Ordering::Relaxed)
     }
 
-    fn set_status(&mut self, status: ServerStatus) {
-        self.status = status;
+    ///
+    #[inline(always)]
+    pub fn set_status(&self, status: ServerStatus) {
+        self.status.store(status, Ordering::Relaxed);
     }
 }

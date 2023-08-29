@@ -1,3 +1,5 @@
+use parking_lot::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use message_io::network::Endpoint;
@@ -5,13 +7,13 @@ use message_io::node::NodeHandler;
 
 use crate::ServiceRs;
 
-use super::{ConnId, NetPacketGuard, PacketReader, PacketType};
+use super::packet_reader::PacketResult;
+use super::{AtomicPacketType, ConnId, NetPacketGuard, PacketReader, PacketType, ServiceNetRs};
 
-/// Tcp connection
-#[repr(C)]
+/// Tcp connection: all fields are public for easy construct
 pub struct TcpConn {
     //
-    pub packet_type: PacketType,
+    pub packet_type: AtomicPacketType,
     pub hd: ConnId,
 
     //
@@ -19,55 +21,32 @@ pub struct TcpConn {
     pub netctrl: NodeHandler<()>,
 
     //
-    pub srv: Arc<dyn ServiceRs>,
-    pub conn_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
-    pub pkt_fn: Arc<dyn Fn(ConnId, NetPacketGuard) + Send + Sync>,
-    pub close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
+    pub closed: AtomicBool,
 
     //
-    pkt_reader: PacketReader,
+    pub srv: Arc<dyn ServiceRs>,
+    pub srv_net: Arc<ServiceNetRs>,
+
+    //
+    pub conn_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
+    pub pkt_fn: Arc<dyn Fn(ConnId, NetPacketGuard) + Send + Sync>,
+    pub close_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
+
+    //
+    pub pkt_reader: PacketReader,
 }
 
 impl TcpConn {
     ///
-    pub fn new(
-        packet_type: PacketType,
-        hd: ConnId,
-        endpoint: Endpoint,
-        netctrl: &NodeHandler<()>,
-        srv: &Arc<dyn ServiceRs>,
-    ) -> TcpConn {
-        Self {
-            packet_type,
-            hd,
-
-            endpoint,
-            netctrl: netctrl.clone(),
-
-            srv: srv.clone(),
-            conn_fn: Arc::new(|_hd| {}),
-            pkt_fn: Arc::new(|_hd, _pkt| {}),
-            close_fn: Arc::new(|_hd| {}),
-
-            pkt_reader: PacketReader::new(packet_type),
-        }
-    }
-
-    ///
     #[inline(always)]
-    pub fn handle_read(
-        &self,
-        data: *const u8,
-        len: usize,
-    ) -> Result<(Option<NetPacketGuard>, usize), String> {
+    pub fn handle_read(&self, data: *const u8, len: usize) -> PacketResult {
         self.pkt_reader.read(data, len)
     }
 
-    ///
+    /// low level close
     #[inline(always)]
-    pub fn disconnect(&self) {
-        log::info!("[hd={}] disconnected", self.hd);
-
+    pub fn close(&self) {
+        log::info!("[hd={}] low level close", self.hd);
         self.netctrl.network().remove(self.endpoint.resource_id());
     }
 
@@ -77,5 +56,58 @@ impl TcpConn {
         log::debug!("[hd={}] send data ...", self.hd);
 
         self.netctrl.network().send(self.endpoint, data);
+    }
+
+    /// call conn_fn
+    pub fn run_conn_fn(&self) {
+        let hd = self.hd;
+        let f = self.conn_fn.clone();
+
+        //
+        self.srv.run_in_service(Box::new(move || {
+            (f)(hd);
+        }));
+    }
+
+    /// call pkt_fn
+    pub fn run_pkt_fn(&self, pkt: NetPacketGuard) {
+        let hd = self.hd;
+        let f = self.pkt_fn.clone();
+
+        //
+        self.srv.run_in_service(Box::new(move || {
+            (f)(hd, pkt);
+        }));
+    }
+
+    /// call close_fn
+    pub fn run_close_fn(&self) {
+        let hd = self.hd;
+
+        let f: Arc<dyn Fn(ConnId) + Send + Sync>;
+        {
+            let close_fn = self.close_fn.read();
+            f = (*close_fn).clone();
+        }
+
+        // 标记关闭
+        self.closed.store(true, Ordering::Relaxed);
+
+        //
+        self.srv.run_in_service(Box::new(move || {
+            (f)(hd);
+        }));
+    }
+
+    ///
+    #[inline(always)]
+    pub fn packet_type(&self) -> PacketType {
+        self.packet_type.load(Ordering::Relaxed)
+    }
+
+    ///
+    #[inline(always)]
+    pub fn set_packet_type(&self, packet_type: PacketType) {
+        self.packet_type.store(packet_type, Ordering::Relaxed);
     }
 }

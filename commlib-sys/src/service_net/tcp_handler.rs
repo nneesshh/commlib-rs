@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use crate::service_net::PacketType;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
-use super::{ConnId, OsSocketAddr, ServiceNetRs, TcpClient, TcpConn, TcpListenerId, TcpServer};
+use super::{packet_reader::PacketResult, PacketType};
+use super::{ConnId, OsSocketAddr, ServiceNetRs, TcpClient, TcpListenerId, TcpServer};
 
 ///
 pub type OnListenFuncType = extern "C" fn(*const TcpServer, TcpListenerId, OsSocketAddr);
@@ -63,7 +63,7 @@ extern "C" fn on_listen_cb(
 ) {
     let tcp_server = unsafe { &mut *(tcp_server_ptr as *mut TcpServer) };
 
-    // trigger listen_cb
+    // trigger listen_fn
     let sock_addr = os_addr.into_addr().unwrap();
     listener_id.run_listen_fn(tcp_server, sock_addr);
 }
@@ -82,28 +82,19 @@ extern "C" fn on_accept_cb(
     let sock_addr = os_addr.into_addr().unwrap();
     let endpoint = Endpoint::new(id, sock_addr);
 
-    let srv = listener_id.service(srv_net).unwrap();
-
     // insert new conn
-    {
-        let mut conn = TcpConn::new(PacketType::Server, hd, endpoint, netctrl, &srv);
-        listener_id.bind_callbacks(&mut conn, srv_net);
+    listener_id.make_new_conn(PacketType::Server, hd, endpoint, netctrl, srv_net);
 
-        {
-            let mut conn_table_mut = srv_net.conn_table.write();
-            (*conn_table_mut).insert(hd, conn);
-        }
+    //
+    let conn_opt = srv_net.get_conn(hd);
+    if let Some(conn) = conn_opt {
+        // trigger conn_fn
+        conn.run_conn_fn();
     }
-
-    // trigger conn_fn
-    hd.run_conn_fn(&srv, srv_net);
 }
 
 extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_addr: OsSocketAddr) {
     let tcp_client = unsafe { &mut *(tcp_client_ptr as *mut TcpClient) };
-
-    let srv_net = &tcp_client.srv_net;
-    let srv = &tcp_client.srv;
 
     let id = ResourceId::from(hd.id);
     let sock_addr = os_addr.into_addr().unwrap();
@@ -115,7 +106,7 @@ extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_a
     // bind new conn to tcp client
     {
         let netctrl = &tcp_client.mi_network.node_handler;
-        let conn = TcpConn::new(PacketType::Server, hd, endpoint, netctrl, srv);
+        tcp_client.make_new_conn(PacketType::Server, hd, endpoint, netctrl);
     }
 }
 
@@ -129,27 +120,27 @@ extern "C" fn on_message_cb(
 
     //
     {
-        let conn_table = srv_net.conn_table.read();
-        if let Some(conn) = conn_table.get(&hd) {
+        let conn_opt = srv_net.get_conn(hd);
+        if let Some(conn) = conn_opt {
             // conn 循环处理 input
             let mut pos = 0_usize;
             loop {
                 let ptr = unsafe { input_data.offset(pos as isize) };
                 let len = input_len - pos;
                 match conn.handle_read(ptr, len) {
-                    Ok((Some(pkt), consumed)) => {
+                    PacketResult::Ready((pkt, consumed)) => {
                         // 收到一个 pkt trigger pkt_fn
-                        hd.run_pkt_fn(&conn.srv, srv_net, pkt);
+                        conn.run_pkt_fn(pkt);
                         pos += consumed;
                     }
-                    Ok((None, consumed)) => {
+                    PacketResult::Suspend(consumed) => {
                         // pkt 尚不完整,  continue
                         pos += consumed;
                     }
-                    Err(err) => {
+                    PacketResult::Abort(err) => {
                         // disconnect
                         log::error!("[on_message_cb] handle_read failed!!! error: {}", err);
-                        hd.disconnet(srv_net);
+                        hd.close(srv_net);
                         break;
                     }
                 }
@@ -171,11 +162,12 @@ extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {
     let srv_net = unsafe { &*srv_net_ptr };
 
     //
-    {
-        let conn_table = srv_net.conn_table.read();
-        if let Some(conn) = conn_table.get(&hd) {
-            // trigger close_fn
-            hd.run_close_fn(&conn.srv, srv_net);
-        }
+    let conn_opt = srv_net.get_conn(hd);
+    if let Some(conn) = conn_opt {
+        // remove conn always
+        srv_net.remove_conn(hd);
+
+        // trigger close_fn
+        conn.run_close_fn();
     }
 }

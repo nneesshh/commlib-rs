@@ -57,9 +57,10 @@ impl App {
 
             let mut exitflag = true;
             for w in &self.services {
-                let w_srv_handle = w.srv.get_handle().read();
+                let w_srv_handle = w.srv.get_handle();
                 log::info!(
-                    "App:run() wait close .. ID={} state={:?}",
+                    "App:run() wait close .. App={} ID={} state={:?}",
+                    self.app_name,
                     w_srv_handle.id(),
                     w_srv_handle.state()
                 );
@@ -86,25 +87,26 @@ impl App {
 
         // init logger
         let log_path = std::path::PathBuf::from("auto-legend");
-        init_logger(&log_path, "testlog", spdlog::Level::Info as u32, true);
+        init_logger(&log_path, "testlog", spdlog::Level::Info as u16, true);
     }
 
     fn add_service(services: &mut Vec<ServiceWrapper>, srv: &'static dyn ServiceRs) {
         //
-        let id = srv.get_handle().read().id();
+        let id = srv.get_handle().id();
+        let name = srv.name();
 
         // 是否已经存在相同 id 的 service ?
         for w in &*services {
-            let w_srv_handle = w.srv.get_handle().read();
+            let w_srv_handle = w.srv.get_handle();
             if w_srv_handle.id() == id {
-                log::error!("App::add_service() failed!!! ID={}", id);
+                log::error!("App::add_service({}) failed!!! ID={}", name, id);
                 return;
             }
         }
 
         //
         services.push(ServiceWrapper { srv });
-        log::info!("App::add_service() ok, ID={}", id);
+        log::info!("App::add_service({}) ok, ID={}", name, id);
     }
 
     fn attach<C, I>(&mut self, creator: C, initializer: I) -> &'static dyn ServiceRs
@@ -120,11 +122,8 @@ impl App {
             if let Some(xml_node) = cfg.get_xml_node(node_id) {
                 let srv_type = xml_node.get_u64(vec!["srv"], 0);
 
-                // xml config
-                {
-                    let mut handle_mut = srv.get_handle().write();
-                    (*handle_mut).set_xml_config(xml_node.clone());
-                }
+                // set xml config
+                srv.get_handle().set_xml_config(xml_node.clone());
             } else {
                 log::error!("node {} xml config not found!!!", node_id);
             }

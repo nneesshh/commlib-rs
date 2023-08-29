@@ -1,24 +1,14 @@
-///
-#[derive(Debug, Copy, Clone)]
-#[repr(u32)]
+use atomic_enum::atomic_enum;
+
+#[atomic_enum]
+#[derive(PartialEq)]
 pub enum ServerStatus {
     Null = 0,
-    Initializing = 1,
-    Initialized = 2,
-    Starting = 3,
-    Running = 4,
-    Stopping = 5,
-    Stopped = 6,
-    Down = 7,
-}
-
-///
-#[derive(Debug, Copy, Clone)]
-#[repr(u32)]
-pub enum ServerSubStatus {
-    SubStatusNull = 0,
-    StoppingListener = 1,
-    StoppingThreadPool = 2,
+    Starting = 1,
+    Running = 2,
+    Stopping = 3,
+    Stopped = 4,
+    Down = 5,
 }
 
 impl ServerStatus {
@@ -26,8 +16,6 @@ impl ServerStatus {
     pub fn to_string(&self) -> &'static str {
         match self {
             ServerStatus::Null => "kNull",
-            ServerStatus::Initializing => "kInitializing",
-            ServerStatus::Initialized => "kInitialized",
             ServerStatus::Starting => "kStarting",
             ServerStatus::Running => "kRunning",
             ServerStatus::Stopping => "kStopping",
@@ -57,17 +45,6 @@ impl ServerStatus {
         match self {
             ServerStatus::Stopping => true,
             _ => false,
-        }
-    }
-}
-
-impl ServerSubStatus {
-    ///
-    pub fn to_string(&self) -> &'static str {
-        match self {
-            ServerSubStatus::SubStatusNull => "kSubStatusNull",
-            ServerSubStatus::StoppingListener => "kStoppingListener",
-            ServerSubStatus::StoppingThreadPool => "kStoppingThreadPool",
         }
     }
 }
