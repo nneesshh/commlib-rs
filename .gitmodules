@@ -34,12 +34,12 @@
 [submodule "rand"]
 	path = rand
 	url = https://github.com/nneesshh/rand.git
-[submodule "atomic_enum"]
-	path = atomic_enum
-	url = https://github.com/nneesshh/atomic_enum
 [submodule "arc-swap"]
 	path = arc-swap
 	url = https://github.com/nneesshh/arc-swap
 [submodule "rust-base64"]
 	path = rust-base64
 	url = https://github.com/nneesshh/rust-base64
+[submodule "atomic-rs"]
+	path = atomic-rs
+	url = https://github.com/nneesshh/atomic-rs
