@@ -16,11 +16,11 @@ use commlib_sys::{ConnId, NetPacketGuard, NodeState, ServiceRs};
 
 use app_helper::Startup;
 
-use super::cli_service::CliService;
-use super::cli_service::G_CLI_SERVICE;
-
 use crate::cli_conf::G_CLI_CONF;
 use crate::cli_manager::G_MAIN;
+
+use super::cli_service::CliService;
+use super::cli_service::G_CLI_SERVICE;
 
 thread_local! {
     ///
@@ -105,7 +105,7 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
     };
 
     //
-    connect_to_tcp_server(
+    let hd_opt = connect_to_tcp_server(
         srv,
         "cli",
         raddr.as_str(),
@@ -116,5 +116,5 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
     );
 
     //
-    true
+    hd_opt.is_some()
 }

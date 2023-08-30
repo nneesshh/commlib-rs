@@ -57,10 +57,10 @@ pub use service_net::{
     connect_to_tcp_server, create_tcp_client, listen_tcp_addr, start_network, stop_network,
 };
 pub use service_net::{
-    ConnId, NetPacket, NetPacketGuard, NetProxy, ServiceNetRs, TcpClient, TcpHandler,
-    TcpListenerId, TcpServer,
+    CmdId, ConnId, NetPacket, NetPacketGuard, NetProxy, PacketType, ServiceNetRs, TcpClient,
+    TcpHandler, TcpListenerId, TcpServer,
 };
-pub use service_net::{ENCRYPT_MAX_LEN, ENCRYPT_KEY_LEN};
+pub use service_net::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
 /// 全局变量
 pub mod globals;

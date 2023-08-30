@@ -2,20 +2,20 @@
 //! Common Library: service
 //!
 
+use bytemuck::NoUninit;
 use parking_lot::RwLock;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
-use atomic_enum::atomic_enum;
+use atomic::{Atomic, Ordering};
 use crossbeam::channel;
 use spdlog::get_current_tid;
 
 use super::G_EXIT_CV;
 use super::{Clock, PinkySwear, StopWatch, XmlReader};
 
-#[atomic_enum]
-#[derive(PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Copy, Clone, NoUninit)]
+#[repr(u8)]
 pub enum NodeState {
     Idle = 0,  // 空闲
     Init,      // 初始化
@@ -33,7 +33,7 @@ pub type ServiceFuncType = dyn FnOnce() + Send + Sync; // Note: tait object is a
 /// Service handle
 pub struct ServiceHandle {
     pub id: u64,
-    pub state: AtomicNodeState,
+    pub state: Atomic<NodeState>,
 
     pub tx: channel::Sender<Box<ServiceFuncType>>,
     pub rx: channel::Receiver<Box<ServiceFuncType>>,
@@ -43,7 +43,7 @@ pub struct ServiceHandle {
     pub xml_config: RwLock<XmlReader>,
 
     //
-    pub tid: AtomicU64,
+    pub tid: Atomic<u64>,
     pub join_handle_opt: RwLock<Option<JoinHandle<()>>>,
 }
 
@@ -54,7 +54,7 @@ impl ServiceHandle {
 
         Self {
             id,
-            state: state.into(),
+            state: Atomic::new(state),
 
             tx,
             rx,
@@ -63,7 +63,7 @@ impl ServiceHandle {
 
             xml_config: RwLock::new(XmlReader::new()),
 
-            tid: 0u64.into(),
+            tid: Atomic::new(0_u64),
             join_handle_opt: RwLock::new(None),
         }
     }

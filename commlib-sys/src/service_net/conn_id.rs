@@ -1,11 +1,12 @@
-use crate::service_net::PacketType;
+use bytemuck::NoUninit;
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use crate::ServiceNetRs;
 
+use super::PacketType;
+
 /// Connection id
-#[derive(Copy, Clone, PartialEq, Eq, std::hash::Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, std::hash::Hash, NoUninit)]
 #[repr(C)]
 pub struct ConnId {
     pub id: usize,
@@ -24,24 +25,6 @@ impl ConnId {
             conn.send(data);
         } else {
             log::error!("[hd={}] send failed!!!", hd);
-        }
-    }
-
-    /// Drop the tcp conn, and check if auto reconnect
-    pub fn close(self, srv_net: &ServiceNetRs) {
-        let hd = self;
-        log::info!("[hd={}] close ...", hd);
-
-        // 在当前线程中加 write 锁取出 conn
-        let conn_opt = srv_net.get_conn(hd);
-        if let Some(conn) = conn_opt {
-            // low level close
-            conn.close();
-
-            // remove conn at once
-            srv_net.remove_conn(hd);
-        } else {
-            log::error!("[hd={}] close failed!!!", hd);
         }
     }
 

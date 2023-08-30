@@ -1,7 +1,7 @@
-use atomic_enum::atomic_enum;
+use bytemuck::NoUninit;
 
-#[atomic_enum]
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone, NoUninit)]
+#[repr(u8)]
 pub enum ServerStatus {
     Null = 0,
     Starting = 1,

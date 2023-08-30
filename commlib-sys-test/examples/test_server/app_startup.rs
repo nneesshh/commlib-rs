@@ -9,18 +9,14 @@
 //!     });
 //! '''
 
-use bytes::{BufMut, BytesMut};
 use std::sync::Arc;
 
 use commlib_sys::listen_tcp_addr;
-use commlib_sys::service_net::{CmdId, ConnId, NetPacketGuard, PacketType};
-use commlib_sys::{NodeState, ServiceRs};
-use commlib_sys::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
+use commlib_sys::{ConnId, NetPacketGuard, NodeState, ServiceRs};
 use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
 use app_helper::Startup;
 
-use crate::proto;
 use crate::test_conf::G_TEST_CONF;
 use crate::test_manager::G_MAIN;
 
@@ -74,10 +70,12 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
         log::info!("[hd={}] conn_fn", hd);
 
         //
-        hd.set_packet_type(&G_SERVICE_NET, PacketType::Client);
+        G_MAIN.with(|g| {
+            let mut test_manager = g.borrow_mut();
 
-        // 发送 EncryptToken
-        send_encrypt_token(hd);
+            let is_encrypt = true;
+            test_manager.c2s_proxy.on_incomming_conn(hd, is_encrypt);
+        });
     };
 
     let pkt_fn = |hd: ConnId, pkt: NetPacketGuard| {
@@ -85,14 +83,12 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
 
         G_MAIN.with(|g| {
             let mut test_manager = g.borrow_mut();
-            test_manager.server_proxy.on_net_packet(hd, pkt);
+            test_manager.c2s_proxy.on_net_packet(hd, pkt);
         });
     };
 
     let close_fn = |hd: ConnId| {
         log::info!("[hd={}] close_fn", hd);
-
-        hd.send(&G_SERVICE_NET, "bye, rust close_fn".as_bytes());
     };
 
     //
@@ -129,25 +125,4 @@ fn test_service_init(srv: &Arc<TestService>) -> bool {
     //
     handle.set_state(NodeState::Start);
     true
-}
-
-fn send_encrypt_token(hd: ConnId) {
-    let code_buff = Vec::<u8>::with_capacity(ENCRYPT_KEY_LEN + ENCRYPT_MAX_LEN);
-
-    let msg = proto::S2cEncryptToken {
-        token: Some(code_buff.to_vec()),
-    };
-
-    // set encrypt key
-    G_MAIN.with(|g| {
-        let mut test_manager = g.borrow_mut();
-        test_manager.server_proxy.set_encrypt_key(hd, code_buff);
-
-        test_manager.server_proxy.send_proto(
-            G_SERVICE_NET.as_ref(),
-            hd,
-            proto::EnumMsgType::EncryptToken as CmdId,
-            &msg,
-        );
-    });
 }

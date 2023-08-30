@@ -2,11 +2,9 @@
 //! CliService
 //!
 
-use parking_lot::RwLock;
+use std::sync::Arc;
 
 use commlib_sys::{NodeState, ServiceHandle, ServiceRs};
-
-use std::sync::Arc;
 
 pub const SERVICE_ID_CLI_SERVICE: u64 = 1000_u64;
 lazy_static::lazy_static! {

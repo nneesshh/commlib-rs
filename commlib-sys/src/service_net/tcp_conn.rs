@@ -1,5 +1,5 @@
+use atomic::{Atomic, Ordering};
 use parking_lot::RwLock;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use message_io::network::Endpoint;
@@ -8,12 +8,12 @@ use message_io::node::NodeHandler;
 use crate::ServiceRs;
 
 use super::packet_reader::PacketResult;
-use super::{AtomicPacketType, ConnId, NetPacketGuard, PacketReader, PacketType, ServiceNetRs};
+use super::{ConnId, NetPacketGuard, PacketReader, PacketType, ServiceNetRs};
 
 /// Tcp connection: all fields are public for easy construct
 pub struct TcpConn {
     //
-    pub packet_type: AtomicPacketType,
+    pub packet_type: Atomic<PacketType>,
     pub hd: ConnId,
 
     //
@@ -21,7 +21,7 @@ pub struct TcpConn {
     pub netctrl: NodeHandler<()>,
 
     //
-    pub closed: AtomicBool,
+    pub closed: Atomic<bool>,
 
     //
     pub srv: Arc<dyn ServiceRs>,

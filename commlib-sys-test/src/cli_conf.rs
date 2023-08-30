@@ -4,7 +4,6 @@
 
 use parking_lot::RwLock;
 use std::cell::UnsafeCell;
-use std::sync::Arc;
 
 use commlib_sys::{NodeConf, XmlReader};
 

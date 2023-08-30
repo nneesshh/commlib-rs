@@ -48,7 +48,7 @@ impl ServiceNetRs {
     }
 
     /// Add conn
-    #[inline(always)]
+    //#[inline(always)]
     pub fn insert_conn(&self, hd: ConnId, conn: &Arc<TcpConn>) {
         let mut conn_table_mut = self.conn_table.write();
         log::info!("[hd={}] ++++++++ service net insert_conn", hd);
@@ -56,7 +56,7 @@ impl ServiceNetRs {
     }
 
     /// Remove conn
-    #[inline(always)]
+    //#[inline(always)]
     pub fn remove_conn(&self, hd: ConnId) -> Option<Arc<TcpConn>> {
         let mut conn_table_mut = self.conn_table.write();
         log::info!("[hd={}] -------- service net remove_conn", hd);
@@ -256,4 +256,19 @@ where
 
     //
     cli
+}
+
+/// 处理连接关闭事件
+pub fn handle_close_conn_event(srv_net: &Arc<ServiceNetRs>, conn: &Arc<TcpConn>) {
+    // remove insert tcp conn in srv net
+    let srv_net2 = srv_net.clone();
+    let conn2 = conn.clone();
+    let cb = move || {
+        // remove conn always
+        srv_net2.remove_conn(conn2.hd);
+
+        // trigger close_fn
+        conn2.run_close_fn();
+    };
+    srv_net.run_in_service(Box::new(cb));
 }

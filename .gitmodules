@@ -43,3 +43,6 @@
 [submodule "atomic-rs"]
 	path = atomic-rs
 	url = https://github.com/nneesshh/atomic-rs
+[submodule "bytemuck"]
+	path = bytemuck
+	url = https://github.com/nneesshh/bytemuck

@@ -34,9 +34,6 @@ rustix = { version = "0.38", features = ["fs"] }
 windows-sys = { version = "0.48", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO", "Win32_System_Console"] }
 rustix = { version = "0.38", features = ["fs"] }
 
-[dev-dependencies]
-signal-hook = "0.3"
-
 [dependencies]
 libc = "0.2"
 lazy_static = "1"
@@ -49,7 +46,8 @@ paste = "1"
 log = "0.4"
 chrono = "0.4"
 bytes = "1"
-atomic_enum = { path="../atomic_enum" }
+atomic = { path="../atomic-rs" }
+bytemuck = { path="../bytemuck", features = ["derive"]}
 base64 = { path="../rust-base64" }
 hashbrown = { path="../hashbrown" }
 message-io = { path="../message-io" }

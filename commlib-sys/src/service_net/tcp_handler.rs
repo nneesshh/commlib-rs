@@ -3,6 +3,7 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
+use super::handle_close_conn_event;
 use super::{packet_reader::PacketResult, PacketType};
 use super::{ConnId, OsSocketAddr, ServiceNetRs, TcpClient, TcpListenerId, TcpServer};
 
@@ -63,7 +64,7 @@ extern "C" fn on_listen_cb(
 ) {
     let tcp_server = unsafe { &mut *(tcp_server_ptr as *mut TcpServer) };
 
-    // trigger listen_fn
+    // trigger listen_fn in main service
     let sock_addr = os_addr.into_addr().unwrap();
     listener_id.run_listen_fn(tcp_server, sock_addr);
 }
@@ -82,32 +83,19 @@ extern "C" fn on_accept_cb(
     let sock_addr = os_addr.into_addr().unwrap();
     let endpoint = Endpoint::new(id, sock_addr);
 
-    // insert new conn
+    // make new conn
     listener_id.make_new_conn(PacketType::Server, hd, endpoint, netctrl, srv_net);
-
-    //
-    let conn_opt = srv_net.get_conn(hd);
-    if let Some(conn) = conn_opt {
-        // trigger conn_fn
-        conn.run_conn_fn();
-    }
 }
 
 extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_addr: OsSocketAddr) {
-    let tcp_client = unsafe { &mut *(tcp_client_ptr as *mut TcpClient) };
+    let cli = unsafe { &mut *(tcp_client_ptr as *mut TcpClient) };
 
     let id = ResourceId::from(hd.id);
     let sock_addr = os_addr.into_addr().unwrap();
     let endpoint = Endpoint::new(id, sock_addr);
 
-    // update inner hd for TcpClient
-    tcp_client.inner_hd = hd;
-
-    // bind new conn to tcp client
-    {
-        let netctrl = &tcp_client.mi_network.node_handler;
-        tcp_client.make_new_conn(PacketType::Server, hd, endpoint, netctrl);
-    }
+    // make new conn
+    cli.make_new_conn(PacketType::Server, hd, endpoint);
 }
 
 extern "C" fn on_message_cb(
@@ -138,9 +126,13 @@ extern "C" fn on_message_cb(
                         pos += consumed;
                     }
                     PacketResult::Abort(err) => {
-                        // disconnect
                         log::error!("[on_message_cb] handle_read failed!!! error: {}", err);
-                        hd.close(srv_net);
+
+                        // low level close
+                        conn.close();
+
+                        // handle close conn event
+                        handle_close_conn_event(srv_net, &conn);
                         break;
                     }
                 }
@@ -164,10 +156,6 @@ extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {
     //
     let conn_opt = srv_net.get_conn(hd);
     if let Some(conn) = conn_opt {
-        // remove conn always
-        srv_net.remove_conn(hd);
-
-        // trigger close_fn
-        conn.run_close_fn();
+        handle_close_conn_event(srv_net, &conn);
     }
 }

@@ -1,4 +1,5 @@
-use atomic_enum::atomic_enum;
+use bytemuck::NoUninit;
+use std::cell::RefCell;
 use std::collections::LinkedList;
 
 use crate::{rand_between_exclusive_i8, PlayerId};
@@ -52,8 +53,8 @@ pub struct EncryptData {
 }
 
 /// 包类型
-#[atomic_enum]
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone, NoUninit)]
+#[repr(u8)]
 pub enum PacketType {
     Server = 0, // 服务器内部包：不加密
 
@@ -315,12 +316,13 @@ impl NetPacket {
     pub fn decode_packet(
         &mut self,
         hd: ConnId,
-        encrypt_table: &mut hashbrown::HashMap<ConnId, EncryptData>,
+        encrypt_table: &hashbrown::HashMap<ConnId, RefCell<EncryptData>>,
     ) -> bool {
         match self.packet_type {
             PacketType::Client => {
                 // 解密
-                if let Some(encrypt) = encrypt_table.get_mut(&hd) {
+                let encrypt_opt = encrypt_table.get(&hd);
+                if let Some(encrypt) = encrypt_opt {
                     if !self.check_packet() {
                         // TODO: 是不是直接 close 这个连接？？？
                         log::error!(
@@ -331,7 +333,7 @@ impl NetPacket {
                         //
                         false
                     } else {
-                        self.read_client_packet(encrypt.encrypt_key.as_str());
+                        self.read_client_packet(encrypt.borrow().encrypt_key.as_str());
 
                         // TODO: 包序号检查
                         let client_no = self.client_no();
@@ -360,7 +362,8 @@ impl NetPacket {
 
             PacketType::ClientWs => {
                 // 解密
-                if let Some(encrypt) = encrypt_table.get_mut(&hd) {
+                let encrypt_opt = encrypt_table.get(&hd);
+                if let Some(encrypt) = encrypt_opt {
                     if !self.check_packet() {
                         // TODO: 是不是直接 close 这个连接？？？
                         log::error!(
@@ -371,7 +374,7 @@ impl NetPacket {
                         //
                         false
                     } else {
-                        self.read_client_ws_packet(encrypt.encrypt_key.as_str());
+                        self.read_client_ws_packet(encrypt.borrow().encrypt_key.as_str());
 
                         // TODO: 包序号检查
                         let client_no = self.client_no();
@@ -418,16 +421,17 @@ impl NetPacket {
     pub fn encode_packet(
         &mut self,
         hd: ConnId,
-        encrypt_table: &mut hashbrown::HashMap<ConnId, EncryptData>,
+        encrypt_table: &hashbrown::HashMap<ConnId, RefCell<EncryptData>>,
     ) -> bool {
         match self.packet_type {
             PacketType::Robot => {
                 // 加密
-                if let Some(encrypt) = encrypt_table.get_mut(&hd) {
+                let encrypt_opt = encrypt_table.get(&hd);
+                if let Some(encrypt) = encrypt_opt {
                     // 随机序号
                     let no = rand_packet_no(encrypt, hd);
                     self.set_client_no(no);
-                    self.write_robot_packet(encrypt.encrypt_key.as_str());
+                    self.write_robot_packet(encrypt.borrow().encrypt_key.as_str());
 
                     //
                     true
@@ -444,11 +448,12 @@ impl NetPacket {
 
             PacketType::RobotWs => {
                 // 加密
-                if let Some(encrypt) = encrypt_table.get_mut(&hd) {
+                let encrypt_opt = encrypt_table.get(&hd);
+                if let Some(encrypt) = encrypt_opt {
                     // 随机序号
                     let no = rand_packet_no(encrypt, hd);
                     self.set_client_no(no);
-                    self.write_robot_ws_packet(encrypt.encrypt_key.as_str());
+                    self.write_robot_ws_packet(encrypt.borrow().encrypt_key.as_str());
 
                     //
                     true
@@ -674,8 +679,8 @@ where
 
 ///
 #[inline(always)]
-pub fn rand_packet_no(encrypt: &mut EncryptData, _hd: ConnId) -> i8 {
-    let no_list = &mut encrypt.no_list;
+pub fn rand_packet_no(encrypt: &RefCell<EncryptData>, _hd: ConnId) -> i8 {
+    let no_list = &mut encrypt.borrow_mut().no_list;
     let no = rand_between_exclusive_i8(0, (ENCRYPT_KEY_LEN - 1) as i8, no_list);
 
     no_list.push_back(no);
@@ -688,12 +693,12 @@ pub fn rand_packet_no(encrypt: &mut EncryptData, _hd: ConnId) -> i8 {
 
 ///
 #[inline(always)]
-pub fn add_packet_no(encrypt: &mut EncryptData, no: i8) -> bool {
+pub fn add_packet_no(encrypt: &RefCell<EncryptData>, no: i8) -> bool {
     if no >= ENCRYPT_KEY_LEN as i8 {
         return false;
     }
 
-    let no_list = &mut encrypt.no_list;
+    let no_list = &mut encrypt.borrow_mut().no_list;
     for it in &*no_list {
         if *it == no {
             return false;

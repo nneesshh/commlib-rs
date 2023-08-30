@@ -3,7 +3,7 @@
 //!
 
 use commlib_sys::service_net::PacketType;
-use commlib_sys::{NetProxy, ServiceRs};
+use commlib_sys::{NetProxy, G_SERVICE_NET};
 
 thread_local! {
     ///
@@ -21,7 +21,7 @@ impl CliManager {
     ///
     pub fn new() -> CliManager {
         CliManager {
-            proxy: NetProxy::new(PacketType::Server),
+            proxy: NetProxy::new(PacketType::Server, &G_SERVICE_NET),
         }
     }
 }

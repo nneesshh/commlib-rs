@@ -35,12 +35,12 @@
 //! //</code>
 //!
 
+use atomic::{Atomic, Ordering};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use super::MessageIoNetwork;
-use super::{AtomicServerStatus, ConnId, NetPacketGuard, ServerStatus, TcpListenerId};
+use super::{ConnId, NetPacketGuard, ServerStatus, TcpListenerId};
 
 use crate::{ServiceNetRs, ServiceRs};
 
@@ -48,10 +48,10 @@ use crate::{ServiceNetRs, ServiceRs};
 #[repr(C)]
 pub struct TcpServer {
     start: std::time::Instant,
-    status: AtomicServerStatus,
+    status: Atomic<ServerStatus>,
 
-    connection_limit: AtomicUsize,
-    connection_num: AtomicUsize,
+    connection_limit: Atomic<usize>,
+    connection_num: Atomic<usize>,
 
     //
     pub addr: String,
@@ -82,10 +82,10 @@ impl TcpServer {
     {
         Self {
             start: std::time::Instant::now(),
-            status: ServerStatus::Null.into(),
+            status: Atomic::new(ServerStatus::Null),
 
-            connection_limit: AtomicUsize::new(0),
-            connection_num: AtomicUsize::new(0),
+            connection_limit: Atomic::new(0_usize),
+            connection_num: Atomic::new(0_usize),
 
             addr: addr.to_owned(),
             listener_id: TcpListenerId::from(0),
