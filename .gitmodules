@@ -46,3 +46,6 @@
 [submodule "bytemuck"]
 	path = bytemuck
 	url = https://github.com/nneesshh/bytemuck
+[submodule "rust-hex"]
+	path = rust-hex
+	url = https://github.com/nneesshh/rust-hex
