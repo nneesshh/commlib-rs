@@ -6,9 +6,11 @@ use std::sync::Arc;
 use message_io::network::Endpoint;
 use message_io::node::NodeHandler;
 
+use crate::service_net::net_packet::get_packet_leading_field_size;
+use crate::service_net::take_small_packet;
 use crate::{ServiceNetRs, ServiceRs};
 
-use super::{ConnId, PacketReader, PacketType, ServerStatus, TcpConn, TcpServer};
+use super::{ConnId, PacketReceiver, PacketType, ServerStatus, TcpConn, TcpServer};
 
 /// Tcp server id
 #[derive(Copy, Clone, PartialEq, Eq, std::hash::Hash)]
@@ -57,6 +59,10 @@ impl TcpListenerId {
                     let pkt_fn = tcp_server.pkt_fn.clone();
                     let close_fn = tcp_server.close_fn.clone();
 
+                    // 设置初始 packet
+                    let mut pkt = take_small_packet();
+                    pkt.set_type(packet_type);
+
                     let conn = Arc::new(TcpConn {
                         //
                         packet_type: Atomic::new(PacketType::Server),
@@ -79,7 +85,7 @@ impl TcpListenerId {
                         close_fn: RwLock::new(close_fn),
 
                         //
-                        pkt_reader: PacketReader::new(packet_type),
+                        pkt_receiver: PacketReceiver::new(pkt),
                     });
 
                     //

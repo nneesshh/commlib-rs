@@ -7,8 +7,9 @@ use crate::{rand_between_exclusive_i8, PlayerId};
 use super::{Buffer, ConnId};
 
 /// Buffer size
-const BUFFER_INITIAL_SIZE: usize = 4096;
-const BUFFER_RESERVED_PREPEND_SIZE: usize = 8;
+//const BUFFER_INITIAL_SIZE: usize = 4096;
+pub const BUFFER_INITIAL_SIZE: usize = 64;
+pub const BUFFER_RESERVED_PREPEND_SIZE: usize = 8;
 
 /// 协议号类型，2字节
 pub type CmdId = u16;
@@ -53,7 +54,7 @@ pub struct EncryptData {
 }
 
 /// 包类型
-#[derive(PartialEq, Copy, Clone, NoUninit)]
+#[derive(Debug, PartialEq, Copy, Clone, NoUninit)]
 #[repr(u8)]
 pub enum PacketType {
     Server = 0, // 服务器内部包：不加密
@@ -97,7 +98,7 @@ pub struct NetPacket {
 
 impl NetPacket {
     ///
-    pub fn new() -> NetPacket {
+    pub fn new(initial_size: usize) -> NetPacket {
         NetPacket {
             size_type: PacketSizeType::Small,
             packet_type: PacketType::Server,
@@ -107,7 +108,7 @@ impl NetPacket {
             cmd: 0,
             client: ClientHead { no: 0 },
 
-            buffer: Buffer::new(BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE),
+            buffer: Buffer::new(initial_size, BUFFER_RESERVED_PREPEND_SIZE),
         }
     }
 
@@ -166,10 +167,14 @@ impl NetPacket {
         self.leading_field_size = get_packet_leading_field_size(packet_type);
     }
 
-    /// 查看包体前导长度字段位数
+    /// 读取包体前导长度字段，获得包体长度数值
     #[inline(always)]
     pub fn peek_leading_field(&self) -> usize {
-        peek_packet_leading_field(&self.buffer, self.packet_type)
+        // 客户端包 2 字节包头，其他都是 4 字节包头
+        match self.packet_type {
+            PacketType::Client => self.buffer.peek_u16() as usize,
+            _ => self.buffer.peek_u32() as usize,
+        }
     }
 
     /// 包体前导长度字段位数
@@ -645,20 +650,9 @@ impl NetPacket {
 #[inline(always)]
 pub fn get_packet_leading_field_size(packet_type: PacketType) -> usize {
     // 客户端包 2 字节包头，其他都是 4 字节包头
-    if packet_type == PacketType::Client {
-        2_usize
-    } else {
-        4_usize
-    }
-}
-
-#[inline(always)]
-pub fn peek_packet_leading_field(buffer: &Buffer, packet_type: PacketType) -> usize {
-    // 客户端包 2 字节包头，其他都是 4 字节包头
-    if packet_type == PacketType::Client {
-        buffer.peek_u16() as usize
-    } else {
-        buffer.peek_u32() as usize
+    match packet_type {
+        PacketType::Client => 2_usize,
+        _ => 4_usize,
     }
 }
 

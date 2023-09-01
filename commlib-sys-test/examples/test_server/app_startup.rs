@@ -73,8 +73,10 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
         G_MAIN.with(|g| {
             let mut test_manager = g.borrow_mut();
 
-            let is_encrypt = true;
-            test_manager.c2s_proxy.on_incomming_conn(hd, is_encrypt);
+            let push_encrypt_token = true; // 是否推送 encrypt token
+            test_manager
+                .c2s_proxy
+                .on_incomming_conn(hd, push_encrypt_token);
         });
     };
 

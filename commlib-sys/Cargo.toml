@@ -50,6 +50,7 @@ atomic = { path="../atomic-rs" }
 bytemuck = { path="../bytemuck", features = ["derive"]}
 base64 = { path="../rust-base64" }
 hashbrown = { path="../hashbrown" }
+hex = { path="../rust-hex" }
 message-io = { path="../message-io" }
 opool = { path="../opool" }
 parking_lot = { path="../parking_lot" }

@@ -13,11 +13,12 @@ pub use net_packet::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
 ///
 pub mod net_packet_pool;
-pub use net_packet_pool::{take_packet, NetPacketGuard, NetPacketPool};
+pub use net_packet_pool::{take_large_packet, take_packet, take_small_packet};
+pub use net_packet_pool::{NetPacketGuard, NetPacketPool};
 
 ///
-pub mod packet_reader;
-pub use packet_reader::PacketReader;
+pub mod packet_receiver;
+pub use packet_receiver::PacketReceiver;
 
 ///
 pub mod conn_id;

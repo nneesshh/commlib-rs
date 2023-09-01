@@ -15,10 +15,11 @@ use std::sync::Arc;
 
 use message_io::network::Endpoint;
 
+use crate::service_net::take_small_packet;
 use crate::{Clock, ServiceNetRs, ServiceRs};
 
 use super::{
-    ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, PacketReader, PacketType, TcpConn,
+    ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, PacketReceiver, PacketType, TcpConn,
 };
 
 ///
@@ -342,6 +343,10 @@ impl TcpClient {
                 }
             });
 
+            // 设置初始 packet
+            let mut pkt = take_small_packet();
+            pkt.set_type(packet_type);
+
             let conn = Arc::new(TcpConn {
                 //
                 packet_type: Atomic::new(PacketType::Server),
@@ -364,7 +369,7 @@ impl TcpClient {
                 close_fn: RwLock::new(close_fn),
 
                 //
-                pkt_reader: PacketReader::new(packet_type),
+                pkt_receiver: PacketReceiver::new(pkt),
             });
 
             //
@@ -375,6 +380,9 @@ impl TcpClient {
             if let Some(cli) = cli_opt {
                 cli.set_inner_hd(hd);
             }
+
+            // trigger conn_fn
+            conn.run_conn_fn();
         };
         self.srv_net.run_in_service(Box::new(cb));
     }

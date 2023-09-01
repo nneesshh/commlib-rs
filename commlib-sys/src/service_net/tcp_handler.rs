@@ -3,9 +3,11 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
-use super::handle_close_conn_event;
-use super::{packet_reader::PacketResult, PacketType};
-use super::{ConnId, OsSocketAddr, ServiceNetRs, TcpClient, TcpListenerId, TcpServer};
+use crate::service_net::take_small_packet;
+use crate::ServiceRs;
+
+use super::{handle_close_conn_event, handle_message_event, net_packet::BUFFER_INITIAL_SIZE};
+use super::{ConnId, OsSocketAddr, PacketType, ServiceNetRs, TcpClient, TcpListenerId, TcpServer};
 
 ///
 pub type OnListenFuncType = extern "C" fn(*const TcpServer, TcpListenerId, OsSocketAddr);
@@ -106,56 +108,48 @@ extern "C" fn on_message_cb(
 ) {
     let srv_net = unsafe { &*srv_net_ptr };
 
-    //
-    {
-        let conn_opt = srv_net.get_conn(hd);
-        if let Some(conn) = conn_opt {
-            // conn 循环处理 input
-            let mut pos = 0_usize;
-            loop {
-                let ptr = unsafe { input_data.offset(pos as isize) };
-                let len = input_len - pos;
-                match conn.handle_read(ptr, len) {
-                    PacketResult::Ready((pkt, consumed)) => {
-                        // 收到一个 pkt trigger pkt_fn
-                        conn.run_pkt_fn(pkt);
-                        pos += consumed;
-                    }
-                    PacketResult::Suspend(consumed) => {
-                        // pkt 尚不完整,  continue
-                        pos += consumed;
-                    }
-                    PacketResult::Abort(err) => {
-                        log::error!("[on_message_cb] handle_read failed!!! error: {}", err);
+    let mut remain: usize = input_len;
+    let mut consumed: isize = 0;
+    while remain > 0 {
+        // 利用 buffer pkt 作为跨线程传递的数据缓存
+        let len = std::cmp::min(remain, BUFFER_INITIAL_SIZE);
+        let mut buffer_pkt = take_small_packet();
 
-                        // low level close
-                        conn.close();
+        let ptr = unsafe { input_data.offset(consumed) };
+        buffer_pkt.append(ptr, len);
 
-                        // handle close conn event
-                        handle_close_conn_event(srv_net, &conn);
-                        break;
-                    }
-                }
-
+        // 在 srv_net 中运行
+        let srv_net2 = srv_net.clone();
+        let cb = move || {
+            let conn_opt = srv_net2.get_conn(hd);
+            if let Some(conn) = conn_opt {
+                handle_message_event(srv_net2.as_ref(), &conn, buffer_pkt);
+            } else {
                 //
-                assert!(pos <= input_len);
-                if pos == input_len {
-                    break;
-                }
+                log::error!("[on_message_cb][hd={}] conn not found!!!", hd);
             }
-        } else {
-            //
-            log::error!("[on_message_cb][hd={}] conn not found!!!", hd);
-        }
+        };
+        srv_net.run_in_service(Box::new(cb));
+
+        //
+        remain -= len;
+        consumed += len as isize;
     }
 }
 
 extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {
     let srv_net = unsafe { &*srv_net_ptr };
 
-    //
-    let conn_opt = srv_net.get_conn(hd);
-    if let Some(conn) = conn_opt {
-        handle_close_conn_event(srv_net, &conn);
-    }
+    // 在 srv_net 中运行
+    let srv_net2 = srv_net.clone();
+    let cb = move || {
+        let conn_opt = srv_net2.get_conn(hd);
+        if let Some(conn) = conn_opt {
+            handle_close_conn_event(srv_net2.as_ref(), &conn);
+        } else {
+            //
+            log::error!("[on_close_cb][hd={}] conn not found!!!", hd);
+        }
+    };
+    srv_net.run_in_service(Box::new(cb));
 }

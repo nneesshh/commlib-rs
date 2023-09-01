@@ -1,13 +1,27 @@
-use super::{net_packet::NetPacket, PacketType};
-use crate::service_net::net_packet::PacketSizeType;
 use lazy_static::lazy_static;
 use opool::{Pool, PoolAllocator, RefGuard};
 
-///
-pub const SMALL_PACKET_MAX_SIZE: usize = 1024 * 4;
+use super::net_packet::{NetPacket, PacketSizeType, PacketType};
+use super::net_packet::{BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE};
 
-///
+/// packet 初始内存分配量
+pub const SMALL_PACKET_MAX_SIZE: usize = BUFFER_INITIAL_SIZE - BUFFER_RESERVED_PREPEND_SIZE;
+pub const LARGE_BUFFER_INITIAL_SIZE: usize = BUFFER_INITIAL_SIZE * 4;
+
+/// 线程安全 packet
 pub type NetPacketGuard = RefGuard<'static, NetPacketPool, NetPacket>;
+
+lazy_static! {
+    // < 4k (SMALL_PACKEG_MAX_SIZE), 最多 cache 8192个
+    pub static ref G_PACKET_POOL_SMALL: Pool<NetPacketPool, NetPacket> = {
+        Pool::new(8192, NetPacketPool)
+    };
+
+    // >= 4k (SMALL_PACKEG_MAX_SIZE), 最多 cache 128个, 超过数量上限立即释放，避免占用过多内存
+    pub static ref G_PACKET_POOL_LARGE: Pool<NetPacketPool, NetPacket> = {
+        Pool::new(128, NetPacketPool)
+    };
+}
 
 ///
 pub struct NetPacketPool;
@@ -15,7 +29,7 @@ pub struct NetPacketPool;
 impl PoolAllocator<NetPacket> for NetPacketPool {
     #[inline]
     fn allocate(&self) -> NetPacket {
-        let mut pkt = NetPacket::new();
+        let mut pkt = NetPacket::new(BUFFER_INITIAL_SIZE);
         pkt.init(true);
         pkt
     }
@@ -35,36 +49,28 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
 
 ///
 #[inline(always)]
-pub fn take_packet(size: usize, packet_type: PacketType) -> NetPacketGuard {
+pub fn take_packet(size: usize) -> NetPacketGuard {
     if size <= SMALL_PACKET_MAX_SIZE {
-        let mut pkt = G_PACKET_POOL_SMALL.get();
-        pkt.set_type(packet_type);
-        pkt
+        take_small_packet()
     } else {
-        let mut pkt = G_PACKET_POOL_LARGE.get();
-        pkt.set_size_type(PacketSizeType::Large);
-        pkt.set_type(packet_type);
-        pkt
+        take_large_packet(size, b"")
     }
 }
 
+/// 申请 small packet
 #[inline(always)]
-pub fn take_larget_packet(
-    ensure_bytes: usize,
-    packet_type: PacketType,
-    init_slice: &[u8],
-) -> NetPacketGuard {
-    let mut pkt = G_PACKET_POOL_LARGE.get();
-    pkt.set_type(packet_type);
-    pkt.ensure_writable_bytes(ensure_bytes);
-    pkt.append_slice(init_slice);
+pub fn take_small_packet() -> NetPacketGuard {
+    let mut pkt = G_PACKET_POOL_SMALL.get();
+    pkt.set_size_type(PacketSizeType::Small);
     pkt
 }
 
-lazy_static! {
-    // < 4k (SMALL_PACKEG_MAX_SIZE), 最多 cache 8192个
-    pub static ref G_PACKET_POOL_LARGE: Pool<NetPacketPool, NetPacket> = Pool::new(8192, NetPacketPool);
-
-    // >= 4k (SMALL_PACKEG_MAX_SIZE), 最多 cache 128个, 超过数量上限立即释放，避免占用过多内存
-    pub static ref G_PACKET_POOL_SMALL: Pool<NetPacketPool, NetPacket> = Pool::new(128, NetPacketPool);
+/// 申请 large packet
+#[inline(always)]
+pub fn take_large_packet(ensure_bytes: usize, init_slice: &[u8]) -> NetPacketGuard {
+    let mut pkt = G_PACKET_POOL_LARGE.get();
+    pkt.set_size_type(PacketSizeType::Large);
+    pkt.ensure_writable_bytes(std::cmp::max(LARGE_BUFFER_INITIAL_SIZE, ensure_bytes));
+    pkt.append_slice(init_slice);
+    pkt
 }

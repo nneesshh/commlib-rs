@@ -86,7 +86,13 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
     let conn_fn = |hd: ConnId| {
         log::info!("[hd={}] conn_fn", hd);
 
-        hd.send(&G_SERVICE_NET, "hello, rust conn_fn".as_bytes());
+        //
+        G_MAIN.with(|g| {
+            let mut cli_manager = g.borrow_mut();
+
+            let push_encrypt_token = false;
+            cli_manager.proxy.on_incomming_conn(hd, push_encrypt_token);
+        });
     };
 
     let pkt_fn = |hd: ConnId, pkt: NetPacketGuard| {
@@ -100,8 +106,6 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
 
     let close_fn = |hd: ConnId| {
         log::info!("[hd={}] close_fn", hd);
-
-        hd.send(&G_SERVICE_NET, "bye, rust close_fn".as_bytes());
     };
 
     //

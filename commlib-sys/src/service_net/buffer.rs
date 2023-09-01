@@ -88,14 +88,16 @@ impl Buffer {
     ///
     #[inline(always)]
     pub fn ensure_writable_bytes(&mut self, len: usize) {
-        if self.writable_bytes() < len {
-            self.grow(len - self.writable_bytes());
+        let writable_bytes = self.writable_bytes();
+        if writable_bytes < len {
+            self.grow(len - writable_bytes);
         }
     }
 
     /// Truncate discards all but the first n unread bytes from the buffer, and
     /// continues to use the same allocated storage.
     /// It does nothing if n is greater than the length of the buffer.
+    #[inline(always)]
     pub fn truncate(&mut self, remain_n: usize) {
         if 0 == remain_n {
             // "write_index == read_index" means no data in buffer now, so reset it
@@ -110,11 +112,13 @@ impl Buffer {
     /// Reset resets the buffer to be empty, but it retains the underlying storage
     /// for use by future writes.
     /// It is the same as truncate(0)
+    #[inline(always)]
     pub fn reset(&mut self) {
         self.truncate(0);
     }
 
     /// Skip advance the reading index of the buffer
+    #[inline(always)]
     pub fn skip(&mut self, len: usize) {
         if len < self.length() {
             self.read_index += len;
@@ -299,56 +303,103 @@ impl Buffer {
     #[inline(always)]
     pub fn peek_u128(&self) -> u128 {
         let len = std::mem::size_of::<u128>();
-        let be = 0_u128;
+        let n = 0_u128;
         assert!(self.length() >= len);
         unsafe {
-            let src = self.begin_ptr_const().offset(self.read_index as isize);
-            let dst = &be as *const u128 as *mut u8;
-            std::ptr::copy_nonoverlapping(src, dst, len);
+            let src = std::slice::from_raw_parts(
+                self.begin_ptr_const().offset(self.read_index as isize),
+                len,
+            );
+            let dst = std::slice::from_raw_parts_mut(&n as *const u128 as *mut u8, len);
+
+            //le do nothing, we should use swap_bytes()
+            dst[0] = src[15];
+            dst[1] = src[14];
+            dst[2] = src[13];
+            dst[3] = src[12];
+            dst[4] = src[11];
+            dst[5] = src[10];
+            dst[6] = src[9];
+            dst[7] = src[8];
+
+            dst[8] = src[7];
+            dst[9] = src[6];
+            dst[10] = src[5];
+            dst[11] = src[4];
+            dst[12] = src[3];
+            dst[13] = src[2];
+            dst[14] = src[1];
+            dst[15] = src[0];
         }
-        be.to_le()
+        n
     }
 
     /// Peek u64
     #[inline(always)]
     pub fn peek_u64(&self) -> u64 {
         let len = std::mem::size_of::<u64>();
-        let be = 0_u64;
+        let n = 0_u64;
         assert!(self.length() >= len);
         unsafe {
-            let src = self.begin_ptr_const().offset(self.read_index as isize);
-            let dst = &be as *const u64 as *mut u8;
-            std::ptr::copy_nonoverlapping(src, dst, len);
+            let src = std::slice::from_raw_parts(
+                self.begin_ptr_const().offset(self.read_index as isize),
+                len,
+            );
+            let dst = std::slice::from_raw_parts_mut(&n as *const u64 as *mut u8, len);
+
+            //le do nothing, we should use swap_bytes()
+            dst[0] = src[7];
+            dst[1] = src[6];
+            dst[2] = src[5];
+            dst[3] = src[4];
+            dst[4] = src[3];
+            dst[5] = src[2];
+            dst[6] = src[1];
+            dst[7] = src[0];
         }
-        be.to_le()
+        n
     }
 
     /// Peek u32
-    #[inline(always)]
+    //#[inline(always)]
     pub fn peek_u32(&self) -> u32 {
         let len = std::mem::size_of::<u32>();
-        let be = 0_u32;
+        let n = 0_u32;
         assert!(self.length() >= len);
         unsafe {
-            let src = self.begin_ptr_const().offset(self.read_index as isize);
-            let dst = &be as *const u32 as *mut u8;
-            std::ptr::copy_nonoverlapping(src, dst, len);
+            let src = std::slice::from_raw_parts(
+                self.begin_ptr_const().offset(self.read_index as isize),
+                len,
+            );
+            let dst = std::slice::from_raw_parts_mut(&n as *const u32 as *mut u8, len);
+
+            //le do nothing, we should use swap_bytes()
+            dst[0] = src[3];
+            dst[1] = src[2];
+            dst[2] = src[1];
+            dst[3] = src[0];
         }
-        be.to_le()
+        n
     }
 
     /// Peek u16
     #[inline(always)]
     pub fn peek_u16(&self) -> u16 {
         let len = std::mem::size_of::<u16>();
-        let be = 0_u16;
+        let n = 0_u16;
         assert!(self.length() >= len);
         unsafe {
-            let src = self.begin_ptr_const().offset(self.read_index as isize);
-            let dst = &be as *const u16 as *mut u8;
-            std::ptr::copy_nonoverlapping(src, dst, len);
+            let src = std::slice::from_raw_parts(
+                self.begin_ptr_const().offset(self.read_index as isize),
+                len,
+            );
+            let dst = std::slice::from_raw_parts_mut(&n as *const u16 as *mut u8, len);
+
+            //le do nothing, we should use swap_bytes()
+            dst[0] = src[1];
+            dst[1] = src[0];
         }
-        be.to_le()
+        n
     }
 
     /// Peek u8
@@ -394,16 +445,19 @@ impl Buffer {
         unsafe { self.begin_ptr().offset(self.write_index() as isize) }
     }
 
+    #[inline(always)]
     fn grow(&mut self, additional: usize) {
-        if self.prependable_bytes() + self.writable_bytes()
-            < self.reserved_prepend_index + additional
-        {
+        // if we can make space inside buffer
+        assert!(self.reserved_prepend_index <= self.read_index);
+        let old_writable_bytes = self.writable_bytes();
+        let already_read_bytes = self.read_index - self.reserved_prepend_index;
+        if already_read_bytes < additional {
             // grow the capacity
             self.inner
                 .reserve(std::cmp::max(self.capacity() << 1, additional));
         } else {
+            // already_read_bytes space can be reused:
             // move readable data to the front, make space inside buffer
-            assert!(self.reserved_prepend_index < self.read_index);
             let readable = self.length();
 
             let src = self.read_ptr();
@@ -415,7 +469,7 @@ impl Buffer {
             self.set_write_index(self.read_index + readable);
 
             assert_eq!(self.length(), readable);
-            assert!(self.writable_bytes() >= additional);
+            assert!(self.writable_bytes() >= old_writable_bytes + additional);
         }
     }
 }

@@ -4,7 +4,10 @@ use std::sync::Arc;
 use crate::{Clock, NodeState, PinkySwear, ServiceHandle, ServiceRs};
 
 use super::MessageIoNetwork;
-use super::{ConnId, NetPacketGuard, TcpClient, TcpConn, TcpListenerId, TcpServer};
+use super::{
+    packet_receiver::PacketResult, ConnId, NetPacketGuard, TcpClient, TcpConn, TcpListenerId,
+    TcpServer,
+};
 
 /// ServiceNetRs
 pub struct ServiceNetRs {
@@ -258,17 +261,60 @@ where
     cli
 }
 
-/// 处理连接关闭事件
-pub fn handle_close_conn_event(srv_net: &Arc<ServiceNetRs>, conn: &Arc<TcpConn>) {
-    // remove insert tcp conn in srv net
-    let srv_net2 = srv_net.clone();
-    let conn2 = conn.clone();
-    let cb = move || {
-        // remove conn always
-        srv_net2.remove_conn(conn2.hd);
+/// 处理 message 事件 （在 srv_net 中运行）
+pub fn handle_message_event(
+    srv_net: &ServiceNetRs,
+    conn: &Arc<TcpConn>,
+    mut buffer_pkt: NetPacketGuard,
+) {
+    assert!(srv_net.is_in_service_thread());
 
-        // trigger close_fn
-        conn2.run_close_fn();
-    };
-    srv_net.run_in_service(Box::new(cb));
+    let input = buffer_pkt.consume();
+    let input_data = input.as_ptr();
+    let input_len: usize = input.len();
+
+    // conn 循环处理 input
+    let mut pos = 0_usize;
+    loop {
+        let ptr = unsafe { input_data.offset(pos as isize) };
+        let len = input_len - pos;
+        match conn.handle_read(ptr, len) {
+            PacketResult::Ready((pkt, consumed)) => {
+                // 收到一个 pkt trigger pkt_fn
+                conn.run_pkt_fn(pkt);
+                pos += consumed;
+            }
+            PacketResult::Suspend(consumed) => {
+                // pkt 尚不完整,  continue
+                pos += consumed;
+            }
+            PacketResult::Abort(err) => {
+                log::error!("[on_message_cb] handle_read failed!!! error: {}", err);
+
+                // low level close
+                conn.close();
+
+                // handle close conn event
+                handle_close_conn_event(srv_net, &conn);
+                break;
+            }
+        }
+
+        //
+        assert!(pos <= input_len);
+        if pos == input_len {
+            break;
+        }
+    }
+}
+
+/// 处理连接关闭事件 （在 srv_net 中运行）
+pub fn handle_close_conn_event(srv_net: &ServiceNetRs, conn: &Arc<TcpConn>) {
+    assert!(srv_net.is_in_service_thread());
+
+    // remove conn always
+    srv_net.remove_conn(conn.hd);
+
+    // trigger close_fn
+    conn.run_close_fn();
 }

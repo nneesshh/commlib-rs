@@ -49,12 +49,18 @@ impl NetProxy {
     }
 
     ///
-    pub fn on_incomming_conn(&mut self, hd: ConnId, is_encrypt: bool) {
+    pub fn on_incomming_conn(&mut self, hd: ConnId, push_encrypt_token: bool) {
         //
-        hd.set_packet_type(self.srv_net.as_ref(), self.get_packet_type());
+        let packet_type = self.packet_type();
+        log::info!(
+            "[hd={}] on_incomming_conn packet_type={:?}",
+            hd,
+            packet_type
+        );
+        hd.set_packet_type(self.srv_net.as_ref(), packet_type);
 
         //
-        if is_encrypt {
+        if push_encrypt_token {
             // 发送 EncryptToken
             (self.encrypt_token_handler)(self, hd);
         }
@@ -78,7 +84,7 @@ impl NetProxy {
 
     ///
     #[inline(always)]
-    pub fn get_packet_type(&self) -> PacketType {
+    pub fn packet_type(&self) -> PacketType {
         self.packet_type
     }
 
@@ -114,10 +120,11 @@ impl NetProxy {
         );
     }
 
-    /// 发送接口线程安全,
+    /// 发送接口线程安全
     #[inline(always)]
     pub fn send_raw(&self, hd: ConnId, cmd: CmdId, slice: &[u8]) {
-        let mut pkt = take_packet(slice.len(), self.packet_type);
+        let mut pkt = take_packet(slice.len());
+        pkt.set_type(self.packet_type);
         pkt.set_cmd(cmd);
         pkt.set_body(slice);
 
@@ -132,7 +139,8 @@ impl NetProxy {
     {
         //
         let len = msg.encoded_len();
-        let mut pkt = take_packet(len, self.packet_type);
+        let mut pkt = take_packet(len);
+        pkt.set_type(self.packet_type);
         pkt.set_cmd(cmd);
         pkt.set_msg(msg);
 
