@@ -11,16 +11,13 @@
 
 use std::sync::Arc;
 
-use commlib_sys::{connect_to_tcp_server, G_SERVICE_NET, G_SERVICE_SIGNAL};
-use commlib_sys::{ConnId, NetPacketGuard, NodeState, ServiceRs};
-
 use app_helper::Startup;
-
-use crate::cli_conf::G_CLI_CONF;
-use crate::cli_manager::G_MAIN;
+use commlib_sys::{connect_to_tcp_server, G_SERVICE_NET};
+use commlib_sys::{ConnId, NetPacketGuard, ServiceRs};
 
 use super::cli_service::CliService;
-use super::cli_service::G_CLI_SERVICE;
+use crate::cli_conf::G_CLI_CONF;
+use crate::cli_manager::G_MAIN;
 
 thread_local! {
     ///
@@ -42,10 +39,13 @@ pub fn resume(srv: &Arc<CliService>) {
 
 ///
 pub fn exec(srv: &Arc<CliService>) {
-    //
-    cli_service_init(srv);
+    // pre-startup, main manager init
+    G_MAIN.with(|g| {
+        let mut main_manager = g.borrow_mut();
+        main_manager.init(srv);
+    });
 
-    //
+    // startup step by step
     let srv2 = srv.clone();
     G_APP_STARTUP.with(|g| {
         let mut startup = g.borrow_mut();
@@ -53,27 +53,15 @@ pub fn exec(srv: &Arc<CliService>) {
         //
         startup.add_step("connect", move || do_connect_to_test_server(&srv2));
 
-        // run
+        // run startup
         startup.exec();
     });
-}
 
-/// Init in-service
-fn cli_service_init(srv: &Arc<CliService>) -> bool {
-    let handle = srv.get_handle();
-
-    // ctrl-c stop, DEBUG ONLY
-    G_SERVICE_SIGNAL.listen_sig_int(G_CLI_SERVICE.as_ref(), || {
-        println!("WTF!!!!");
+    // startup over, main manager lazy init
+    G_MAIN.with(|g| {
+        let mut main_manager = g.borrow_mut();
+        main_manager.lazy_init(srv);
     });
-    log::info!("\nGAME init ...\n");
-
-    //
-    app_helper::with_conf_mut!(G_CLI_CONF, cfg, { cfg.init(handle.xml_config()) });
-
-    //
-    handle.set_state(NodeState::Start);
-    true
 }
 
 ///
@@ -91,7 +79,9 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
             let mut cli_manager = g.borrow_mut();
 
             let push_encrypt_token = false;
-            cli_manager.proxy.on_incomming_conn(hd, push_encrypt_token);
+            cli_manager
+                .proxy
+                .on_incomming_conn(G_SERVICE_NET.as_ref(), hd, push_encrypt_token);
         });
     };
 

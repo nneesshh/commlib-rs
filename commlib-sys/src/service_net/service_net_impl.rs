@@ -5,18 +5,21 @@ use crate::{Clock, NodeState, PinkySwear, ServiceHandle, ServiceRs};
 
 use super::MessageIoNetwork;
 use super::{
-    packet_receiver::PacketResult, ConnId, NetPacketGuard, TcpClient, TcpConn, TcpListenerId,
-    TcpServer,
+    packet_receiver::PacketResult, ConnId, EncryptData, NetPacketGuard, TcpClient, TcpConn,
+    TcpListenerId, TcpServer,
 };
 
 /// ServiceNetRs
 pub struct ServiceNetRs {
     pub handle: ServiceHandle,
 
-    client_table: RwLock<hashbrown::HashMap<uuid::Uuid, Arc<TcpClient>>>, // TODO: remove lock?
-    conn_table: RwLock<hashbrown::HashMap<ConnId, Arc<TcpConn>>>,         // TODO: remove lock?
+    pub client_table: RwLock<hashbrown::HashMap<uuid::Uuid, Arc<TcpClient>>>, // TODO: remove lock?
+    pub conn_table: RwLock<hashbrown::HashMap<ConnId, Arc<TcpConn>>>,         // TODO: remove lock?
 
     pub tcp_server_vec: RwLock<Vec<TcpServer>>, // TODO: remove lock?
+
+    // 每条连接的包序号和密钥
+    hd_encrypt_table: RwLock<hashbrown::HashMap<ConnId, Arc<EncryptData>>>, // TODO: remove lock?
 
     //
     inner_network: Arc<MessageIoNetwork>,
@@ -32,6 +35,8 @@ impl ServiceNetRs {
 
             conn_table: RwLock::new(hashbrown::HashMap::with_capacity(4096)),
             tcp_server_vec: RwLock::new(Vec::new()),
+
+            hd_encrypt_table: RwLock::new(hashbrown::HashMap::with_capacity(4096)),
 
             //
             inner_network: Arc::new(MessageIoNetwork::new()),
@@ -51,7 +56,7 @@ impl ServiceNetRs {
     }
 
     /// Add conn
-    //#[inline(always)]
+    #[inline(always)]
     pub fn insert_conn(&self, hd: ConnId, conn: &Arc<TcpConn>) {
         let mut conn_table_mut = self.conn_table.write();
         log::info!("[hd={}] ++++++++ service net insert_conn", hd);
@@ -59,7 +64,7 @@ impl ServiceNetRs {
     }
 
     /// Remove conn
-    //#[inline(always)]
+    #[inline(always)]
     pub fn remove_conn(&self, hd: ConnId) -> Option<Arc<TcpConn>> {
         let mut conn_table_mut = self.conn_table.write();
         log::info!("[hd={}] -------- service net remove_conn", hd);
@@ -265,45 +270,27 @@ where
 pub fn handle_message_event(
     srv_net: &ServiceNetRs,
     conn: &Arc<TcpConn>,
-    mut buffer_pkt: NetPacketGuard,
+    buffer_pkt: NetPacketGuard,
 ) {
     assert!(srv_net.is_in_service_thread());
 
-    let input = buffer_pkt.consume();
-    let input_data = input.as_ptr();
-    let input_len: usize = input.len();
-
-    // conn 循环处理 input
-    let mut pos = 0_usize;
-    loop {
-        let ptr = unsafe { input_data.offset(pos as isize) };
-        let len = input_len - pos;
-        match conn.handle_read(ptr, len) {
-            PacketResult::Ready((pkt, consumed)) => {
-                // 收到一个 pkt trigger pkt_fn
+    // conn 处理 input
+    match conn.handle_read(buffer_pkt) {
+        PacketResult::Ready(pkt_list) => {
+            // pkt trigger pkt_fn
+            for pkt in pkt_list {
                 conn.run_pkt_fn(pkt);
-                pos += consumed;
-            }
-            PacketResult::Suspend(consumed) => {
-                // pkt 尚不完整,  continue
-                pos += consumed;
-            }
-            PacketResult::Abort(err) => {
-                log::error!("[on_message_cb] handle_read failed!!! error: {}", err);
-
-                // low level close
-                conn.close();
-
-                // handle close conn event
-                handle_close_conn_event(srv_net, &conn);
-                break;
             }
         }
 
-        //
-        assert!(pos <= input_len);
-        if pos == input_len {
-            break;
+        PacketResult::Abort(err) => {
+            log::error!("[on_message_cb] handle_read failed!!! error: {}", err);
+
+            // low level close
+            conn.close();
+
+            // handle close conn event
+            handle_close_conn_event(srv_net, &conn);
         }
     }
 }

@@ -39,8 +39,8 @@ pub struct TcpConn {
 impl TcpConn {
     ///
     #[inline(always)]
-    pub fn handle_read(&self, data: *const u8, len: usize) -> PacketResult {
-        self.pkt_receiver.read(data, len)
+    pub fn handle_read(&self, buffer_pkt: NetPacketGuard) -> PacketResult {
+        self.pkt_receiver.read(buffer_pkt)
     }
 
     /// low level close

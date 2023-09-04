@@ -15,7 +15,6 @@ use std::sync::Arc;
 
 use message_io::network::Endpoint;
 
-use crate::service_net::take_small_packet;
 use crate::{Clock, ServiceNetRs, ServiceRs};
 
 use super::{
@@ -343,10 +342,6 @@ impl TcpClient {
                 }
             });
 
-            // 设置初始 packet
-            let mut pkt = take_small_packet();
-            pkt.set_type(packet_type);
-
             let conn = Arc::new(TcpConn {
                 //
                 packet_type: Atomic::new(PacketType::Server),
@@ -369,7 +364,7 @@ impl TcpClient {
                 close_fn: RwLock::new(close_fn),
 
                 //
-                pkt_receiver: PacketReceiver::new(pkt),
+                pkt_receiver: PacketReceiver::new(),
             });
 
             //

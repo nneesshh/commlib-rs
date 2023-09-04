@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use opool::{Pool, PoolAllocator, RefGuard};
 
-use super::net_packet::{NetPacket, PacketSizeType, PacketType};
+use super::net_packet::{NetPacket, PacketSizeType};
 use super::net_packet::{BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE};
 
 /// packet 初始内存分配量
@@ -27,20 +27,22 @@ lazy_static! {
 pub struct NetPacketPool;
 
 impl PoolAllocator<NetPacket> for NetPacketPool {
-    #[inline]
+    ///
+    //#[inline(always)]
     fn allocate(&self) -> NetPacket {
-        let mut pkt = NetPacket::new(BUFFER_INITIAL_SIZE);
+        let mut pkt = NetPacket::new();
         pkt.init(true);
         pkt
     }
 
     /// OPTIONAL METHODS:
-    #[inline]
+    //#[inline(always)]
     fn reset(&self, pkt: &mut NetPacket) {
         pkt.release();
     }
 
-    #[inline]
+    ///
+    #[inline(always)]
     fn is_valid(&self, _pkt: &NetPacket) -> bool {
         // you can optionally is_valid if object is good to be pushed back to the pool
         true
@@ -48,28 +50,34 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
 }
 
 ///
-#[inline(always)]
-pub fn take_packet(size: usize) -> NetPacketGuard {
+//#[inline(always)]
+pub fn take_packet(size: usize, leading_filed_size: u8) -> NetPacketGuard {
     if size <= SMALL_PACKET_MAX_SIZE {
-        take_small_packet()
+        take_small_packet(leading_filed_size)
     } else {
-        take_large_packet(size, b"")
+        take_large_packet(leading_filed_size, size, b"")
     }
 }
 
 /// 申请 small packet
-#[inline(always)]
-pub fn take_small_packet() -> NetPacketGuard {
+//#[inline(always)]
+pub fn take_small_packet(leading_filed_size: u8) -> NetPacketGuard {
     let mut pkt = G_PACKET_POOL_SMALL.get();
     pkt.set_size_type(PacketSizeType::Small);
+    pkt.set_leading_field_size(leading_filed_size);
     pkt
 }
 
 /// 申请 large packet
-#[inline(always)]
-pub fn take_large_packet(ensure_bytes: usize, init_slice: &[u8]) -> NetPacketGuard {
+//#[inline(always)]
+pub fn take_large_packet(
+    leading_filed_size: u8,
+    ensure_bytes: usize,
+    init_slice: &[u8],
+) -> NetPacketGuard {
     let mut pkt = G_PACKET_POOL_LARGE.get();
     pkt.set_size_type(PacketSizeType::Large);
+    pkt.set_leading_field_size(leading_filed_size);
     pkt.ensure_writable_bytes(std::cmp::max(LARGE_BUFFER_INITIAL_SIZE, ensure_bytes));
     pkt.append_slice(init_slice);
     pkt

@@ -12,8 +12,8 @@
 use std::sync::Arc;
 
 use commlib_sys::listen_tcp_addr;
-use commlib_sys::{ConnId, NetPacketGuard, NodeState, ServiceRs};
-use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
+use commlib_sys::G_SERVICE_NET;
+use commlib_sys::{ConnId, NetPacketGuard, ServiceRs};
 
 use app_helper::Startup;
 
@@ -21,7 +21,6 @@ use crate::test_conf::G_TEST_CONF;
 use crate::test_manager::G_MAIN;
 
 use super::test_service::TestService;
-use super::test_service::G_TEST_SERVICE;
 
 thread_local! {
     ///
@@ -43,10 +42,13 @@ pub fn resume(srv: &Arc<TestService>) {
 
 ///
 pub fn exec(srv: &Arc<TestService>) {
-    //
-    test_service_init(srv);
+    // pre-startup, main manager init
+    G_MAIN.with(|g| {
+        let mut main_manager = g.borrow_mut();
+        main_manager.init(srv);
+    });
 
-    //
+    // startup step by step
     let srv2 = srv.clone();
     G_APP_STARTUP.with(|g| {
         let mut startup = g.borrow_mut();
@@ -56,8 +58,14 @@ pub fn exec(srv: &Arc<TestService>) {
             startup_network_listen(&srv2)
         });
 
-        // run
+        // run startup
         startup.exec();
+    });
+
+    // startup over, main manager lazy init
+    G_MAIN.with(|g| {
+        let mut main_manager = g.borrow_mut();
+        main_manager.lazy_init(srv);
     });
 }
 
@@ -71,12 +79,14 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
 
         //
         G_MAIN.with(|g| {
-            let mut test_manager = g.borrow_mut();
+            let mut main_manager = g.borrow_mut();
 
             let push_encrypt_token = true; // 是否推送 encrypt token
-            test_manager
-                .c2s_proxy
-                .on_incomming_conn(hd, push_encrypt_token);
+            main_manager.c2s_proxy.on_incomming_conn(
+                G_SERVICE_NET.as_ref(),
+                hd,
+                push_encrypt_token,
+            );
         });
     };
 
@@ -84,8 +94,8 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
         log::info!("[hd={}] msg_fn", hd);
 
         G_MAIN.with(|g| {
-            let mut test_manager = g.borrow_mut();
-            test_manager.c2s_proxy.on_net_packet(hd, pkt);
+            let mut main_manager = g.borrow_mut();
+            main_manager.c2s_proxy.on_net_packet(hd, pkt);
         });
     };
 
@@ -108,23 +118,5 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
     });
 
     //
-    true
-}
-
-/// 初始化
-fn test_service_init(srv: &Arc<TestService>) -> bool {
-    let handle = srv.get_handle();
-
-    // ctrl-c stop, DEBUG ONLY
-    G_SERVICE_SIGNAL.listen_sig_int(G_TEST_SERVICE.as_ref(), || {
-        println!("WTF!!!!");
-    });
-    log::info!("\nTest init ...\n");
-
-    //
-    app_helper::with_conf_mut!(G_TEST_CONF, cfg, { cfg.init(handle.xml_config()) });
-
-    //
-    handle.set_state(NodeState::Start);
     true
 }

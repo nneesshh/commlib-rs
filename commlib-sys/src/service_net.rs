@@ -8,6 +8,7 @@ pub use buffer::Buffer;
 
 ///
 pub mod net_packet;
+pub use net_packet::get_leading_field_size;
 pub use net_packet::{CmdId, EncryptData, NetPacket, PacketType};
 pub use net_packet::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 

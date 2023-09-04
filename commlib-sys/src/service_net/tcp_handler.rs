@@ -3,10 +3,10 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
-use crate::service_net::take_small_packet;
 use crate::ServiceRs;
 
-use super::{handle_close_conn_event, handle_message_event, net_packet::BUFFER_INITIAL_SIZE};
+use super::net_packet::BUFFER_INITIAL_SIZE;
+use super::{get_leading_field_size, handle_close_conn_event, handle_message_event, take_packet};
 use super::{ConnId, OsSocketAddr, PacketType, ServiceNetRs, TcpClient, TcpListenerId, TcpServer};
 
 ///
@@ -108,33 +108,24 @@ extern "C" fn on_message_cb(
 ) {
     let srv_net = unsafe { &*srv_net_ptr };
 
-    let mut remain: usize = input_len;
-    let mut consumed: isize = 0;
-    while remain > 0 {
-        // 利用 buffer pkt 作为跨线程传递的数据缓存
-        let len = std::cmp::min(remain, BUFFER_INITIAL_SIZE);
-        let mut buffer_pkt = take_small_packet();
+    // 利用 buffer pkt 作为跨线程传递的数据缓存 （需要 TcpConn 设置 leading_filed_size）
+    let mut buffer_pkt = take_packet(input_len, 0);
+    buffer_pkt.append(input_data, input_len);
 
-        let ptr = unsafe { input_data.offset(consumed) };
-        buffer_pkt.append(ptr, len);
-
-        // 在 srv_net 中运行
-        let srv_net2 = srv_net.clone();
-        let cb = move || {
-            let conn_opt = srv_net2.get_conn(hd);
-            if let Some(conn) = conn_opt {
-                handle_message_event(srv_net2.as_ref(), &conn, buffer_pkt);
-            } else {
-                //
-                log::error!("[on_message_cb][hd={}] conn not found!!!", hd);
-            }
-        };
-        srv_net.run_in_service(Box::new(cb));
-
-        //
-        remain -= len;
-        consumed += len as isize;
-    }
+    // 在 srv_net 中运行
+    let srv_net2 = srv_net.clone();
+    let cb = move || {
+        let conn_opt = srv_net2.get_conn(hd);
+        if let Some(conn) = conn_opt {
+            let leading_field_size = get_leading_field_size(conn.packet_type());
+            buffer_pkt.set_leading_field_size(leading_field_size);
+            handle_message_event(srv_net2.as_ref(), &conn, buffer_pkt);
+        } else {
+            //
+            log::error!("[on_message_cb][hd={}] conn not found!!!", hd);
+        }
+    };
+    srv_net.run_in_service(Box::new(cb));
 }
 
 extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {

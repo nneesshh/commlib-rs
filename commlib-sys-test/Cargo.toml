@@ -19,6 +19,7 @@ paste = "1"
 log = "0.4"
 bytes = "1"
 tonic = "0.9"
+atomic = { path="../atomic-rs" }
 base64 = { path="../rust-base64" }
 hashbrown = { path="../hashbrown" }
 parking_lot = { path="../parking_lot" }

@@ -22,22 +22,22 @@ pub const ENCRYPT_KEY_LEN: usize = 64; /* 密钥总长度，根据 client no 进
 const SAVED_NO_COUNT: usize = 1;
 
 /// 4字节包体前导长度字段
-const PKT_LEADING_SIZE: usize = 4;
+const PKT_LEADING_FIELD_SIZE_DEFAULT: usize = 4;
 
 /// 2字节包体前导长度字段(来自客户端)
-const FROM_CLIENT_PKT_LEADING_SIZE: usize = 2;
+const FROM_CLIENT_PKT_LEADING_FIELD_SIZE: usize = 2;
 
 /// 4字节包体前导长度字段 + 2字节协议号
 ///     leading(pkt_full_len)(4) + cmd(2)
-const SERVER_INNER_HEADER_SIZE: usize = PKT_LEADING_SIZE + 2;
+const SERVER_INNER_HEADER_SIZE: usize = PKT_LEADING_FIELD_SIZE_DEFAULT + 2;
 
 /// 4字节包体前导长度字段 + 2字节协议号(发往客户端)
 ///     leading( pkt_full_len)(4) + cmd(2)
-const TO_CLIENT_HEADER_SIZE: usize = PKT_LEADING_SIZE + 2;
+const TO_CLIENT_HEADER_SIZE: usize = PKT_LEADING_FIELD_SIZE_DEFAULT + 2;
 
 /// 2字节包体前导长度字段 + 1字节序号 + 2字节协议号(来自客户端)
 ///     leading(pkt_full_len)(2) + client_no(1) + cmd(2)
-const FROM_CLIENT_HEADER_SIZE: usize = FROM_CLIENT_PKT_LEADING_SIZE + 1 + 2;
+const FROM_CLIENT_HEADER_SIZE: usize = FROM_CLIENT_PKT_LEADING_FIELD_SIZE + 1 + 2;
 
 /// 2字节协议号: WS
 ///     cmd(2)
@@ -85,8 +85,7 @@ pub struct ClientHead {
 #[repr(C)]
 pub struct NetPacket {
     size_type: PacketSizeType,
-    packet_type: PacketType,
-    leading_field_size: usize,
+    leading_field_size: u8,
 
     ///
     body_size: usize, // 包体纯数据长度，不包含包头（包头：包体前导长度字段，协议号，包序号等）
@@ -98,17 +97,16 @@ pub struct NetPacket {
 
 impl NetPacket {
     ///
-    pub fn new(initial_size: usize) -> NetPacket {
+    pub fn new() -> NetPacket {
         NetPacket {
             size_type: PacketSizeType::Small,
-            packet_type: PacketType::Server,
-            leading_field_size: get_packet_leading_field_size(PacketType::Server),
+            leading_field_size: 4, // 缺省占用4字节
 
             body_size: 0,
             cmd: 0,
             client: ClientHead { no: 0 },
 
-            buffer: Buffer::new(initial_size, BUFFER_RESERVED_PREPEND_SIZE),
+            buffer: Buffer::new(BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE),
         }
     }
 
@@ -134,8 +132,9 @@ impl NetPacket {
         self.buffer.write(data, len);
 
         // body size 计数
-        self.body_size = if self.buffer_raw_len() >= self.leading_field_size {
-            self.buffer_raw_len() - self.leading_field_size
+        let leading_size = self.leading_field_size as usize;
+        self.body_size = if self.buffer_raw_len() >= leading_size {
+            self.buffer_raw_len() - leading_size
         } else {
             0
         };
@@ -148,8 +147,9 @@ impl NetPacket {
         self.buffer.write_slice(slice);
 
         // body size 计数
-        self.body_size = if self.buffer_raw_len() >= self.leading_field_size {
-            self.buffer_raw_len() - self.leading_field_size
+        let leading_size = self.leading_field_size() as usize;
+        self.body_size = if self.buffer_raw_len() >= leading_size {
+            self.buffer_raw_len() - leading_size
         } else {
             0
         };
@@ -160,27 +160,16 @@ impl NetPacket {
         self.size_type = size_type;
     }
 
-    ///
-    #[inline(always)]
-    pub fn set_type(&mut self, packet_type: PacketType) {
-        self.packet_type = packet_type;
-        self.leading_field_size = get_packet_leading_field_size(packet_type);
-    }
-
-    /// 读取包体前导长度字段，获得包体长度数值
-    #[inline(always)]
-    pub fn peek_leading_field(&self) -> usize {
-        // 客户端包 2 字节包头，其他都是 4 字节包头
-        match self.packet_type {
-            PacketType::Client => self.buffer.peek_u16() as usize,
-            _ => self.buffer.peek_u32() as usize,
-        }
-    }
-
     /// 包体前导长度字段位数
     #[inline(always)]
-    pub fn leading_field_size(&self) -> usize {
+    pub fn leading_field_size(&self) -> u8 {
         self.leading_field_size
+    }
+
+    ///
+    #[inline(always)]
+    pub fn set_leading_field_size(&mut self, leading_field_size: u8) {
+        self.leading_field_size = leading_field_size;
     }
 
     /// 包体数据缓冲区 剩余可写容量
@@ -225,16 +214,37 @@ impl NetPacket {
         self.client.no = client_no;
     }
 
-    /// 查看 buffer 数据，供给外部使用
-    #[inline(always)]
+    /// 查看 buffer 数据
     pub fn peek(&self) -> &[u8] {
         self.buffer.peek()
+    }
+
+    /// 查看 buffer n 个字节
+    pub fn peek_leading_field(&self) -> usize {
+        // 客户端包 2 字节包头，其他都是 4 字节包头
+        if 2 == self.leading_field_size {
+            self.buffer.peek_u16() as usize
+        } else {
+            self.buffer.peek_u32() as usize
+        }
     }
 
     /// 内部消耗掉 buffer 数据，供给外部使用
     #[inline(always)]
     pub fn consume(&mut self) -> &[u8] {
         self.buffer.next_all()
+    }
+
+    /// 内部消耗掉 buffer 数据，供给外部使用
+    #[inline(always)]
+    pub fn consume_n(&mut self, n: usize) -> &[u8] {
+        self.buffer.next(n)
+    }
+
+    /// 内部消耗掉 buffer 数据，供给外部使用
+    #[inline(always)]
+    pub fn consume_tail_n(&mut self, n: usize) -> &[u8] {
+        self.buffer.shrink(n)
     }
 
     ///
@@ -306,24 +316,17 @@ impl NetPacket {
     /// 包头长度校验
     #[inline(always)]
     pub fn check_packet(&self) -> bool {
-        match self.packet_type {
-            PacketType::Server => self.buffer.length() >= SERVER_INNER_HEADER_SIZE,
-            PacketType::Client | PacketType::Robot => {
-                self.buffer.length() >= FROM_CLIENT_HEADER_SIZE
-            }
-            PacketType::ClientWs | PacketType::RobotWs => {
-                self.buffer.length() >= FROM_CLIENT_HEADER_SIZE_WS
-            }
-        }
+        self.buffer.length() >= self.leading_field_size() as usize
     }
 
     /// Decode header from packet slice and return the data part of packet slice
     pub fn decode_packet(
         &mut self,
+        packet_type: PacketType,
         hd: ConnId,
         encrypt_table: &hashbrown::HashMap<ConnId, RefCell<EncryptData>>,
     ) -> bool {
-        match self.packet_type {
+        match packet_type {
             PacketType::Client => {
                 // 解密
                 let encrypt_opt = encrypt_table.get(&hd);
@@ -425,10 +428,11 @@ impl NetPacket {
     /// Encode header into packet slice and return the full packet slice
     pub fn encode_packet(
         &mut self,
+        packet_type: PacketType,
         hd: ConnId,
         encrypt_table: &hashbrown::HashMap<ConnId, RefCell<EncryptData>>,
     ) -> bool {
-        match self.packet_type {
+        match packet_type {
             PacketType::Robot => {
                 // 加密
                 let encrypt_opt = encrypt_table.get(&hd);
@@ -647,12 +651,13 @@ impl NetPacket {
     }
 }
 
+///
 #[inline(always)]
-pub fn get_packet_leading_field_size(packet_type: PacketType) -> usize {
+pub fn get_leading_field_size(packet_type: PacketType) -> u8 {
     // 客户端包 2 字节包头，其他都是 4 字节包头
     match packet_type {
-        PacketType::Client => 2_usize,
-        _ => 4_usize,
+        PacketType::Client => FROM_CLIENT_PKT_LEADING_FIELD_SIZE as u8,
+        _ => PKT_LEADING_FIELD_SIZE_DEFAULT as u8,
     }
 }
 

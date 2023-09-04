@@ -10,6 +10,8 @@ mod cli_service;
 mod cli_app_startup;
 mod cli_manager;
 
+mod robot;
+
 fn main() {
     // panic hook
     std::panic::set_hook(Box::new(|panic_info| {

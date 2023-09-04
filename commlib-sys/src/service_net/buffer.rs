@@ -224,12 +224,12 @@ impl Buffer {
         }
     }
 
-    /*================================ next ( read and write slice ) ================================*/
+    /*================================ next ================================*/
 
     /// Next returns a slice containing the next n bytes from the buffer, advancing the
     /// buffer as if the bytes had been retured by Read.
     /// If there are fewer than n bytes in the buffer, Next() returns then entire buff.
-    /// The slice is only valid untile the next call to read or write method.
+    /// The slice is only valid until the next call to read or write method.
     pub fn next(&mut self, len: usize) -> &mut [u8] {
         if len < self.length() {
             let slice = unsafe { std::slice::from_raw_parts_mut(self.data_mut(), len) };
@@ -255,6 +255,24 @@ impl Buffer {
         let slice = unsafe { std::slice::from_raw_parts_mut(self.write_ptr(), len) };
         self.set_write_index(self.write_index() + len);
         slice
+    }
+
+    /*================================ shrink ================================*/
+
+    /// Shrink returns a slice containing the tail n bytes from the buffer, rollback the
+    /// buffer as if the bytes had never been write.
+    /// If there are fewer than n bytes in the buffer, Next() returns then entire buff.
+    /// The slice is only valid until the next call to read or write method.
+    pub fn shrink(&mut self, len: usize) -> &mut [u8] {
+        if len < self.length() {
+            let write_index = self.write_index() - len;
+            let write_ptr = unsafe { self.begin_ptr().offset(write_index as isize) };
+            let slice = unsafe { std::slice::from_raw_parts_mut(write_ptr, len) };
+            self.set_write_index(write_index);
+            slice
+        } else {
+            self.next_all()
+        }
     }
 
     /*================================ peek and read ================================*/
@@ -361,7 +379,7 @@ impl Buffer {
     }
 
     /// Peek u32
-    //#[inline(always)]
+    #[inline(always)]
     pub fn peek_u32(&self) -> u32 {
         let len = std::mem::size_of::<u32>();
         let n = 0_u32;

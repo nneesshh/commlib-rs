@@ -2,10 +2,10 @@ use bytes::BytesMut;
 use std::cell::RefCell;
 use std::collections::LinkedList;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::{Base64, ServiceNetRs};
 
+use super::get_leading_field_size;
 use super::take_packet;
 use super::{CmdId, ConnId, EncryptData, NetPacketGuard, PacketType};
 
@@ -18,38 +18,45 @@ pub struct CrossRoutInfo {
 }
 
 ///
-pub type EncryptTokenHander = Box<dyn Fn(&NetProxy, ConnId) + Send + Sync>;
-pub type PacketHander = Box<dyn Fn(&NetProxy, ConnId, CmdId, &[u8]) + Send + Sync>;
+pub type EncryptTokenHander = Box<dyn Fn(&mut NetProxy, ConnId) + Send + Sync>;
+pub type PacketHander = Box<dyn Fn(&mut NetProxy, ConnId, CmdId, &[u8]) + Send + Sync>;
 
 ///
 pub struct NetProxy {
     packet_type: PacketType, // 通信 packet 类型
-    srv_net: Arc<ServiceNetRs>,
+    leading_field_size: u8,  // 包体前导长度字段占用字节数
 
     hd_encrypt_table: hashbrown::HashMap<ConnId, RefCell<EncryptData>>, // 每条连接的包序号和密钥（客户端连接才需要保存）
-    encrypt_token_handler: EncryptTokenHander,
+    encrypt_token_handler: Rc<EncryptTokenHander>,
 
-    default_handler: PacketHander,
+    default_handler: Rc<PacketHander>,
     handlers: hashbrown::HashMap<CmdId, Rc<PacketHander>>,
 }
 
 impl NetProxy {
     ///
-    pub fn new(packet_type: PacketType, srv_net: &Arc<ServiceNetRs>) -> NetProxy {
+    pub fn new(packet_type: PacketType) -> NetProxy {
+        let leading_field_size = get_leading_field_size(packet_type);
+
         NetProxy {
             packet_type,
-            srv_net: srv_net.clone(),
+            leading_field_size,
 
             hd_encrypt_table: hashbrown::HashMap::new(),
-            encrypt_token_handler: Box::new(|_1, _2| {}),
+            encrypt_token_handler: Rc::new(Box::new(|_1, _2| {})),
 
-            default_handler: Box::new(|_1, _2, _3, _4| {}),
+            default_handler: Rc::new(Box::new(|_1, _2, _3, _4| {})),
             handlers: hashbrown::HashMap::new(),
         }
     }
 
     ///
-    pub fn on_incomming_conn(&mut self, hd: ConnId, push_encrypt_token: bool) {
+    pub fn on_incomming_conn(
+        &mut self,
+        srv_net: &ServiceNetRs,
+        hd: ConnId,
+        push_encrypt_token: bool,
+    ) {
         //
         let packet_type = self.packet_type();
         log::info!(
@@ -57,18 +64,19 @@ impl NetProxy {
             hd,
             packet_type
         );
-        hd.set_packet_type(self.srv_net.as_ref(), packet_type);
+        hd.set_packet_type(srv_net, packet_type);
 
         //
         if push_encrypt_token {
             // 发送 EncryptToken
-            (self.encrypt_token_handler)(self, hd);
+            let encrypt_token_handler = self.encrypt_token_handler.clone();
+            (*encrypt_token_handler)(self, hd);
         }
     }
 
     ///
     pub fn on_net_packet(&mut self, hd: ConnId, mut pkt: NetPacketGuard) {
-        if pkt.decode_packet(hd, &mut self.hd_encrypt_table) {
+        if pkt.decode_packet(self.packet_type, hd, &mut self.hd_encrypt_table) {
             let cmd = pkt.cmd();
             if let Some(handler) = self.handlers.get(&cmd) {
                 let h = handler.clone();
@@ -77,7 +85,8 @@ impl NetProxy {
             } else {
                 // no-handler(trans), use default handler
                 let slice = pkt.consume();
-                (self.default_handler)(self, hd, cmd, slice);
+                let default_handler = self.default_handler.clone();
+                (*default_handler)(self, hd, cmd, slice);
             }
         }
     }
@@ -91,13 +100,13 @@ impl NetProxy {
     ///
     pub fn set_encrypt_token_handler<F>(&mut self, f: F)
     where
-        F: Fn(&NetProxy, ConnId) + Send + Sync + 'static,
+        F: Fn(&mut NetProxy, ConnId) + Send + Sync + 'static,
     {
-        self.encrypt_token_handler = Box::new(f);
+        self.encrypt_token_handler = Rc::new(Box::new(f));
     }
 
     ///
-    pub fn set_encrypt_key(&mut self, hd: ConnId, key: Vec<u8>) {
+    pub fn set_encrypt_key(&mut self, hd: ConnId, key: &[u8]) {
         let encrypt_opt = self.hd_encrypt_table.get(&hd);
         if let Some(encrypt) = encrypt_opt {
             let old_encrypt = encrypt;
@@ -110,50 +119,61 @@ impl NetProxy {
         }
 
         //
-        log::info!("set [hd={}] encrypt key {}", hd, Base64::encode(&key));
+        log::info!(
+            "set [hd={}] encrypt key {} len {}",
+            hd,
+            Base64::encode(key),
+            key.len()
+        );
         self.hd_encrypt_table.insert(
             hd,
             RefCell::new(EncryptData {
                 no_list: LinkedList::new(),
-                encrypt_key: unsafe { String::from_utf8_unchecked(key) },
+                encrypt_key: unsafe { String::from_utf8_unchecked(key.to_vec()) },
             }),
         );
     }
 
+    /// cmd handler
+    pub fn set_packet_handler<F>(&mut self, cmd: CmdId, f: F)
+    where
+        F: Fn(&mut NetProxy, ConnId, CmdId, &[u8]) + Send + Sync + 'static,
+    {
+        self.handlers.insert(cmd, Rc::new(Box::new(f)));
+    }
+
     /// 发送接口线程安全
     #[inline(always)]
-    pub fn send_raw(&self, hd: ConnId, cmd: CmdId, slice: &[u8]) {
-        let mut pkt = take_packet(slice.len());
-        pkt.set_type(self.packet_type);
+    pub fn send_raw(&self, srv_net: &ServiceNetRs, hd: ConnId, cmd: CmdId, slice: &[u8]) {
+        let mut pkt = take_packet(slice.len(), self.leading_field_size);
         pkt.set_cmd(cmd);
         pkt.set_body(slice);
 
         //
-        self.send_packet(hd, pkt);
+        self.send_packet(srv_net, hd, pkt);
     }
 
-    //#[inline(always)]
-    pub fn send_proto<M>(&self, hd: ConnId, cmd: CmdId, msg: &M)
+    #[inline(always)]
+    pub fn send_proto<M>(&self, srv_net: &ServiceNetRs, hd: ConnId, cmd: CmdId, msg: &M)
     where
         M: prost::Message,
     {
         //
         let len = msg.encoded_len();
-        let mut pkt = take_packet(len);
-        pkt.set_type(self.packet_type);
+        let mut pkt = take_packet(len, self.leading_field_size);
         pkt.set_cmd(cmd);
         pkt.set_msg(msg);
 
         //
-        self.send_packet(hd, pkt);
+        self.send_packet(srv_net, hd, pkt);
     }
 
     //#[inline(always)]
-    fn send_packet(&self, hd: ConnId, mut pkt: NetPacketGuard) {
-        if pkt.encode_packet(hd, &self.hd_encrypt_table) {
+    fn send_packet(&self, srv_net: &ServiceNetRs, hd: ConnId, mut pkt: NetPacketGuard) {
+        if pkt.encode_packet(self.packet_type, hd, &self.hd_encrypt_table) {
             let slice = pkt.consume();
             log::info!("send: {:?}", slice);
-            hd.send(self.srv_net.as_ref(), slice);
+            hd.send(srv_net, slice);
         } else {
             log::error!("[hd={}] send packet failed!!!", hd);
             return;
