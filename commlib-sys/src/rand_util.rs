@@ -32,9 +32,7 @@ pub fn gen_password(password_len: usize) -> String {
                             abcdefghijklmnopqrstuvwxyz\
                             0123456789)(*&^%$#@!~";
 
-    G_SMALL_RNG.with(|rng| {
-        let rng_mut = unsafe { &mut (*rng.get()) };
-
+    with_tls_mut!(G_SMALL_RNG, rng_mut, {
         let password: String = (0..password_len)
             .map(|_| {
                 let idx = rand_range(rng_mut, 0, CHARSET.len() as i32);
@@ -45,17 +43,10 @@ pub fn gen_password(password_len: usize) -> String {
     })
 }
 
-/*let rng = rand::thread_rng();
-let x = rng.sample(rand::distributions::Uniform::new(10u32, 15));
-// Type annotation requires two types, the type and distribution; the
-// distribution can be inferred.
-let y = rng.sample::<u16, _>(rand::distributions::Uniform::new(10, 15));*/
-
 ///
 #[inline(always)]
 pub fn rand_between(start: i32, end: i32) -> i32 {
-    G_SMALL_RNG.with(|rng| {
-        let rng_mut = unsafe { &mut (*rng.get()) };
+    with_tls_mut!(G_SMALL_RNG, rng_mut, {
         rand_between2(start, end, rng_mut)
     })
 }
@@ -139,8 +130,7 @@ pub fn rand_one_from_hashmap<T>(table: &hashbrown::HashMap<u32, T>) -> &T {
 ///
 #[inline(always)]
 pub fn rand_ratio_(numerator: u32, denominator: u32) -> bool {
-    G_SMALL_RNG.with(|rng| {
-        let rng_mut = unsafe { &mut (*rng.get()) };
+    with_tls_mut!(G_SMALL_RNG, rng_mut, {
         rand_ratio(rng_mut, numerator, denominator)
     })
 }
@@ -148,8 +138,7 @@ pub fn rand_ratio_(numerator: u32, denominator: u32) -> bool {
 ///
 #[inline(always)]
 pub fn rand_shuffle(vec: &mut Vec<i32>) {
-    G_SMALL_RNG.with(|rng| {
-        let rng_mut = unsafe { &mut (*rng.get()) };
+    with_tls_mut!(G_SMALL_RNG, rng_mut, {
         vec.shuffle(rng_mut);
     });
 }

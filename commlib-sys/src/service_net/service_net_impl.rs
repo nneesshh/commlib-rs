@@ -1,4 +1,6 @@
+use lazy_static::lazy_static;
 use parking_lot::RwLock;
+use std::cell::{RefCell, UnsafeCell};
 use std::sync::Arc;
 
 use crate::{Clock, NodeState, PinkySwear, ServiceHandle, ServiceRs};
@@ -9,6 +11,24 @@ use super::{
     TcpListenerId, TcpServer,
 };
 
+thread_local! {
+    static G_SRVNET_LOCAL_DATA: UnsafeCell<ServiceNetLocalData> = UnsafeCell::new(ServiceNetLocalData::new());
+}
+
+struct ServiceNetLocalData {
+    // 每条连接的包序号和密钥
+    pub hd_encrypt_table: hashbrown::HashMap<ConnId, EncryptData>,
+}
+
+impl ServiceNetLocalData {
+    ///
+    pub fn new() -> Self {
+        Self {
+            hd_encrypt_table: hashbrown::HashMap::with_capacity(4096),
+        }
+    }
+}
+
 /// ServiceNetRs
 pub struct ServiceNetRs {
     pub handle: ServiceHandle,
@@ -18,11 +38,8 @@ pub struct ServiceNetRs {
 
     pub tcp_server_vec: RwLock<Vec<TcpServer>>, // TODO: remove lock?
 
-    // 每条连接的包序号和密钥
-    hd_encrypt_table: RwLock<hashbrown::HashMap<ConnId, Arc<EncryptData>>>, // TODO: remove lock?
-
     //
-    inner_network: Arc<MessageIoNetwork>,
+    mi_network: Arc<MessageIoNetwork>,
 }
 
 impl ServiceNetRs {
@@ -36,10 +53,8 @@ impl ServiceNetRs {
             conn_table: RwLock::new(hashbrown::HashMap::with_capacity(4096)),
             tcp_server_vec: RwLock::new(Vec::new()),
 
-            hd_encrypt_table: RwLock::new(hashbrown::HashMap::with_capacity(4096)),
-
             //
-            inner_network: Arc::new(MessageIoNetwork::new()),
+            mi_network: Arc::new(MessageIoNetwork::new()),
         }
     }
 
@@ -165,7 +180,7 @@ pub fn start_network(srv_net: &Arc<ServiceNetRs>) {
     log::info!("service net start network ...");
 
     // inner network run in async mode -- loop in a isolate thread
-    srv_net.inner_network.start_network_async(srv_net);
+    srv_net.mi_network.start_network_async(srv_net);
 }
 
 /// Stop network event loop over service net
@@ -173,7 +188,7 @@ pub fn stop_network(srv_net: &Arc<ServiceNetRs>) {
     log::info!("service net stop network ...");
 
     // inner server stop
-    srv_net.inner_network.stop();
+    srv_net.mi_network.stop();
 }
 
 /// Listen on [ip:port] over service net
@@ -202,8 +217,7 @@ where
     let cb = move || {
         //
         let addr = std::format!("{}:{}", ip, port);
-        let mut tcp_server =
-            TcpServer::new(&srv2, addr.as_str(), &srv_net2.inner_network, &srv_net2);
+        let mut tcp_server = TcpServer::new(&srv2, addr.as_str(), &srv_net2.mi_network, &srv_net2);
 
         //
         tcp_server.set_connection_callback(conn_fn);
@@ -252,7 +266,7 @@ where
         srv,
         name,
         raddr,
-        &srv_net.inner_network,
+        &srv_net.mi_network,
         conn_fn,
         pkt_fn,
         close_fn,
@@ -279,6 +293,7 @@ pub fn handle_message_event(
         PacketResult::Ready(pkt_list) => {
             // pkt trigger pkt_fn
             for pkt in pkt_list {
+                //if pkt.decode_packet(conn.packet_type, conn.hd, &mut srv_net.hd_encrypt_table) {
                 conn.run_pkt_fn(pkt);
             }
         }
@@ -304,4 +319,22 @@ pub fn handle_close_conn_event(srv_net: &ServiceNetRs, conn: &Arc<TcpConn>) {
 
     // trigger close_fn
     conn.run_close_fn();
+}
+
+/// Add encrypt data
+#[inline(always)]
+pub fn insert_encrypt_data(hd: ConnId, encrypt_data: EncryptData) {
+    with_tls_mut!(G_SRVNET_LOCAL_DATA, g, {
+        g.hd_encrypt_table.insert(hd, encrypt_data);
+        log::info!("[hd={}] ++++++++ service net insert_encrypt_data", hd);
+    });
+}
+
+/// Remove encrypt data
+#[inline(always)]
+pub fn remove_encrypt_data(hd: ConnId) -> Option<EncryptData> {
+    with_tls_mut!(G_SRVNET_LOCAL_DATA, g, {
+        log::info!("[hd={}] -------- service net remove_encrypt_data", hd);
+        g.hd_encrypt_table.remove(&hd)
+    })
 }

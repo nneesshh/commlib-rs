@@ -1,5 +1,9 @@
 //! Commlib: event, log, service, ...
 
+///
+#[macro_use]
+pub mod macros;
+
 include!("../ffi/common.rs");
 include!("../ffi/signal.rs");
 include!("../ffi/net.rs");
