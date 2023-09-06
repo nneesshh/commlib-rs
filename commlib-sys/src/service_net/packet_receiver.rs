@@ -46,12 +46,12 @@ impl PacketReceiver {
         let leading_field_size = buffer_pkt.leading_field_size();
 
         // debug only
-        {
+        /*{
             let input = buffer_pkt.peek();
             log::info!("input: {:?}", input);
             let input_hex = hex::encode(input);
             log::info!("input_hex: {}", input_hex);
-        }
+        }*/
 
         // option trick 以便 pkt 移交
         let mut input_pkt_opt = Some(buffer_pkt);

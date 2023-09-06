@@ -1,9 +1,4 @@
 use bytemuck::NoUninit;
-use std::net::SocketAddr;
-
-use crate::ServiceNetRs;
-
-use super::PacketType;
 
 /// Connection id
 #[derive(Copy, Clone, PartialEq, Eq, std::hash::Hash, NoUninit)]
@@ -13,47 +8,7 @@ pub struct ConnId {
     // TODO: add self as payload to EndPoint
 }
 
-impl ConnId {
-    ///
-    #[inline(always)]
-    pub fn send(&self, srv_net: &ServiceNetRs, data: &[u8]) {
-        let hd = *self;
-
-        // 在当前线程中加 read 锁取出 conn，以便尽快发送
-        let conn_opt = srv_net.get_conn(hd);
-        if let Some(conn) = conn_opt {
-            conn.send(data);
-        } else {
-            log::error!("[hd={}] send failed!!!", hd);
-        }
-    }
-
-    ///
-    pub fn to_socket_addr(&self, srv_net: &ServiceNetRs) -> Option<SocketAddr> {
-        let hd = *self;
-
-        // 在当前线程中加 read 锁取出 conn，这样方便返回数值
-        let conn_opt = srv_net.get_conn(hd);
-        if let Some(conn) = conn_opt {
-            Some(conn.endpoint.addr())
-        } else {
-            None
-        }
-    }
-
-    ///
-    pub fn set_packet_type(&self, srv_net: &ServiceNetRs, packet_type: PacketType) {
-        let hd = *self;
-
-        // 在当前线程中加 read 锁取出 conn
-        let conn_opt = srv_net.get_conn(hd);
-        if let Some(conn) = conn_opt {
-            conn.set_packet_type(packet_type);
-        } else {
-            log::error!("[hd={}] change pakcet type failed!!!", hd);
-        }
-    }
-}
+impl ConnId {}
 
 impl From<usize> for ConnId {
     #[inline(always)]

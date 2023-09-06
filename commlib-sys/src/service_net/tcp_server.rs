@@ -40,7 +40,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use super::MessageIoNetwork;
-use super::{ConnId, NetPacketGuard, ServerStatus, TcpListenerId};
+use super::{ConnId, NetPacketGuard, ServerStatus, TcpConn, TcpListenerId};
 
 use crate::{ServiceNetRs, ServiceRs};
 
@@ -64,21 +64,27 @@ pub struct TcpServer {
     pub srv_net: Arc<ServiceNetRs>,
 
     //
-    pub conn_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
-    pub pkt_fn: Arc<dyn Fn(ConnId, NetPacketGuard) + Send + Sync>,
+    pub conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
+    pub pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
     pub close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
 }
 
 impl TcpServer {
     ///
-    pub fn new<T>(
+    pub fn new<T, C, P, S>(
         srv: &Arc<T>,
         addr: &str,
+        conn_fn: C,
+        pkt_fn: P,
+        close_fn: S,
         mi_network: &Arc<MessageIoNetwork>,
         srv_net: &Arc<ServiceNetRs>,
     ) -> TcpServer
     where
         T: ServiceRs + 'static,
+        C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
+        P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+        S: Fn(ConnId) + Send + Sync + 'static,
     {
         Self {
             start: std::time::Instant::now(),
@@ -95,9 +101,9 @@ impl TcpServer {
             mi_network: mi_network.clone(),
             srv_net: srv_net.clone(),
 
-            conn_fn: Arc::new(|_hd| {}),
-            pkt_fn: Arc::new(|_hd, _pkt| {}),
-            close_fn: Arc::new(|_hd| {}),
+            conn_fn: Arc::new(conn_fn),
+            pkt_fn: Arc::new(pkt_fn),
+            close_fn: Arc::new(close_fn),
         }
     }
 
@@ -141,7 +147,7 @@ impl TcpServer {
     ///
     pub fn set_connection_callback<F>(&mut self, cb: F)
     where
-        F: Fn(ConnId) + Send + Sync + 'static,
+        F: Fn(Arc<TcpConn>) + Send + Sync + 'static,
     {
         self.conn_fn = Arc::new(cb);
     }
@@ -149,7 +155,7 @@ impl TcpServer {
     ///
     pub fn set_message_callback<F>(&mut self, cb: F)
     where
-        F: Fn(ConnId, NetPacketGuard) + Send + Sync + 'static,
+        F: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
     {
         self.pkt_fn = Arc::new(cb);
     }

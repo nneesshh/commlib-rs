@@ -12,6 +12,7 @@
 use std::sync::Arc;
 
 use app_helper::Startup;
+use commlib_sys::service_net::TcpConn;
 use commlib_sys::{connect_to_tcp_server, G_SERVICE_NET};
 use commlib_sys::{ConnId, NetPacketGuard, ServiceRs};
 
@@ -71,7 +72,8 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
         std::format!("{}:{}", cfg.remote.addr, cfg.remote.port)
     });
 
-    let conn_fn = |hd: ConnId| {
+    let conn_fn = |conn: Arc<TcpConn>| {
+        let hd = conn.hd;
         log::info!("[hd={}] conn_fn", hd);
 
         //
@@ -81,21 +83,27 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
             let push_encrypt_token = false;
             cli_manager
                 .proxy
-                .on_incomming_conn(G_SERVICE_NET.as_ref(), hd, push_encrypt_token);
+                .on_incomming_conn(conn.as_ref(), push_encrypt_token);
         });
     };
 
-    let pkt_fn = |hd: ConnId, pkt: NetPacketGuard| {
+    let pkt_fn = |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
+        let hd = conn.hd;
         log::info!("[hd={}] msg_fn", hd);
 
         G_MAIN.with(|g| {
             let mut main_manager = g.borrow_mut();
-            main_manager.proxy.on_net_packet(hd, pkt);
+            main_manager.proxy.on_net_packet(conn.as_ref(), pkt);
         });
     };
 
     let close_fn = |hd: ConnId| {
         log::info!("[hd={}] close_fn", hd);
+
+        G_MAIN.with(|g| {
+            let mut main_manager = g.borrow_mut();
+            main_manager.proxy.on_hd_lost(hd);
+        });
     };
 
     //

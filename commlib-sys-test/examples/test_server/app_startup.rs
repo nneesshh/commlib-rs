@@ -16,6 +16,7 @@ use commlib_sys::G_SERVICE_NET;
 use commlib_sys::{ConnId, NetPacketGuard, ServiceRs};
 
 use app_helper::Startup;
+use commlib_sys::service_net::TcpConn;
 
 use crate::test_conf::G_TEST_CONF;
 use crate::test_manager::G_MAIN;
@@ -74,7 +75,8 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
     // TODO: let thread_num: u32 = 1;
     // TODO: let connection_limit: u32 = 0; // 0=no limit
 
-    let conn_fn = |hd: ConnId| {
+    let conn_fn = |conn: Arc<TcpConn>| {
+        let hd = conn.hd;
         log::info!("[hd={}] conn_fn", hd);
 
         //
@@ -82,25 +84,29 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
             let mut main_manager = g.borrow_mut();
 
             let push_encrypt_token = true; // 是否推送 encrypt token
-            main_manager.c2s_proxy.on_incomming_conn(
-                G_SERVICE_NET.as_ref(),
-                hd,
-                push_encrypt_token,
-            );
+            main_manager
+                .c2s_proxy
+                .on_incomming_conn(conn.as_ref(), push_encrypt_token);
         });
     };
 
-    let pkt_fn = |hd: ConnId, pkt: NetPacketGuard| {
+    let pkt_fn = |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
+        let hd = conn.hd;
         log::info!("[hd={}] msg_fn", hd);
 
         G_MAIN.with(|g| {
             let mut main_manager = g.borrow_mut();
-            main_manager.c2s_proxy.on_net_packet(hd, pkt);
+            main_manager.c2s_proxy.on_net_packet(conn.as_ref(), pkt);
         });
     };
 
     let close_fn = |hd: ConnId| {
         log::info!("[hd={}] close_fn", hd);
+
+        G_MAIN.with(|g| {
+            let mut main_manager = g.borrow_mut();
+            main_manager.c2s_proxy.on_hd_lost(hd);
+        });
     };
 
     //

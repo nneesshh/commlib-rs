@@ -3,10 +3,10 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
-use crate::ServiceRs;
-
-use super::net_packet::BUFFER_INITIAL_SIZE;
-use super::{get_leading_field_size, handle_close_conn_event, handle_message_event, take_packet};
+use super::take_packet;
+use super::tcp_client_manager::tcp_client_make_new_conn;
+use super::tcp_conn_manager::{handle_close_conn_event, handle_message_event};
+use super::tcp_server_manager::tcp_server_make_new_conn;
 use super::{ConnId, OsSocketAddr, PacketType, ServiceNetRs, TcpClient, TcpListenerId, TcpServer};
 
 ///
@@ -86,7 +86,14 @@ extern "C" fn on_accept_cb(
     let endpoint = Endpoint::new(id, sock_addr);
 
     // make new conn
-    listener_id.make_new_conn(PacketType::Server, hd, endpoint, netctrl, srv_net);
+    tcp_server_make_new_conn(
+        srv_net,
+        listener_id,
+        PacketType::Server,
+        hd,
+        endpoint,
+        netctrl,
+    );
 }
 
 extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_addr: OsSocketAddr) {
@@ -97,7 +104,7 @@ extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_a
     let endpoint = Endpoint::new(id, sock_addr);
 
     // make new conn
-    cli.make_new_conn(PacketType::Server, hd, endpoint);
+    tcp_client_make_new_conn(cli, PacketType::Server, hd, endpoint);
 }
 
 extern "C" fn on_message_cb(
@@ -112,35 +119,13 @@ extern "C" fn on_message_cb(
     let mut buffer_pkt = take_packet(input_len, 0);
     buffer_pkt.append(input_data, input_len);
 
-    // 在 srv_net 中运行
-    let srv_net2 = srv_net.clone();
-    let cb = move || {
-        let conn_opt = srv_net2.get_conn(hd);
-        if let Some(conn) = conn_opt {
-            let leading_field_size = get_leading_field_size(conn.packet_type());
-            buffer_pkt.set_leading_field_size(leading_field_size);
-            handle_message_event(srv_net2.as_ref(), &conn, buffer_pkt);
-        } else {
-            //
-            log::error!("[on_message_cb][hd={}] conn not found!!!", hd);
-        }
-    };
-    srv_net.run_in_service(Box::new(cb));
+    //
+    handle_message_event(srv_net, hd, buffer_pkt);
 }
 
 extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {
     let srv_net = unsafe { &*srv_net_ptr };
 
-    // 在 srv_net 中运行
-    let srv_net2 = srv_net.clone();
-    let cb = move || {
-        let conn_opt = srv_net2.get_conn(hd);
-        if let Some(conn) = conn_opt {
-            handle_close_conn_event(srv_net2.as_ref(), &conn);
-        } else {
-            //
-            log::error!("[on_close_cb][hd={}] conn not found!!!", hd);
-        }
-    };
-    srv_net.run_in_service(Box::new(cb));
+    //
+    handle_close_conn_event(srv_net, hd);
 }

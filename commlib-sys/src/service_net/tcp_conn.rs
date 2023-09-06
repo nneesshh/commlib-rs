@@ -13,7 +13,6 @@ use super::{ConnId, NetPacketGuard, PacketReceiver, PacketType, ServiceNetRs};
 /// Tcp connection: all fields are public for easy construct
 pub struct TcpConn {
     //
-    pub packet_type: Atomic<PacketType>,
     pub hd: ConnId,
 
     //
@@ -21,6 +20,7 @@ pub struct TcpConn {
     pub netctrl: NodeHandler<()>,
 
     //
+    pub packet_type: Atomic<PacketType>,
     pub closed: Atomic<bool>,
 
     //
@@ -28,8 +28,8 @@ pub struct TcpConn {
     pub srv_net: Arc<ServiceNetRs>,
 
     //
-    pub conn_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
-    pub pkt_fn: Arc<dyn Fn(ConnId, NetPacketGuard) + Send + Sync>,
+    pub conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
+    pub pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
     pub close_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
 
     //
@@ -58,47 +58,6 @@ impl TcpConn {
         self.netctrl.network().send(self.endpoint, data);
     }
 
-    /// call conn_fn
-    pub fn run_conn_fn(&self) {
-        let hd = self.hd;
-        let f = self.conn_fn.clone();
-
-        //
-        self.srv.run_in_service(Box::new(move || {
-            (f)(hd);
-        }));
-    }
-
-    /// call pkt_fn
-    pub fn run_pkt_fn(&self, pkt: NetPacketGuard) {
-        let hd = self.hd;
-        let f = self.pkt_fn.clone();
-
-        //
-        self.srv.run_in_service(Box::new(move || {
-            (f)(hd, pkt);
-        }));
-    }
-
-    /// call close_fn
-    pub fn run_close_fn(&self) {
-        let hd = self.hd;
-
-        let f: Arc<dyn Fn(ConnId) + Send + Sync>;
-        {
-            let close_fn = self.close_fn.read();
-            f = (*close_fn).clone();
-        }
-
-        // 标记关闭
-        self.closed.store(true, Ordering::Relaxed);
-
-        //
-        self.srv.run_in_service(Box::new(move || {
-            (f)(hd);
-        }));
-    }
-
     ///
     #[inline(always)]
     pub fn packet_type(&self) -> PacketType {
@@ -109,5 +68,17 @@ impl TcpConn {
     #[inline(always)]
     pub fn set_packet_type(&self, packet_type: PacketType) {
         self.packet_type.store(packet_type, Ordering::Relaxed);
+    }
+
+    ///
+    #[inline(always)]
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
+    }
+
+    ///
+    #[inline(always)]
+    pub fn set_closed(&self, is_closed: bool) {
+        self.closed.store(is_closed, Ordering::Relaxed);
     }
 }

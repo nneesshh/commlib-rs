@@ -93,6 +93,7 @@ impl ServiceHandle {
     }
 
     ///
+    #[inline(always)]
     pub fn set_xml_config(&self, xml_config: XmlReader) {
         let mut xml_config_mut = self.xml_config.write();
         (*xml_config_mut) = xml_config;
@@ -105,6 +106,7 @@ impl ServiceHandle {
     }
 
     ///
+    #[inline(always)]
     pub fn set_tid(&self, tid: u64) {
         self.tid.store(tid, Ordering::Relaxed);
     }
@@ -112,11 +114,7 @@ impl ServiceHandle {
     /// 在 service 线程中执行回调任务
     #[inline(always)]
     pub fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
-        if self.is_in_service_thread() {
-            cb();
-        } else {
-            self.tx.send(cb).unwrap();
-        }
+        self.tx.send(cb).unwrap();
     }
 
     /// 当前代码是否运行于 service 线程中
@@ -285,8 +283,8 @@ fn run_service(srv: &'static dyn ServiceRs, service_name: &str) {
             while count > 0 && !handle.rx.is_empty() {
                 match handle.rx.try_recv() {
                     Ok(cb) => {
-                        log::info!("Dequeued item ID={}", handle.id);
-                        println!("Dequeued item ID={}", handle.id);
+                        /*log::info!("Dequeued item ID={}", handle.id);
+                        println!("Dequeued item ID={}", handle.id);*/
                         cb();
                         count -= 1;
                     }

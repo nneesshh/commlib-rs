@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use commlib_sys::service_net::EncryptData;
+use commlib_sys::service_net::TcpConn;
 use commlib_sys::{CmdId, ConnId, NetProxy, NodeState, PacketType, ServiceRs};
 use commlib_sys::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
@@ -41,7 +41,7 @@ impl CliManager {
     pub fn init(&mut self, srv: &Arc<CliService>) -> bool {
         let handle = srv.get_handle();
 
-        //
+        // 消息处理
         self.proxy.set_packet_handler(
             proto::EnumMsgType::EncryptToken as CmdId,
             Self::handle_encrypt_token,
@@ -67,10 +67,11 @@ impl CliManager {
     }
 
     /// 消息处理: encrypt token
-    pub fn handle_encrypt_token(proxy: &mut NetProxy, hd: ConnId, cmd: CmdId, slice: &[u8]) {
+    pub fn handle_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn, cmd: CmdId, slice: &[u8]) {
         // 消息包加密 key
         let msg = proto::S2cEncryptToken::decode(slice).unwrap();
 
+        let hd = conn.hd;
         let key = msg.token();
         proxy.set_encrypt_key(hd, key);
 
@@ -80,8 +81,8 @@ impl CliManager {
             rbt.borrow_mut().encrypt_key.extend_from_slice(key);
 
             // echo
-            proxy.send_raw(G_SERVICE_NET.as_ref(), hd, cmd, slice);
-            proxy.send_raw(G_SERVICE_NET.as_ref(), hd, cmd, slice);
+            proxy.send_raw(conn, cmd, slice);
+            proxy.send_raw(conn, cmd, slice);
         });
     }
 }

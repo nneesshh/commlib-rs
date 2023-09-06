@@ -57,9 +57,7 @@ pub use service_signal::ServiceSignalRs;
 
 ///
 pub mod service_net;
-pub use service_net::{
-    connect_to_tcp_server, create_tcp_client, listen_tcp_addr, start_network, stop_network,
-};
+pub use service_net::{connect_to_tcp_server, listen_tcp_addr, start_network, stop_network};
 pub use service_net::{
     CmdId, ConnId, NetPacket, NetPacketGuard, NetProxy, PacketType, ServiceNetRs, TcpClient,
     TcpHandler, TcpListenerId, TcpServer,
