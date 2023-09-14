@@ -21,8 +21,6 @@ cpplibs/.vs/
 
 cpplibs/obj/
 
-cpplibs/libs/win/Release/
-
 commlib-test/log/
 
 commlib/.vs/
