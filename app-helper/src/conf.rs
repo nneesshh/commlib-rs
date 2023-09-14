@@ -1,33 +1,9 @@
 //! Commlib: Conf
-use commlib_sys::*;
+
+use commlib::split_string_to_set;
+use commlib::{Base64, GroupId, NodeId, XmlReader, ZoneId};
 
 pub const TEST_NODE: NodeId = 999;
-
-/// use thread local unsafe cell for conf -- mut
-#[macro_export]
-macro_rules! with_conf_mut {
-    ($t:path, $c:ident, $body:block) => {
-        $t.with(|v| {
-            paste::paste! {
-                let $c = unsafe { &mut *v.get() };
-                $body
-            }
-        })
-    };
-}
-
-/// use thread local unsafe cell for conf
-#[macro_export]
-macro_rules! with_conf {
-    ($t:path, $c:ident, $body:block) => {
-        $t.with(|v| {
-            paste::paste! {
-                let $c = unsafe { &*v.get() };
-                $body
-            }
-        })
-    };
-}
 
 /// 获取当前执行环境，正式环境目录结构
 /// dragon-game/
@@ -92,6 +68,7 @@ pub struct Conf {
     pub appname: String,
     pub etcfile: std::ffi::OsString, // 配置文件名称
     pub env_: String,                // 当前的执行环境
+    pub encrypt_token: Vec<u8>,      // 协议包加密密钥
 
     pub log: Log,
     pub url: WebUrl,
@@ -122,6 +99,7 @@ impl Conf {
             appname: "server".to_owned(),
             etcfile: std::ffi::OsString::default(),
             env_: "dev".to_owned(),
+            encrypt_token: Vec::new(),
 
             log: Log {
                 level: spdlog::Level::Debug as u32,
@@ -203,8 +181,6 @@ impl Conf {
 
         // 配置文件位置，先从参数获取，再从默认位置
         let etcfile = matches.get_one::<String>("config").unwrap().to_owned();
-
-        //self.etcfile
         if !etcfile.is_empty() {
             self.etcfile = std::ffi::OsString::from(etcfile.trim());
         } else {
@@ -338,6 +314,12 @@ impl Conf {
 
         //
         self.limit_players = config_xml.get::<u32>(vec!["limit_players"], self.limit_players);
+
+        //
+        let token_str = config_xml.get::<String>(vec!["encrypt_token"], "".to_owned());
+        if !token_str.is_empty() {
+            self.encrypt_token = Base64::decode(token_str).unwrap();
+        }
 
         //
         if srv_name.is_empty() {

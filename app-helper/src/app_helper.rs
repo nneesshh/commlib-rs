@@ -1,11 +1,16 @@
-use commlib_sys::*;
+use std::sync::Arc;
 
-use crate::with_conf_mut;
+use commlib::{init_logger, proc_service_ready, start_network, start_service};
+use commlib::{NodeState, ServiceRs};
+use commlib::{G_EXIT_CV, G_SERVICE_NET, G_SERVICE_SIGNAL};
 
-/// App: 应用框架RwLock<
+use crate::conf::Conf;
+use crate::G_CONF;
+
+/// App: 应用框架
 pub struct App {
     app_name: String,
-    services: Vec<ServiceWrapper>,
+    services: Vec<Arc<dyn ServiceRs + 'static>>,
 }
 
 impl App {
@@ -19,16 +24,16 @@ impl App {
 
         // attach default services -- signal
         app.attach(
-            || G_SERVICE_SIGNAL.as_ref(),
-            || {
+            || G_SERVICE_SIGNAL.clone(),
+            |_conf| {
                 // do nothing
             },
         );
 
         // attach default services -- net
         app.attach(
-            || G_SERVICE_NET.as_ref(),
-            || {
+            || G_SERVICE_NET.clone(),
+            |_conf| {
                 start_network(&G_SERVICE_NET);
             },
         );
@@ -37,10 +42,11 @@ impl App {
     }
 
     /// App init
-    pub fn init<C, I>(&mut self, creator: C, initializer: I)
+    pub fn init<T, C, I>(&mut self, creator: C, initializer: I)
     where
-        C: FnOnce() -> &'static dyn ServiceRs,
-        I: FnOnce() + Send + Sync + 'static,
+        T: ServiceRs + 'static,
+        C: FnOnce() -> Arc<T>,
+        I: FnOnce(&Arc<Conf>) + Send + Sync + 'static,
     {
         log::info!("App({}) startup ...", self.app_name);
         self.attach(creator, initializer);
@@ -56,23 +62,23 @@ impl App {
             cvar.wait(&mut quit);
 
             let mut exitflag = true;
-            for w in &self.services {
-                let w_srv_handle = w.srv.get_handle();
+            for srv in &self.services {
+                let srv_handle = srv.get_handle();
                 log::info!(
                     "App:run() wait close .. App={} ID={} state={:?}",
                     self.app_name,
-                    w_srv_handle.id(),
-                    w_srv_handle.state()
+                    srv_handle.id(),
+                    srv_handle.state()
                 );
-                if NodeState::Closed as u32 != w_srv_handle.state() as u32 {
+                if NodeState::Closed as u32 != srv_handle.state() as u32 {
                     exitflag = false;
                     break;
                 }
             }
 
             if exitflag {
-                for w in &self.services {
-                    w.srv.join();
+                for srv in &self.services {
+                    srv.join();
                 }
                 break;
             }
@@ -81,63 +87,69 @@ impl App {
 
     fn config(&mut self, arg_vec: &Vec<std::ffi::OsString>, srv_name: &str) {
         // init G_CONF
-        with_conf_mut!(crate::G_CONF, cfg_mut, {
-            cfg_mut.init(&arg_vec, srv_name);
-        });
+        let mut conf_mut = Conf::new();
+        conf_mut.init(&arg_vec, srv_name);
+        G_CONF.store(Arc::new(conf_mut));
 
         // init logger
         let log_path = std::path::PathBuf::from("auto-legend");
         init_logger(&log_path, "testlog", spdlog::Level::Info as u16, true);
     }
 
-    fn add_service(services: &mut Vec<ServiceWrapper>, srv: &'static dyn ServiceRs) {
+    fn add_service<T>(services: &mut Vec<Arc<dyn ServiceRs>>, service: &Arc<T>)
+    where
+        T: ServiceRs + 'static,
+    {
         //
-        let id = srv.get_handle().id();
-        let name = srv.name();
+        let id = service.get_handle().id();
+        let name = service.name();
 
         // 是否已经存在相同 id 的 service ?
-        for w in &*services {
-            let w_srv_handle = w.srv.get_handle();
-            if w_srv_handle.id() == id {
+        for srv in &*services {
+            let srv_handle = srv.get_handle();
+            if srv_handle.id() == id {
                 log::error!("App::add_service({}) failed!!! ID={}", name, id);
                 return;
             }
         }
 
         //
-        services.push(ServiceWrapper { srv });
+        services.push(service.clone());
         log::info!("App::add_service({}) ok, ID={}", name, id);
     }
 
-    fn attach<C, I>(&mut self, creator: C, initializer: I) -> &'static dyn ServiceRs
+    fn attach<T, C, I>(&mut self, creator: C, initializer: I) -> Arc<T>
     where
-        C: FnOnce() -> &'static dyn ServiceRs,
-        I: FnOnce() + Send + Sync + 'static,
+        T: ServiceRs + 'static,
+        C: FnOnce() -> Arc<T>,
+        I: FnOnce(&Arc<Conf>) + Send + Sync + 'static,
     {
         let srv = creator();
 
         // attach xml node to custom service
-        crate::with_conf!(crate::G_CONF, cfg, {
-            let node_id = cfg.node_id;
-            if let Some(xml_node) = cfg.get_xml_node(node_id) {
-                let srv_type = xml_node.get_u64(vec!["srv"], 0);
+        let g_conf = G_CONF.load();
+        let node_id = g_conf.node_id;
+        if let Some(xml_node) = g_conf.get_xml_node(node_id) {
+            let srv_type = xml_node.get_u64(vec!["srv"], 0);
 
-                // set xml config
-                srv.get_handle().set_xml_config(xml_node.clone());
-            } else {
-                log::error!("node {} xml config not found!!!", node_id);
-            }
-        });
+            // set xml config
+            srv.get_handle().set_xml_config(xml_node.clone());
+        } else {
+            log::error!("node {} xml config not found!!!", node_id);
+        }
 
         //
         srv.conf();
 
         //
-        let ready_pair = start_service(srv, srv.name(), initializer);
-        proc_service_ready(srv, ready_pair);
+        let g_conf2 = g_conf.clone();
+        let ready_pair = start_service(&srv, srv.name(), move || {
+            initializer(&g_conf2);
+        });
+        proc_service_ready(srv.as_ref(), ready_pair);
 
-        // add server to app
-        Self::add_service(&mut self.services, srv);
+        // add service (nudge the compiler to infer the correct type)
+        Self::add_service(&mut self.services, &srv);
 
         //
         srv

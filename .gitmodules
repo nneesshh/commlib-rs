@@ -49,3 +49,6 @@
 [submodule "rust-hex"]
 	path = rust-hex
 	url = https://github.com/nneesshh/rust-hex
+[submodule "rust-openssl"]
+	path = rust-openssl
+	url = https://github.com/nneesshh/rust-openssl

@@ -9,7 +9,7 @@ pub mod ffi_common {
 ///
 #[repr(C)]
 pub struct ServiceWrapper {
-    pub srv: &'static dyn ServiceRs,
+    pub srv: String,
 }
 
 unsafe impl cxx::ExternType for ServiceWrapper {

@@ -12,7 +12,7 @@
 //! |    1~32,768    |1~2,147,487,648 |
 //! +----------------+----------------+
 
-use commlib_sys::{PlayerId, ZoneId};
+use commlib::{PlayerId, ZoneId};
 
 ///
 pub const PID_UID_BITS: i32 = 31_i32;

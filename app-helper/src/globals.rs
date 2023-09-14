@@ -1,13 +1,7 @@
-use parking_lot::Mutex;
+use arc_swap::ArcSwap;
 
-use std::cell::UnsafeCell;
-use std::sync::atomic::AtomicBool;
+use crate::conf::Conf;
 
-#[allow(dead_code)]
-static INIT: AtomicBool = AtomicBool::new(false);
-#[allow(dead_code)]
-static INIT_LOCK: Mutex<()> = Mutex::new(());
-
-thread_local! {
-    pub static G_CONF: UnsafeCell<crate::conf::Conf> = UnsafeCell::new(crate::conf::Conf::new());
+lazy_static::lazy_static! {
+    pub static ref G_CONF: ArcSwap<Conf> = ArcSwap::from_pointee(Conf::new());
 }
