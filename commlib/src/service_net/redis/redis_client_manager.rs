@@ -6,12 +6,12 @@ use uuid::Uuid;
 
 use message_io::network::Endpoint;
 
-use crate::{PinkySwear, ServiceNetRs, ServiceRs};
+use crate::{ClientStatus, ConnId, PinkySwear, RedisClient, ServiceNetRs, ServiceRs, TcpConn};
+use crate::{NetPacketGuard, PacketType};
 
-use super::super::create_redis_client;
-use super::super::tcp_conn_manager::{insert_connection, run_conn_fn};
-use super::super::{ClientStatus, ConnId, RedisClient, TcpConn};
-use super::super::{NetPacketGuard, PacketResult, PacketType, RedisReplyReceiver};
+use crate::service_net::create_redis_client;
+use crate::service_net::tcp_conn_manager::insert_connection;
+use crate::service_net::ReplyBuilder;
 
 thread_local! {
      static G_REDIS_CLIENT_STORAGE: UnsafeCell<RedisClientStorage> = UnsafeCell::new(RedisClientStorage::new());
@@ -83,7 +83,7 @@ where
         let cli3 = cli.clone();
         let pkt_fn = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
             let slice = pkt.peek();
-            cli3.on_receive_message(conn, slice);
+            //cli3.on_receive_reply(conn, slice);
         };
 
         let cli4 = cli.clone();
@@ -158,13 +158,13 @@ pub fn redis_client_make_new_conn(
             redis_client_check_auto_reconnect(&srv_net2, hd, cli_id);
         });
 
-        // use redis reply receiver to handle buffer pkt
-        let reply_receiver = RedisReplyReceiver::new();
-        let read_fn = Box::new(move |buffer_pkt: NetPacketGuard| -> PacketResult {
-            reply_receiver.read(buffer_pkt)
+        // use redis reply builder to handle input buffer
+        let srv_net3 = srv_net.clone();
+        let reply_builder = ReplyBuilder::new();
+        let read_fn = Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
+            reply_builder.build(srv_net3.as_ref(), conn, input_buffer);
         });
 
-        let srv_net3 = srv_net.clone();
         let conn = Arc::new(TcpConn {
             //
             hd,
@@ -191,7 +191,7 @@ pub fn redis_client_make_new_conn(
         });
 
         // add conn
-        insert_connection(srv_net3.as_ref(), conn.hd, &conn.clone());
+        insert_connection(srv_net.as_ref(), conn.hd, &conn.clone());
 
         // update inner hd for RedisClient
         with_tls_mut!(G_REDIS_CLIENT_STORAGE, g, {
@@ -207,7 +207,11 @@ pub fn redis_client_make_new_conn(
         });
 
         // trigger conn_fn
-        run_conn_fn(&conn);
+        let f = conn.conn_fn.clone();
+        let srv = conn.srv.clone();
+        srv.run_in_service(Box::new(move || {
+            (f)(conn);
+        }));
     };
     cli.srv_net().run_in_service(Box::new(func));
 }

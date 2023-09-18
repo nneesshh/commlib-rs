@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use crate::{ServiceNetRs, ServiceRs};
 
-use super::get_leading_field_size;
+use super::NetPacketGuard;
 use super::{ConnId, TcpConn};
-use super::{NetPacketGuard, PacketResult};
 
 thread_local! {
     static G_TCP_CONN_STORAGE: UnsafeCell<TcpConnStorage> = UnsafeCell::new(TcpConnStorage::new());
@@ -71,52 +70,22 @@ pub fn disconnect_connection<F>(
 }
 
 ///
-pub fn handle_message_event(
+#[inline(always)]
+pub fn handle_raw_data_event(
     srv_net: &Arc<ServiceNetRs>,
     hd: ConnId,
-    mut buffer_pkt: NetPacketGuard,
+    input_buffer: NetPacketGuard,
 ) {
     // 在 srv_net 中运行
     let srv_net2 = srv_net.clone();
     let func = move || {
-        with_tls_mut!(G_TCP_CONN_STORAGE, g, {
-            if let Some(conn) = g.conn_table.get(&hd) {
-                let leading_field_size = get_leading_field_size(conn.packet_type());
-                buffer_pkt.set_leading_field_size(leading_field_size);
-
-                // conn 处理 input
-                match conn.handle_read(buffer_pkt) {
-                    PacketResult::Ready(pkt_list) => {
-                        for pkt in pkt_list {
-                            // trigger pkt_fn
-                            run_pkt_fn(&conn, pkt);
-                        }
-                    }
-
-                    PacketResult::Abort(err) => {
-                        log::error!(
-                            "[handle_message_event] handle_read failed!!! error: {}",
-                            err
-                        );
-
-                        // low level close
-                        conn.close();
-
-                        // trigger connetion closed event
-                        on_connection_closed(srv_net2.as_ref(), conn.hd);
-                    }
-                }
-            } else {
-                //
-                log::error!("[handle_message_event][hd={}] conn not found!!!", hd);
-            }
-        });
+        on_got_raw_data(srv_net2.as_ref(), hd, input_buffer);
     };
     srv_net.run_in_service(Box::new(func));
 }
 
 ///
-pub fn handle_close_conn_event(srv_net: &Arc<ServiceNetRs>, hd: ConnId) {
+pub fn handle_close_event(srv_net: &Arc<ServiceNetRs>, hd: ConnId) {
     // 在 srv_net 中运行
     let srv_net2 = srv_net.clone();
     let func = move || {
@@ -146,6 +115,22 @@ pub fn remove_connection(srv_net: &ServiceNetRs, hd: ConnId) -> Option<Arc<TcpCo
         g.conn_table.remove(&hd)
     })
 }
+///
+#[inline(always)]
+pub fn on_got_raw_data(srv_net: &ServiceNetRs, hd: ConnId, input_buffer: NetPacketGuard) {
+    // 运行于 srv_net 线程
+    assert!(srv_net.is_in_service_thread());
+
+    with_tls_mut!(G_TCP_CONN_STORAGE, g, {
+        if let Some(conn) = g.conn_table.get(&hd) {
+            // input buffer 数据读取处理
+            (conn.read_fn)(conn, input_buffer)
+        } else {
+            //
+            log::error!("[on_got_message][hd={}] conn not found!!!", hd);
+        }
+    });
+}
 
 ///
 pub fn on_connection_closed(srv_net: &ServiceNetRs, hd: ConnId) {
@@ -155,32 +140,24 @@ pub fn on_connection_closed(srv_net: &ServiceNetRs, hd: ConnId) {
     // remove conn always
     if let Some(conn) = remove_connection(srv_net, hd) {
         // trigger close_fn
-        run_close_fn(&conn);
+        let f: Arc<dyn Fn(ConnId) + Send + Sync>;
+        {
+            let close_fn = conn.close_fn.read();
+            f = (*close_fn).clone();
+        }
+
+        // 标记关闭
+        conn.set_closed(true);
+
+        //
+        let srv = conn.srv.clone();
+        srv.run_in_service(Box::new(move || {
+            (f)(conn.hd);
+        }));
     } else {
         //
         log::error!("[on_connection_closed][hd={}] conn not found!!!", hd);
     }
-}
-
-/// Trigger conn_fn
-pub fn run_conn_fn(conn: &Arc<TcpConn>) {
-    let conn = conn.clone();
-    let f = conn.conn_fn.clone();
-    let srv = conn.srv.clone();
-    srv.run_in_service(Box::new(move || {
-        (f)(conn);
-    }));
-}
-
-/// Trigger pkt_fn
-pub fn run_pkt_fn(conn: &Arc<TcpConn>, pkt: NetPacketGuard) {
-    let conn = conn.clone();
-    let f = conn.pkt_fn.clone();
-    let srv = conn.srv.clone();
-
-    srv.run_in_service(Box::new(move || {
-        (f)(conn, pkt);
-    }));
 }
 
 /// Trigger close_fn

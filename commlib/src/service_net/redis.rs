@@ -11,5 +11,5 @@ pub mod redis_client_manager;
 pub use redis_client_manager::connect_to_redis;
 
 ///
-pub mod redis_reply_receiver;
-pub use redis_reply_receiver::RedisReplyReceiver;
+pub mod reply_builders;
+pub use reply_builders::{ReplyBuilder, SimpleStringBuilder};

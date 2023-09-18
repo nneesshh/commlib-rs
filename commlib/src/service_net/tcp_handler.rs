@@ -3,15 +3,16 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
-use super::redis_client_manager::redis_client_make_new_conn;
 use super::take_packet;
 use super::tcp_client_manager::tcp_client_make_new_conn;
-use super::tcp_conn_manager::{handle_close_conn_event, handle_message_event};
+use super::tcp_conn_manager::{handle_close_event, handle_raw_data_event};
 use super::tcp_server_manager::tcp_server_make_new_conn;
 use super::{
     ConnId, OsSocketAddr, PacketType, RedisClient, ServiceNetRs, TcpClient, TcpListenerId,
     TcpServer,
 };
+
+use super::redis::redis_client_manager::redis_client_make_new_conn;
 
 ///
 pub type OnListenFuncType = extern "C" fn(*const TcpServer, TcpListenerId, OsSocketAddr);
@@ -32,7 +33,7 @@ pub type OnTcpClientConnectedFuncType = extern "C" fn(*const TcpClient, ConnId, 
 pub type OnRedisClientConnectedFuncType = extern "C" fn(*const RedisClient, ConnId, OsSocketAddr);
 
 ///
-pub type OnMessageFuncType = extern "C" fn(*const Arc<ServiceNetRs>, ConnId, *const u8, usize);
+pub type OnInputFuncType = extern "C" fn(*const Arc<ServiceNetRs>, ConnId, *const u8, usize);
 
 ///
 pub type OnCloseFuncType = extern "C" fn(*const Arc<ServiceNetRs>, ConnId);
@@ -47,7 +48,7 @@ pub struct TcpHandler {
     pub on_tcp_client_connected: OnTcpClientConnectedFuncType,
     pub on_redis_client_connected: OnRedisClientConnectedFuncType,
 
-    pub on_message: OnMessageFuncType,
+    pub on_input: OnInputFuncType,
     pub on_close: OnCloseFuncType,
 }
 
@@ -61,7 +62,7 @@ impl TcpHandler {
             on_tcp_client_connected: on_tcp_client_connected_cb,
             on_redis_client_connected: on_redis_client_connected_cb,
 
-            on_message: on_message_cb,
+            on_input: on_input_cb,
             on_close: on_close_cb,
         }
     }
@@ -135,7 +136,7 @@ extern "C" fn on_redis_client_connected_cb(
     redis_client_make_new_conn(cli, PacketType::Server, hd, endpoint);
 }
 
-extern "C" fn on_message_cb(
+extern "C" fn on_input_cb(
     srv_net_ptr: *const Arc<ServiceNetRs>,
     hd: ConnId,
     input_data: *const u8,
@@ -144,16 +145,16 @@ extern "C" fn on_message_cb(
     let srv_net = unsafe { &*srv_net_ptr };
 
     // 利用 buffer pkt 作为跨线程传递的数据缓存 （需要 TcpConn 设置 leading_filed_size）
-    let mut buffer_pkt = take_packet(input_len, 0);
-    buffer_pkt.append(input_data, input_len);
+    let mut input_buffer = take_packet(input_len, 0);
+    input_buffer.append(input_data, input_len);
 
     //
-    handle_message_event(srv_net, hd, buffer_pkt);
+    handle_raw_data_event(srv_net, hd, input_buffer);
 }
 
 extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {
     let srv_net = unsafe { &*srv_net_ptr };
 
     //
-    handle_close_conn_event(srv_net, hd);
+    handle_close_event(srv_net, hd);
 }

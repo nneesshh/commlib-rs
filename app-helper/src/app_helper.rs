@@ -130,7 +130,9 @@ impl App {
         let g_conf = G_CONF.load();
         let node_id = g_conf.node_id;
         if let Some(xml_node) = g_conf.get_xml_node(node_id) {
+            //
             let srv_type = xml_node.get_u64(vec!["srv"], 0);
+            log::info!("node {} srv_type {}", node_id, srv_type);
 
             // set xml config
             srv.get_handle().set_xml_config(xml_node.clone());

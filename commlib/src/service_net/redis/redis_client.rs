@@ -10,14 +10,16 @@
 //!
 
 use atomic::{Atomic, Ordering};
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::sync::Arc;
 
 use message_io::node::NodeHandler;
 
 use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
 
-use super::super::{tcp_client_manager::tcp_client_reconnect, tcp_conn_manager::disconnect_connection};
+use super::super::{
+    tcp_client_manager::tcp_client_reconnect, tcp_conn_manager::disconnect_connection,
+};
 use super::super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, TcpConn};
 
 ///
@@ -90,20 +92,21 @@ impl RedisClient {
     pub fn on_connect(&self, conn: Arc<TcpConn>) {
         //
         log::info!(
-            "id<{}>[hd={}]({}) redis client on_connect ... raddr: {} status: {}",
+            "id<{}>[hd={}]({}) redis client on_connect ... raddr: {} status: {} -- conn: {}",
             self.id,
             self.inner_hd(),
             self.name,
             self.raddr,
-            self.status().to_string()
+            self.status().to_string(),
+            conn.hd,
         );
     }
 
-    /// Event: on_receive_message
-    pub fn on_receive_message(&self, conn: Arc<TcpConn>, data: &[u8]) {
+    /// Event: on_receive_reply
+    pub fn on_receive_reply(&self, conn: Arc<TcpConn>, data: &[u8]) {
         //
         log::info!(
-            "id<{}>[hd={}]({}) redis client on_receive_message ... raddr: {} status: {}",
+            "id<{}>[hd={}]({}) redis client on_receive_reply ... raddr: {} status: {}",
             self.id,
             self.inner_hd(),
             self.name,
@@ -268,7 +271,7 @@ impl RedisClient {
         Ok(())
     }
 
-    ///
+    /// inner hd
     pub fn inner_hd(&self) -> ConnId {
         self.inner_hd.load(Ordering::Relaxed)
     }
@@ -278,7 +281,7 @@ impl RedisClient {
         self.inner_hd.store(hd, Ordering::Relaxed)
     }
 
-    ///
+    /// status
     #[inline(always)]
     pub fn status(&self) -> ClientStatus {
         self.status.load(Ordering::Relaxed)

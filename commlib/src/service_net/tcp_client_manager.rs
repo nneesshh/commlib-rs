@@ -9,9 +9,9 @@ use message_io::network::Endpoint;
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
 use super::create_tcp_client;
-use super::tcp_conn_manager::{insert_connection, run_conn_fn};
+use super::tcp_conn_manager::insert_connection;
 use super::{ClientStatus, ConnId, TcpClient, TcpConn};
-use super::{NetPacketGuard, PacketReceiver, PacketResult, PacketType};
+use super::{NetPacketGuard, PacketBuilder, PacketType};
 
 thread_local! {
      static G_TCP_CLIENT_STORAGE: UnsafeCell<TcpClientStorage> = UnsafeCell::new(TcpClientStorage::new());
@@ -145,13 +145,13 @@ pub fn tcp_client_make_new_conn(
             tcp_client_check_auto_reconnect(&srv_net2, hd, cli_id);
         });
 
-        // use packet receiver to handle buffer pkt
-        let pkt_receiver = PacketReceiver::new();
-        let read_fn = Box::new(move |buffer_pkt: NetPacketGuard| -> PacketResult {
-            pkt_receiver.read(buffer_pkt)
+        // use packet builder to handle input buffer
+        let srv_net3 = srv_net.clone();
+        let pkt_builder = PacketBuilder::new();
+        let read_fn = Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
+            pkt_builder.build(srv_net3.as_ref(), conn, input_buffer)
         });
 
-        let srv_net3 = srv_net.clone();
         let conn = Arc::new(TcpConn {
             //
             hd,
@@ -178,7 +178,7 @@ pub fn tcp_client_make_new_conn(
         });
 
         // add conn
-        insert_connection(srv_net3.as_ref(), conn.hd, &conn.clone());
+        insert_connection(srv_net.as_ref(), conn.hd, &conn.clone());
 
         // update inner hd for TcpClient
         with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
@@ -194,7 +194,11 @@ pub fn tcp_client_make_new_conn(
         });
 
         // trigger conn_fn
-        run_conn_fn(&conn);
+        let f = conn.conn_fn.clone();
+        let srv = conn.srv.clone();
+        srv.run_in_service(Box::new(move || {
+            (f)(conn);
+        }));
     };
     cli.srv_net().run_in_service(Box::new(func));
 }

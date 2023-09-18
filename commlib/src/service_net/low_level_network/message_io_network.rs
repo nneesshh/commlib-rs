@@ -173,7 +173,7 @@ impl MessageIoNetwork {
 
         //
         let on_accept = self.tcp_handler.on_accept;
-        let on_message = self.tcp_handler.on_message;
+        let on_input = self.tcp_handler.on_input;
         let on_close = self.tcp_handler.on_close;
 
         let node_handler = self.node_handler.clone();
@@ -231,7 +231,7 @@ impl MessageIoNetwork {
                     let hd = ConnId::from(raw_id);
 
                     //
-                    (on_message)(srv_net_ptr, hd, input_data.as_ptr(), input_data.len());
+                    (on_input)(srv_net_ptr, hd, input_data.as_ptr(), input_data.len());
                 }
 
                 NetEvent::Disconnected(endpoint) => {
