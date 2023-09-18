@@ -24,6 +24,10 @@ pub use net_packet_pool::{take_large_packet, take_packet, take_small_packet};
 pub use net_packet_pool::{NetPacketGuard, NetPacketPool};
 
 ///
+pub mod packet_result;
+pub use packet_result::PacketResult;
+
+///
 pub mod packet_receiver;
 pub use packet_receiver::PacketReceiver;
 
@@ -85,3 +89,7 @@ pub use service_net_impl::*;
 ///
 pub mod low_level_network;
 pub use low_level_network::*;
+
+///
+pub mod redis;
+pub use redis::*;

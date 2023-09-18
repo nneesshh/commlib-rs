@@ -91,8 +91,8 @@ pub struct NetPacket {
 
 impl NetPacket {
     ///
-    pub fn new() -> NetPacket {
-        NetPacket {
+    pub fn new() -> Self {
+        Self {
             size_type: PacketSizeType::Small,
             leading_field_size: 4, // 缺省占用4字节
 

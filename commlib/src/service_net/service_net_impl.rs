@@ -1,10 +1,13 @@
+use atomic::{Atomic, Ordering};
 use std::sync::Arc;
 
 use crate::{Clock, NodeState, ServiceHandle, ServiceRs};
 
 use super::tcp_server_manager::notify_tcp_server_stop;
 use super::MessageIoNetwork;
-use super::{ConnId, NetPacketGuard, TcpClient, TcpConn, TcpServer};
+use super::{ConnId, NetPacketGuard, RedisClient, TcpClient, TcpConn, TcpServer};
+
+static NEXT_CLIENT_ID: Atomic<usize> = Atomic::<usize>::new(1);
 
 /// ServiceNetRs
 pub struct ServiceNetRs {
@@ -16,7 +19,7 @@ pub struct ServiceNetRs {
 
 impl ServiceNetRs {
     ///
-    pub fn new(id: u64) -> ServiceNetRs {
+    pub fn new(id: u64) -> Self {
         Self {
             handle: ServiceHandle::new(id, NodeState::Idle),
             mi_network: Arc::new(MessageIoNetwork::new()),
@@ -122,14 +125,14 @@ pub fn create_tcp_client<T, C, P, S>(
     pkt_fn: P,
     close_fn: S,
     srv_net: &Arc<ServiceNetRs>,
-) -> Arc<TcpClient>
+) -> TcpClient
 where
     T: ServiceRs + 'static,
     C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
     P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
     S: Fn(ConnId) + Send + Sync + 'static,
 {
-    let cli = Arc::new(TcpClient::new(
+    TcpClient::new(
         srv,
         name,
         raddr,
@@ -138,6 +141,30 @@ where
         pkt_fn,
         close_fn,
         srv_net,
-    ));
-    cli
+    )
+}
+
+/// Create redis client: mi_network is private
+pub fn create_redis_client<T>(
+    srv: &Arc<T>,
+    raddr: &str,
+    pass: &str,
+    dbindex: isize,
+    srv_net: &Arc<ServiceNetRs>,
+) -> RedisClient
+where
+    T: ServiceRs + 'static,
+{
+    let next_id = NEXT_CLIENT_ID.fetch_add(1, Ordering::Relaxed);
+    let name = std::format!("redis{}", next_id);
+
+    RedisClient::new(
+        srv,
+        name.as_str(),
+        raddr,
+        pass,
+        dbindex,
+        &srv_net.mi_network,
+        srv_net,
+    )
 }

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use crate::{ServiceNetRs, ServiceRs};
 
 use super::get_leading_field_size;
-use super::{packet_receiver::PacketResult, NetPacketGuard};
 use super::{ConnId, TcpConn};
+use super::{NetPacketGuard, PacketResult};
 
 thread_local! {
     static G_TCP_CONN_STORAGE: UnsafeCell<TcpConnStorage> = UnsafeCell::new(TcpConnStorage::new());

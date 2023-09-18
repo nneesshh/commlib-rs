@@ -3,11 +3,15 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
+use super::redis_client_manager::redis_client_make_new_conn;
 use super::take_packet;
 use super::tcp_client_manager::tcp_client_make_new_conn;
 use super::tcp_conn_manager::{handle_close_conn_event, handle_message_event};
 use super::tcp_server_manager::tcp_server_make_new_conn;
-use super::{ConnId, OsSocketAddr, PacketType, ServiceNetRs, TcpClient, TcpListenerId, TcpServer};
+use super::{
+    ConnId, OsSocketAddr, PacketType, RedisClient, ServiceNetRs, TcpClient, TcpListenerId,
+    TcpServer,
+};
 
 ///
 pub type OnListenFuncType = extern "C" fn(*const TcpServer, TcpListenerId, OsSocketAddr);
@@ -22,7 +26,10 @@ pub type OnAcceptFuncType = extern "C" fn(
 );
 
 ///
-pub type OnConnectedFuncType = extern "C" fn(*const TcpClient, ConnId, OsSocketAddr);
+pub type OnTcpClientConnectedFuncType = extern "C" fn(*const TcpClient, ConnId, OsSocketAddr);
+
+///
+pub type OnRedisClientConnectedFuncType = extern "C" fn(*const RedisClient, ConnId, OsSocketAddr);
 
 ///
 pub type OnMessageFuncType = extern "C" fn(*const Arc<ServiceNetRs>, ConnId, *const u8, usize);
@@ -37,7 +44,8 @@ pub struct TcpHandler {
     pub on_listen: OnListenFuncType,
     pub on_accept: OnAcceptFuncType,
 
-    pub on_connected: OnConnectedFuncType,
+    pub on_tcp_client_connected: OnTcpClientConnectedFuncType,
+    pub on_redis_client_connected: OnRedisClientConnectedFuncType,
 
     pub on_message: OnMessageFuncType,
     pub on_close: OnCloseFuncType,
@@ -45,12 +53,13 @@ pub struct TcpHandler {
 
 impl TcpHandler {
     /// Constructor
-    pub fn new() -> TcpHandler {
-        TcpHandler {
+    pub fn new() -> Self {
+        Self {
             on_listen: on_listen_cb,
             on_accept: on_accept_cb,
 
-            on_connected: on_connected_cb,
+            on_tcp_client_connected: on_tcp_client_connected_cb,
+            on_redis_client_connected: on_redis_client_connected_cb,
 
             on_message: on_message_cb,
             on_close: on_close_cb,
@@ -96,7 +105,11 @@ extern "C" fn on_accept_cb(
     );
 }
 
-extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_addr: OsSocketAddr) {
+extern "C" fn on_tcp_client_connected_cb(
+    tcp_client_ptr: *const TcpClient,
+    hd: ConnId,
+    os_addr: OsSocketAddr,
+) {
     let cli = unsafe { &mut *(tcp_client_ptr as *mut TcpClient) };
 
     let id = ResourceId::from(hd.id);
@@ -105,6 +118,21 @@ extern "C" fn on_connected_cb(tcp_client_ptr: *const TcpClient, hd: ConnId, os_a
 
     // make new conn
     tcp_client_make_new_conn(cli, PacketType::Server, hd, endpoint);
+}
+
+extern "C" fn on_redis_client_connected_cb(
+    redis_client_ptr: *const RedisClient,
+    hd: ConnId,
+    os_addr: OsSocketAddr,
+) {
+    let cli = unsafe { &mut *(redis_client_ptr as *mut RedisClient) };
+
+    let id = ResourceId::from(hd.id);
+    let sock_addr = os_addr.into_addr().unwrap();
+    let endpoint = Endpoint::new(id, sock_addr);
+
+    // make new conn
+    redis_client_make_new_conn(cli, PacketType::Server, hd, endpoint);
 }
 
 extern "C" fn on_message_cb(

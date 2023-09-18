@@ -1,10 +1,10 @@
-use super::{take_large_packet, take_packet};
-use super::{NetPacketGuard, PacketResult};
+use super::super::{take_large_packet, take_packet};
+use super::super::{NetPacketGuard, PacketResult};
 
 const MAX_PACKET_SIZE: usize = 1024 * 1024 * 20; // 20M
 
 /// Reader state
-enum PacketReceiverState {
+enum RedisReplyReceiverState {
     Null,                   // 空包
     Leading,                // 包体前导长度
     Expand(usize),          // 扩展包体缓冲区（pkt_full_len）
@@ -15,17 +15,17 @@ enum PacketReceiverState {
 }
 
 ///
-pub struct PacketReceiver {
+pub struct RedisReplyReceiver {
     pkt_opt: Option<NetPacketGuard>, // 使用 option 以便 pkt 移交
-    state: PacketReceiverState,
+    state: RedisReplyReceiverState,
 }
 
-impl PacketReceiver {
+impl RedisReplyReceiver {
     ///
     pub fn new() -> Self {
         Self {
             pkt_opt: None,
-            state: PacketReceiverState::Null,
+            state: RedisReplyReceiverState::Null,
         }
     }
 
@@ -53,7 +53,8 @@ impl PacketReceiver {
         //
         let pkt_opt_ptr_: *mut Option<NetPacketGuard> =
             &self.pkt_opt as *const Option<NetPacketGuard> as *mut Option<NetPacketGuard>;
-        let state_ptr_ = &self.state as *const PacketReceiverState as *mut PacketReceiverState;
+        let state_ptr_ =
+            &self.state as *const RedisReplyReceiverState as *mut RedisReplyReceiverState;
 
         let pkt_opt = unsafe { &mut *pkt_opt_ptr_ };
         let state = unsafe { &mut *state_ptr_ };
@@ -61,7 +62,7 @@ impl PacketReceiver {
         loop {
             //
             match self.state {
-                PacketReceiverState::Null => {
+                RedisReplyReceiverState::Null => {
                     let input_pkt = input_pkt_opt.take().unwrap();
                     let append_bytes = input_pkt.buffer_raw_len();
 
@@ -69,14 +70,14 @@ impl PacketReceiver {
                     (*pkt_opt) = Some(input_pkt);
 
                     // state: 进入包体前导长度读取
-                    (*state) = PacketReceiverState::Leading;
+                    (*state) = RedisReplyReceiverState::Leading;
 
                     //
                     remain -= append_bytes;
                     consumed += append_bytes;
                 }
 
-                PacketReceiverState::Leading => {
+                RedisReplyReceiverState::Leading => {
                     let pkt = pkt_opt.as_mut().unwrap();
                     let buffer_raw_len = pkt.buffer_raw_len();
 
@@ -86,16 +87,16 @@ impl PacketReceiver {
                         let pkt_full_len = pkt.peek_leading_field();
                         if pkt_full_len > MAX_PACKET_SIZE {
                             // state: 中止
-                            (*state) = PacketReceiverState::Abort(pkt_full_len);
+                            (*state) = RedisReplyReceiverState::Abort(pkt_full_len);
                         } else {
                             // 检查 pkt 容量是否足够
                             let writable_bytes = pkt.buffer_writable_bytes();
                             if writable_bytes < pkt_full_len {
                                 // state: 进入扩展包体缓冲区处理，重新申请 large pkt
-                                (*state) = PacketReceiverState::Expand(pkt_full_len);
+                                (*state) = RedisReplyReceiverState::Expand(pkt_full_len);
                             } else {
                                 // state: 进入包体数据处理
-                                (*state) = PacketReceiverState::Data(pkt_full_len);
+                                (*state) = RedisReplyReceiverState::Data(pkt_full_len);
                             }
                         }
                     } else if remain > 0 {
@@ -126,7 +127,7 @@ impl PacketReceiver {
                     }
                 }
 
-                PacketReceiverState::Expand(pkt_full_len) => {
+                RedisReplyReceiverState::Expand(pkt_full_len) => {
                     let old_pkt = pkt_opt.as_mut().unwrap();
 
                     //
@@ -139,20 +140,20 @@ impl PacketReceiver {
                     (*pkt_opt) = Some(new_pkt);
 
                     // 进入包体数据处理
-                    (*state) = PacketReceiverState::Data(pkt_full_len);
+                    (*state) = RedisReplyReceiverState::Data(pkt_full_len);
                 }
 
-                PacketReceiverState::Data(pkt_full_len) => {
+                RedisReplyReceiverState::Data(pkt_full_len) => {
                     let pkt = pkt_opt.as_mut().unwrap();
                     let buffer_raw_len = pkt.buffer_raw_len();
 
                     // 包体数据是否完整？
                     if buffer_raw_len > pkt_full_len {
                         // state: 完成当前 pkt 读取，转入完成处理（pkt尾部有多余数据）
-                        (*state) = PacketReceiverState::CompleteTailing(pkt_full_len);
+                        (*state) = RedisReplyReceiverState::CompleteTailing(pkt_full_len);
                     } else if buffer_raw_len == pkt_full_len {
                         // state: 完成当前 pkt 读取，转入完成处理
-                        (*state) = PacketReceiverState::Complete;
+                        (*state) = RedisReplyReceiverState::Complete;
                     } else if remain > 0 {
                         // buffer_pkt 中还有 input 数据未处理，将此 input 数据附加到内部 pkt
                         assert!(buffer_raw_len + consumed <= pkt_full_len);
@@ -182,7 +183,7 @@ impl PacketReceiver {
                     }
                 }
 
-                PacketReceiverState::Complete => {
+                RedisReplyReceiverState::Complete => {
                     // 完成一个 pkt
                     let ready_pkt = pkt_opt.take().unwrap();
                     (*pkt_opt) = None;
@@ -191,7 +192,7 @@ impl PacketReceiver {
                     pkt_list.push(ready_pkt);
 
                     // 完成当前 pkt 读取，进入空包状态
-                    (*state) = PacketReceiverState::Null;
+                    (*state) = RedisReplyReceiverState::Null;
 
                     // input 数据处理完毕
                     if 0 == remain {
@@ -200,7 +201,7 @@ impl PacketReceiver {
                     assert!(input_pkt_opt.is_some());
                 }
 
-                PacketReceiverState::CompleteTailing(pkt_full_len) => {
+                RedisReplyReceiverState::CompleteTailing(pkt_full_len) => {
                     // 截取多余的尾部，创建新包
                     let pkt = pkt_opt.as_mut().unwrap();
                     let buffer_raw_len = pkt.buffer_raw_len();
@@ -237,10 +238,10 @@ impl PacketReceiver {
                     }
 
                     // 完成当前 pkt 读取，重新开始包体前导长度处理
-                    (*state) = PacketReceiverState::Leading;
+                    (*state) = RedisReplyReceiverState::Leading;
                 }
 
-                PacketReceiverState::Abort(pkt_full_len) => {
+                RedisReplyReceiverState::Abort(pkt_full_len) => {
                     log::error!("packet overflow!!! pkt_full_len={}", pkt_full_len);
 
                     // 包长度越界

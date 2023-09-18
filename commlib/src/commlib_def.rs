@@ -36,8 +36,8 @@ pub struct NodeConf {
 
 impl NodeConf {
     ///
-    pub fn new() -> NodeConf {
-        NodeConf {
+    pub fn new() -> Self {
+        Self {
             id: 0,
             addr: "".to_owned(),
             port: 0,
@@ -66,8 +66,8 @@ pub struct RouteConf {
 
 impl RouteConf {
     ///
-    pub fn new() -> RouteConf {
-        RouteConf {
+    pub fn new() -> Self {
+        Self {
             gw: NodeConf::new(),
             world: NodeConf::new(),
             comm: NodeConf::new(),
@@ -92,8 +92,8 @@ pub struct RedisConf {
 
 impl RedisConf {
     ///
-    pub fn new(addr: String, port: u16, auth: String, db: usize) -> RedisConf {
-        RedisConf {
+    pub fn new(addr: String, port: u16, auth: String, db: usize) -> Self {
+        Self {
             addr,
             port,
             auth,
@@ -116,8 +116,8 @@ pub struct DbAddr {
 
 impl DbAddr {
     ///
-    pub fn new() -> DbAddr {
-        DbAddr {
+    pub fn new() -> Self {
+        Self {
             addr: "".to_owned(),
             port: 0,
 

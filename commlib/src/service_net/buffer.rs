@@ -12,8 +12,8 @@ pub struct Buffer {
 
 impl Buffer {
     ///
-    pub fn new(init_size: usize, reserved_prepend_size: usize) -> Buffer {
-        let mut b = Buffer {
+    pub fn new(init_size: usize, reserved_prepend_size: usize) -> Self {
+        let mut b = Self {
             inner: BytesMut::with_capacity(init_size),
             read_index: reserved_prepend_size,
             reserved_prepend_index: reserved_prepend_size,

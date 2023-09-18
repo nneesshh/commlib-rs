@@ -7,8 +7,8 @@ pub struct StopWatch {
 
 impl StopWatch {
     ///
-    pub fn new() -> StopWatch {
-        StopWatch {
+    pub fn new() -> Self {
+        Self {
             start: std::time::Instant::now(),
         }
     }

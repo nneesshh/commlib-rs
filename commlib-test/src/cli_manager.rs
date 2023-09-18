@@ -7,6 +7,7 @@ use std::sync::Arc;
 use commlib::with_tls_mut;
 use commlib::{CmdId, ConnId, NetProxy, NodeState, PacketType, ServiceRs, TcpConn};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
+use commlib::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
 use crate::proto;
 use prost::Message;
@@ -73,12 +74,14 @@ impl CliManager {
 
         let hd = conn.hd;
         let key = msg.token();
-        proxy.set_encrypt_key(hd, key);
+        let mut encrypt_buf = Vec::from(key);
+        encrypt_buf.extend_from_within(..ENCRYPT_MAX_LEN);
+        proxy.set_encrypt_key(hd, encrypt_buf.as_slice());
 
         G_ROBOT_MANAGER.with(|g| {
             let mut robot_mgr = g.borrow_mut();
             let rbt = robot_mgr.get_or_create_robot_by_hd(hd);
-            rbt.borrow_mut().encrypt_key.extend_from_slice(key);
+            rbt.borrow_mut().encrypt_key.extend_from_slice(encrypt_buf.as_slice());
 
             // echo
             proxy.send_raw(conn, cmd, slice);

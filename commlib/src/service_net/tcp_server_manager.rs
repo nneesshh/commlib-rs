@@ -11,7 +11,7 @@ use crate::{PinkySwear, ServiceNetRs, ServiceRs, TcpListenerId};
 use super::create_tcp_server;
 use super::tcp_conn_manager::{insert_connection, run_conn_fn};
 use super::{ConnId, TcpConn, TcpServer};
-use super::{NetPacketGuard, PacketReceiver, PacketType};
+use super::{NetPacketGuard, PacketReceiver, PacketResult, PacketType};
 
 thread_local! {
     static G_TCP_SERVER_STORAGE: UnsafeCell<TcpServerStorage> = UnsafeCell::new(TcpServerStorage::new());
@@ -137,6 +137,12 @@ pub fn tcp_server_make_new_conn(
                 let pkt_fn = tcp_server.pkt_fn.clone();
                 let close_fn = tcp_server.close_fn.clone();
 
+                // use packet receiver to handle buffer pkt
+                let pkt_receiver = PacketReceiver::new();
+                let read_fn = Box::new(move |buffer_pkt: NetPacketGuard| -> PacketResult {
+                    pkt_receiver.read(buffer_pkt)
+                });
+
                 let conn = Arc::new(TcpConn {
                     //
                     hd,
@@ -159,7 +165,7 @@ pub fn tcp_server_make_new_conn(
                     close_fn: RwLock::new(close_fn),
 
                     //
-                    pkt_receiver: PacketReceiver::new(),
+                    read_fn,
                 });
 
                 //

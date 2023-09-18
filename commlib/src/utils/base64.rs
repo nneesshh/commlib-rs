@@ -26,17 +26,21 @@ impl Base64 {
 mod tests {
     #[test]
     fn test_base64() {
-        use base64::{Engine as _, alphabet, engine::{self, general_purpose}};
-        
+        use base64::{
+            alphabet,
+            engine::{self, general_purpose},
+            Engine as _,
+        };
+
         let bytes = general_purpose::STANDARD
-            .decode("aGVsbG8gd29ybGR+Cg==").unwrap();
+            .decode("aGVsbG8gd29ybGR+Cg==")
+            .unwrap();
         println!("{:?}", bytes);
-        
+
         // custom engine setup
-        let bytes_url = engine::GeneralPurpose::new(
-                    &alphabet::URL_SAFE,
-                    general_purpose::NO_PAD)
-            .decode("aGVsbG8gaW50ZXJuZXR-Cg").unwrap();
+        let bytes_url = engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD)
+            .decode("aGVsbG8gaW50ZXJuZXR-Cg")
+            .unwrap();
         println!("{:?}", bytes_url);
     }
 }

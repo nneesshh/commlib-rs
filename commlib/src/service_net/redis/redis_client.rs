@@ -1,27 +1,28 @@
-//! Commlib: TcpClient
+//! Commlib: RedisClient
 //! We can use this class to create a TCP client.
 //! The typical usage is :
-//!      1. Create a TcpClient object
+//!      1. Create a RedisClient object
 //!      2. Set the message callback and connection callback
-//!      3. Call TcpClient::Connect() to try to establish a connection with remote server
-//!      4. Call TcpClient::Send(...) to send message to remote server
+//!      3. Call RedisClient::Connect() to try to establish a connection with remote server
+//!      4. Call RedisClient::Send(...) to send message to remote server
 //!      5. Handle the connection and message in callbacks
-//!      6. Call TcpClient::Disconnect() to disconnect from remote server
+//!      6. Call RedisClient::Disconnect() to disconnect from remote server
 //!
 
 use atomic::{Atomic, Ordering};
 use std::sync::Arc;
+use parking_lot::RwLock;
 
 use message_io::node::NodeHandler;
 
 use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
 
-use super::{tcp_client_manager::tcp_client_reconnect, tcp_conn_manager::disconnect_connection};
-use super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, TcpConn};
+use super::super::{tcp_client_manager::tcp_client_reconnect, tcp_conn_manager::disconnect_connection};
+use super::super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, TcpConn};
 
 ///
 #[repr(C)]
-pub struct TcpClient {
+pub struct RedisClient {
     start: std::time::Instant,
     status: Atomic<ClientStatus>,
 
@@ -29,6 +30,8 @@ pub struct TcpClient {
     id: uuid::Uuid,
     name: String,
     raddr: String,
+    pass: String,   // redis 密码
+    dbindex: isize, // redis db index
 
     //
     srv: Arc<dyn ServiceRs>,
@@ -37,31 +40,27 @@ pub struct TcpClient {
     auto_reconnect: bool,
 
     //
-    conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
-    pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
-    close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
+    conn_fn: RwLock<Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>>,
+    pkt_fn: RwLock<Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>>,
+    close_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
 
     //
     inner_hd: Atomic<ConnId>,
 }
 
-impl TcpClient {
+impl RedisClient {
     ///
-    pub fn new<T, C, P, S>(
+    pub fn new<T>(
         srv: &Arc<T>,
         name: &str,
         raddr: &str,
+        pass: &str,
+        dbindex: isize,
         mi_network: &Arc<MessageIoNetwork>,
-        conn_fn: C,
-        pkt_fn: P,
-        close_fn: S,
         srv_net: &Arc<ServiceNetRs>,
-    ) -> TcpClient
+    ) -> RedisClient
     where
         T: ServiceRs + 'static,
-        C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-        P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
-        S: Fn(ConnId) + Send + Sync + 'static,
     {
         Self {
             start: std::time::Instant::now(),
@@ -71,24 +70,65 @@ impl TcpClient {
 
             name: name.to_owned(),
             raddr: raddr.to_owned(),
+            pass: pass.to_owned(),
+            dbindex,
 
             srv: srv.clone(),
             mi_network: mi_network.clone(),
             srv_net: srv_net.clone(),
             auto_reconnect: true,
 
-            conn_fn: Arc::new(conn_fn),
-            pkt_fn: Arc::new(pkt_fn),
-            close_fn: Arc::new(close_fn),
+            conn_fn: RwLock::new(Arc::new(|_1| {})),
+            pkt_fn: RwLock::new(Arc::new(|_1, _2| {})),
+            close_fn: RwLock::new(Arc::new(|_1| {})),
 
             inner_hd: Atomic::new(ConnId::from(0)),
         }
     }
 
+    /// Event: on_connect
+    pub fn on_connect(&self, conn: Arc<TcpConn>) {
+        //
+        log::info!(
+            "id<{}>[hd={}]({}) redis client on_connect ... raddr: {} status: {}",
+            self.id,
+            self.inner_hd(),
+            self.name,
+            self.raddr,
+            self.status().to_string()
+        );
+    }
+
+    /// Event: on_receive_message
+    pub fn on_receive_message(&self, conn: Arc<TcpConn>, data: &[u8]) {
+        //
+        log::info!(
+            "id<{}>[hd={}]({}) redis client on_receive_message ... raddr: {} status: {}",
+            self.id,
+            self.inner_hd(),
+            self.name,
+            self.raddr,
+            self.status().to_string()
+        );
+    }
+
+    /// Event: on_disconnect
+    pub fn on_disconnect(&self, hd: ConnId) {
+        //
+        log::info!(
+            "id<{}>[hd={}]({}) redis client on_disconnect ... raddr: {} status: {}",
+            self.id,
+            self.inner_hd(),
+            self.name,
+            self.raddr,
+            self.status().to_string()
+        );
+    }
+
     /// Connect to [ip:port]
     pub fn connect(&self) -> Result<ConnId, String> {
         log::info!(
-            "[hd={}]({}) tcp client start connect to raddr: {} status: {} -- id<{}>",
+            "[hd={}]({}) redis client start connect to raddr: {} status: {} -- id<{}>",
             self.inner_hd(),
             self.name,
             self.raddr,
@@ -101,7 +141,7 @@ impl TcpClient {
 
         // inner connect
         let mi_network = self.mi_network.clone();
-        match mi_network.tcp_client_connect(self) {
+        match mi_network.redis_client_connect(self) {
             Ok(hd) => {
                 self.set_status(ClientStatus::Connected);
                 Ok(hd)
@@ -119,7 +159,7 @@ impl TcpClient {
     /// Reonnect to [ip:port]
     pub fn reconnect(&self) -> Result<(), String> {
         log::info!(
-            "[hd={}]({}) tcp client start reconnect to raddr: {} status: {} -- id<{}>",
+            "[hd={}]({}) redis client start reconnect to raddr: {} status: {} -- id<{}>",
             self.inner_hd(),
             self.name,
             self.raddr,
@@ -131,7 +171,7 @@ impl TcpClient {
         if !self.status().is_idle() {
             let errmsg = "wrong status".to_owned();
             log::error!(
-                "[hd={}]({}) tcp client reconnect to raddr: {} status: {} -- id<{}> falied: {}!!!",
+                "[hd={}]({}) redis client reconnect to raddr: {} status: {} -- id<{}> falied: {}!!!",
                 self.inner_hd(),
                 self.name,
                 self.raddr,
@@ -145,7 +185,7 @@ impl TcpClient {
         //
         const DELAY_MS: u64 = 5000_u64; // ms
         log::info!(
-            "[hd={}]({}) tcp client try to reconnect after {}ms -- id<{}> ...",
+            "[hd={}]({}) redis client try to reconnect after {}ms -- id<{}> ...",
             self.inner_hd(),
             self.name,
             DELAY_MS,
@@ -161,7 +201,7 @@ impl TcpClient {
         //
         Clock::set_timeout(self.srv_net.as_ref(), DELAY_MS, move || {
             log::info!(
-                "[hd={}]({}) tcp client reconnect -- id<{}> ...",
+                "[hd={}]({}) redis client reconnect -- id<{}> ...",
                 hd,
                 name,
                 cli_id
@@ -183,7 +223,7 @@ impl TcpClient {
         let inner_hd = self.inner_hd();
 
         log::info!(
-            "[hd={}]({}) tcp client start disconnect from raddr: {} status: {} -- id<{}>",
+            "[hd={}]({}) redis client start disconnect from raddr: {} status: {} -- id<{}>",
             inner_hd,
             self.name,
             self.raddr,
@@ -195,7 +235,7 @@ impl TcpClient {
         if !self.status().is_connected() {
             let errmsg = "wrong status".to_owned();
             log::error!(
-                "[hd={}]({}) tcp client disconnect from raddr: {} status: {} -- id<{}> falied: {}!!!",
+                "[hd={}]({}) redis client disconnect from raddr: {} status: {} -- id<{}> falied: {}!!!",
                 inner_hd,
                 self.name,
                 self.raddr,
@@ -209,7 +249,7 @@ impl TcpClient {
         // remove inner TcpConn by hd
         self.set_status(ClientStatus::Disconnecting);
         log::info!(
-            "[hd={}]({}) tcp client disconnecting from raddr: {} status: {} -- id<{}>",
+            "[hd={}]({}) redis client disconnecting from raddr: {} status: {} -- id<{}>",
             inner_hd,
             self.name,
             self.raddr,
@@ -219,7 +259,7 @@ impl TcpClient {
 
         //
         let cb = move |hd| {
-            log::info!("[hd={}] tcp client disconnect over.", hd);
+            log::info!("[hd={}] redis client disconnect over.", hd);
             disconneced_cb(hd);
         };
         disconnect_connection(&G_SERVICE_NET, inner_hd, cb, &self.srv);
@@ -289,19 +329,48 @@ impl TcpClient {
     ///
     #[inline(always)]
     pub fn clone_conn_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>) + Send + Sync> {
-        self.conn_fn.clone()
+        let conn_fn = self.conn_fn.read();
+        conn_fn.clone()
     }
 
     ///
     #[inline(always)]
     pub fn clone_pkt_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync> {
-        self.pkt_fn.clone()
+        let pkt_fn = self.pkt_fn.read();
+        pkt_fn.clone()
     }
 
     ///
     #[inline(always)]
     pub fn clone_close_fn(&self) -> Arc<dyn Fn(ConnId) + Send + Sync> {
-        self.close_fn.clone()
+        let close_fn = self.close_fn.read();
+        close_fn.clone()
+    }
+
+    ///
+    pub fn setup_callbacks<C, P, S>(&self, conn_fn: C, pkt_fn: P, close_fn: S)
+    where
+        C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
+        P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+        S: Fn(ConnId) + Send + Sync + 'static,
+    {
+        // conn_fn
+        {
+            let mut conn_fn_mut = self.conn_fn.write();
+            (*conn_fn_mut) = Arc::new(conn_fn);
+        }
+
+        // pkt_fn
+        {
+            let mut pkt_fn_mut = self.pkt_fn.write();
+            (*pkt_fn_mut) = Arc::new(pkt_fn);
+        }
+
+        // close_fn
+        {
+            let mut close_fn_mut = self.close_fn.write();
+            (*close_fn_mut) = Arc::new(close_fn);
+        }
     }
 
     ///
@@ -311,7 +380,7 @@ impl TcpClient {
             match self.reconnect() {
                 Ok(_) => {
                     log::error!(
-                        "[hd={}]({}) tcp client auto reconnect start -- id<{}> ...",
+                        "[hd={}]({}) redis client auto reconnect start -- id<{}> ...",
                         self.inner_hd(),
                         self.name,
                         self.id,
@@ -319,7 +388,7 @@ impl TcpClient {
                 }
                 Err(err) => {
                     log::error!(
-                        "[hd={}]({}) tcp client auto reconnect -- id<{}> failed: {}!!!",
+                        "[hd={}]({}) redis client auto reconnect -- id<{}> failed: {}!!!",
                         self.inner_hd(),
                         self.name,
                         self.id,

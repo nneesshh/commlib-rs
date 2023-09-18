@@ -33,10 +33,10 @@ pub struct NetProxy {
 
 impl NetProxy {
     ///
-    pub fn new(packet_type: PacketType) -> NetProxy {
+    pub fn new(packet_type: PacketType) -> Self {
         let leading_field_size = get_leading_field_size(packet_type);
 
-        NetProxy {
+        Self {
             packet_type,
             leading_field_size,
 

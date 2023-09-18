@@ -70,8 +70,8 @@ where
     S: crate::ServiceRs,
     E: Event,
 {
-    pub fn new() -> EventListener<S, E> {
-        EventListener::<S, E> {
+    pub fn new() -> Self {
+        Self {
             handlers: Vec::new(),
             _phantom: std::marker::PhantomData,
         }

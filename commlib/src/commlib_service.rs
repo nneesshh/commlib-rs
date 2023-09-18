@@ -49,7 +49,7 @@ pub struct ServiceHandle {
 
 impl ServiceHandle {
     ///
-    pub fn new(id: u64, state: NodeState) -> ServiceHandle {
+    pub fn new(id: u64, state: NodeState) -> Self {
         let (tx, rx) = channel::unbounded::<Box<ServiceFuncType>>();
 
         Self {

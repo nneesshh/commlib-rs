@@ -7,8 +7,8 @@ use message_io::node::NodeHandler;
 
 use crate::ServiceRs;
 
-use super::packet_receiver::PacketResult;
-use super::{ConnId, NetPacketGuard, PacketReceiver, PacketType, ServiceNetRs};
+use super::{ConnId, ServiceNetRs};
+use super::{NetPacketGuard, PacketResult, PacketType};
 
 /// Tcp connection: all fields are public for easy construct
 pub struct TcpConn {
@@ -33,14 +33,14 @@ pub struct TcpConn {
     pub close_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
 
     //
-    pub pkt_receiver: PacketReceiver,
+    pub read_fn: Box<dyn Fn(NetPacketGuard) -> PacketResult + Send + Sync>,
 }
 
 impl TcpConn {
-    ///
+    /// buffer 数据处理
     #[inline(always)]
     pub fn handle_read(&self, buffer_pkt: NetPacketGuard) -> PacketResult {
-        self.pkt_receiver.read(buffer_pkt)
+        (self.read_fn)(buffer_pkt)
     }
 
     /// low level close
