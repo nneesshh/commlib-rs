@@ -53,7 +53,7 @@ parking_lot = { path = "../parking_lot" }
 prost = { path = "../prost" }
 rand = { path = "../rand", features = ["small_rng"]}
 roxmltree = { path = "../roxmltree" }
-spdlog-rs = { path = "../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
+spdlog-rs = { path = "../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location", "flexible-string"] }
 openssl = { path = "../rust-openssl/openssl" }
 commlib-sys = { path = "../commlib-sys" }
 
