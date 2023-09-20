@@ -28,36 +28,43 @@ enum PacketBuilderState {
 
 ///
 pub struct PacketBuilder {
-    pkt_opt: Option<NetPacketGuard>, // 使用 option 以便 pkt 移交
     state: PacketBuilderState,
+
+    //
+    pkt_opt: Option<NetPacketGuard>, // 使用 option 以便 pkt 移交
+    pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
 }
 
 impl PacketBuilder {
     ///
-    pub fn new() -> Self {
+    pub fn new(pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>) -> Self {
         Self {
-            pkt_opt: None,
             state: PacketBuilderState::Null,
+            pkt_opt: None,
+            pkt_fn,
         }
     }
 
-    ///
+    /// 解析数据包，触发数据包回调函数
+    #[inline(always)]
     pub fn build(
         &self,
         srv_net: &ServiceNetRs,
         conn: &Arc<TcpConn>,
         mut input_buffer: NetPacketGuard,
     ) {
+        let builder = unsafe { &mut *(self as *const Self as *mut Self) };
+
         let leading_field_size = get_leading_field_size(conn.packet_type());
         input_buffer.set_leading_field_size(leading_field_size);
 
         //
-        match self.build_once(input_buffer) {
+        match builder.build_once(input_buffer) {
             PacketResult::Ready(pkt_list) => {
                 for pkt in pkt_list {
                     // trigger pkt_fn
                     let conn = conn.clone();
-                    let f = conn.pkt_fn.clone();
+                    let f = self.pkt_fn.clone();
                     let srv = conn.srv.clone();
 
                     srv.run_in_service(Box::new(move || {
@@ -78,8 +85,9 @@ impl PacketBuilder {
         }
     }
 
-    /// input_buffer 中存放 input 数据，一次性处理完毕，Ok 返回 pkt_list, Err 返回错误信息
-    pub fn build_once(&self, input_buffer: NetPacketGuard) -> PacketResult {
+    /* input_buffer 中存放 input 数据，一次性处理完毕，Ok 返回 pkt_list, Err 返回错误信息 */
+    #[inline(always)]
+    fn build_once(&mut self, input_buffer: NetPacketGuard) -> PacketResult {
         //
         let mut pkt_list = Vec::new();
 
@@ -100,13 +108,6 @@ impl PacketBuilder {
         let mut input_pkt_opt = Some(input_buffer);
 
         //
-        let pkt_opt_ptr_: *mut Option<NetPacketGuard> =
-            &self.pkt_opt as *const Option<NetPacketGuard> as *mut Option<NetPacketGuard>;
-        let state_ptr_ = &self.state as *const PacketBuilderState as *mut PacketBuilderState;
-
-        let pkt_opt = unsafe { &mut *pkt_opt_ptr_ };
-        let state = unsafe { &mut *state_ptr_ };
-
         loop {
             //
             match self.state {
@@ -115,10 +116,10 @@ impl PacketBuilder {
                     let append_bytes = input_pkt.buffer_raw_len();
 
                     // 初始化 pkt，直接使用 input_pkt 避免 copy
-                    (*pkt_opt) = Some(input_pkt);
+                    self.pkt_opt = Some(input_pkt);
 
                     // state: 进入包体前导长度读取
-                    (*state) = PacketBuilderState::Leading;
+                    self.state = PacketBuilderState::Leading;
 
                     //
                     remain -= append_bytes;
@@ -126,7 +127,7 @@ impl PacketBuilder {
                 }
 
                 PacketBuilderState::Leading => {
-                    let pkt = pkt_opt.as_mut().unwrap();
+                    let pkt = self.pkt_opt.as_mut().unwrap();
                     let buffer_raw_len = pkt.buffer_raw_len();
 
                     // 包体前导长度字段是否完整？
@@ -135,16 +136,16 @@ impl PacketBuilder {
                         let pkt_full_len = pkt.peek_leading_field();
                         if pkt_full_len > MAX_PACKET_SIZE {
                             // state: 中止
-                            (*state) = PacketBuilderState::Abort(pkt_full_len);
+                            self.state = PacketBuilderState::Abort(pkt_full_len);
                         } else {
                             // 检查 pkt 容量是否足够
                             let writable_bytes = pkt.buffer_writable_bytes();
                             if writable_bytes < pkt_full_len {
                                 // state: 进入扩展包体缓冲区处理，重新申请 large pkt
-                                (*state) = PacketBuilderState::Expand(pkt_full_len);
+                                self.state = PacketBuilderState::Expand(pkt_full_len);
                             } else {
                                 // state: 进入包体数据处理
-                                (*state) = PacketBuilderState::Data(pkt_full_len);
+                                self.state = PacketBuilderState::Data(pkt_full_len);
                             }
                         }
                     } else if remain > 0 {
@@ -176,7 +177,7 @@ impl PacketBuilder {
                 }
 
                 PacketBuilderState::Expand(pkt_full_len) => {
-                    let old_pkt = pkt_opt.as_mut().unwrap();
+                    let old_pkt = self.pkt_opt.as_mut().unwrap();
 
                     //
                     let ensure_bytes = pkt_full_len;
@@ -185,23 +186,23 @@ impl PacketBuilder {
                     // old pkt 数据转移到 new pkt，使用 new pkt 继续解析
                     let new_pkt =
                         take_large_packet(leading_field_size, ensure_bytes, old_pkt_slice);
-                    (*pkt_opt) = Some(new_pkt);
+                    self.pkt_opt = Some(new_pkt);
 
                     // 进入包体数据处理
-                    (*state) = PacketBuilderState::Data(pkt_full_len);
+                    self.state = PacketBuilderState::Data(pkt_full_len);
                 }
 
                 PacketBuilderState::Data(pkt_full_len) => {
-                    let pkt = pkt_opt.as_mut().unwrap();
+                    let pkt = self.pkt_opt.as_mut().unwrap();
                     let buffer_raw_len = pkt.buffer_raw_len();
 
                     // 包体数据是否完整？
                     if buffer_raw_len > pkt_full_len {
                         // state: 完成当前 pkt 读取，转入完成处理（pkt尾部有多余数据）
-                        (*state) = PacketBuilderState::CompleteTailing(pkt_full_len);
+                        self.state = PacketBuilderState::CompleteTailing(pkt_full_len);
                     } else if buffer_raw_len == pkt_full_len {
                         // state: 完成当前 pkt 读取，转入完成处理
-                        (*state) = PacketBuilderState::Complete;
+                        self.state = PacketBuilderState::Complete;
                     } else if remain > 0 {
                         // input_buffer 中还有 input 数据未处理，将此 input 数据附加到内部 pkt
                         assert!(buffer_raw_len + consumed <= pkt_full_len);
@@ -233,14 +234,14 @@ impl PacketBuilder {
 
                 PacketBuilderState::Complete => {
                     // 完成一个 pkt
-                    let ready_pkt = pkt_opt.take().unwrap();
-                    (*pkt_opt) = None;
+                    let ready_pkt = self.pkt_opt.take().unwrap();
+                    self.pkt_opt = None;
 
                     //
                     pkt_list.push(ready_pkt);
 
                     // 完成当前 pkt 读取，进入空包状态
-                    (*state) = PacketBuilderState::Null;
+                    self.state = PacketBuilderState::Null;
 
                     // input 数据处理完毕
                     if 0 == remain {
@@ -251,7 +252,7 @@ impl PacketBuilder {
 
                 PacketBuilderState::CompleteTailing(pkt_full_len) => {
                     // 截取多余的尾部，创建新包
-                    let pkt = pkt_opt.as_mut().unwrap();
+                    let pkt = self.pkt_opt.as_mut().unwrap();
                     let buffer_raw_len = pkt.buffer_raw_len();
                     assert!(pkt_full_len < buffer_raw_len);
 
@@ -270,7 +271,7 @@ impl PacketBuilder {
                         pkt_list.push(ready_pkt);
                     } else {
                         // 尾部较小，使用新包进行容纳
-                        let mut ready_pkt = pkt_opt.take().unwrap();
+                        let mut ready_pkt = self.pkt_opt.take().unwrap();
                         {
                             let to_append = ready_pkt.consume_tail_n(tail_len);
 
@@ -278,7 +279,7 @@ impl PacketBuilder {
                             let mut tail_pkt = take_packet(pkt_full_len, leading_field_size);
                             tail_pkt.append_slice(to_append);
 
-                            (*pkt_opt) = Some(tail_pkt);
+                            self.pkt_opt = Some(tail_pkt);
                         }
 
                         //
@@ -286,7 +287,7 @@ impl PacketBuilder {
                     }
 
                     // 完成当前 pkt 读取，重新开始包体前导长度处理
-                    (*state) = PacketBuilderState::Leading;
+                    self.state = PacketBuilderState::Leading;
                 }
 
                 PacketBuilderState::Abort(pkt_full_len) => {

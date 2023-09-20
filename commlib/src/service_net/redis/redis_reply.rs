@@ -17,6 +17,7 @@ pub enum RedisReplyType {
 pub struct RedisReply {
     rpl_type: RedisReplyType,
 
+    //
     str_val: String,
     int_val: i64,
     arr_val: Vec<RedisReply>,
@@ -24,10 +25,22 @@ pub struct RedisReply {
 
 impl RedisReply {
     ///
+    pub fn null() -> Self {
+        Self {
+            rpl_type: RedisReplyType::Null,
+
+            str_val: "".to_owned(),
+            int_val: 0,
+            arr_val: Vec::new(),
+        }
+    }
+
+    ///
     pub fn from(value: &str, rpl_type: RedisReplyType) -> Self {
         assert!(rpl_type == RedisReplyType::BulkString || rpl_type == RedisReplyType::SimpleString);
         Self {
             rpl_type,
+
             str_val: value.to_owned(),
             int_val: 0,
             arr_val: Vec::new(),
@@ -35,7 +48,18 @@ impl RedisReply {
     }
 
     ///
-    pub fn from_i64(value: i64) -> Self {
+    pub fn from_error(value: &str) -> Self {
+        Self {
+            rpl_type: RedisReplyType::Error,
+
+            str_val: value.to_owned(),
+            int_val: 0,
+            arr_val: Vec::new(),
+        }
+    }
+
+    ///
+    pub fn from_integer(value: i64) -> Self {
         Self {
             rpl_type: RedisReplyType::Integer,
             str_val: "".to_owned(),
@@ -57,7 +81,9 @@ impl RedisReply {
     ///
     #[inline(always)]
     pub fn is_string(&self) -> bool {
-        self.rpl_type == RedisReplyType::BulkString || self.rpl_type == RedisReplyType::SimpleString
+        self.rpl_type == RedisReplyType::BulkString
+            || self.rpl_type == RedisReplyType::SimpleString
+            || self.rpl_type == RedisReplyType::Error
     }
 
     ///

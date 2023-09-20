@@ -147,7 +147,7 @@ pub fn tcp_client_make_new_conn(
 
         // use packet builder to handle input buffer
         let srv_net3 = srv_net.clone();
-        let pkt_builder = PacketBuilder::new();
+        let pkt_builder = PacketBuilder::new(pkt_fn);
         let read_fn = Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
             pkt_builder.build(srv_net3.as_ref(), conn, input_buffer)
         });
@@ -170,7 +170,6 @@ pub fn tcp_client_make_new_conn(
 
             //
             conn_fn,
-            pkt_fn,
             close_fn: RwLock::new(close_fn),
 
             //

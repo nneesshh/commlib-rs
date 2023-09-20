@@ -38,9 +38,9 @@ pub struct TcpServer {
     pub srv_net: Arc<ServiceNetRs>,
 
     //
-    pub conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
-    pub pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
-    pub close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
+    conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
+    pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
+    close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
 }
 
 impl TcpServer {
@@ -119,30 +119,6 @@ impl TcpServer {
     }
 
     ///
-    pub fn set_connection_callback<F>(&mut self, cb: F)
-    where
-        F: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-    {
-        self.conn_fn = Arc::new(cb);
-    }
-
-    ///
-    pub fn set_message_callback<F>(&mut self, cb: F)
-    where
-        F: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
-    {
-        self.pkt_fn = Arc::new(cb);
-    }
-
-    ///
-    pub fn set_close_callback<F>(&mut self, cb: F)
-    where
-        F: Fn(ConnId) + Send + Sync + 'static,
-    {
-        self.close_fn = Arc::new(cb);
-    }
-
-    ///
     #[inline(always)]
     pub fn status(&self) -> ServerStatus {
         self.status.load(Ordering::Relaxed)
@@ -152,5 +128,35 @@ impl TcpServer {
     #[inline(always)]
     pub fn set_status(&self, status: ServerStatus) {
         self.status.store(status, Ordering::Relaxed);
+    }
+
+    ///
+    #[inline(always)]
+    pub fn clone_conn_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>) + Send + Sync> {
+        self.conn_fn.clone()
+    }
+
+    ///
+    #[inline(always)]
+    pub fn clone_pkt_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync> {
+        self.pkt_fn.clone()
+    }
+
+    ///
+    #[inline(always)]
+    pub fn clone_close_fn(&self) -> Arc<dyn Fn(ConnId) + Send + Sync> {
+        self.close_fn.clone()
+    }
+
+    ///
+    pub fn setup_callbacks<C, P, S>(&mut self, conn_fn: C, pkt_fn: P, close_fn: S)
+    where
+        C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
+        P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+        S: Fn(ConnId) + Send + Sync + 'static,
+    {
+        self.conn_fn = Arc::new(conn_fn);
+        self.pkt_fn = Arc::new(pkt_fn);
+        self.close_fn = Arc::new(close_fn);
     }
 }

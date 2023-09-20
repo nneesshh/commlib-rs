@@ -7,8 +7,7 @@ use super::Buffer;
 use super::{decrypt_packet, encrypt_packet};
 
 /// Buffer size
-//const BUFFER_INITIAL_SIZE: usize = 4096;
-pub const BUFFER_INITIAL_SIZE: usize = 64;
+pub const BUFFER_INITIAL_SIZE: usize = 4096;
 pub const BUFFER_RESERVED_PREPEND_SIZE: usize = 8;
 
 /// 协议号类型，2字节

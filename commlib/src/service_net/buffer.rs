@@ -57,6 +57,12 @@ impl Buffer {
         self.length()
     }
 
+    /// It is the same as 0 == length()
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        0_usize == self.length()
+    }
+
     /// Capacity returns the capacity of the buffer's underlying byte slice, that is, the
     /// total space allocated for the buffer's data
     #[inline(always)]
@@ -77,7 +83,7 @@ impl Buffer {
         self.read_index
     }
 
-    ///
+    /// Ensure buffer capacity
     #[inline(always)]
     pub fn ensure(&mut self, len: usize) {
         if self.capacity() < self.reserved_prepend_index + len {
@@ -85,7 +91,7 @@ impl Buffer {
         }
     }
 
-    ///
+    /// Ensure writable bytes
     #[inline(always)]
     pub fn ensure_writable_bytes(&mut self, len: usize) {
         let writable_bytes = self.writable_bytes();
@@ -489,5 +495,22 @@ impl Buffer {
             assert_eq!(self.length(), readable);
             assert!(self.writable_bytes() >= old_writable_bytes + additional);
         }
+    }
+}
+
+impl std::fmt::Write for Buffer {
+    #[inline(always)]
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        let slice = s.as_bytes();
+        self.write_slice(slice);
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn write_char(&mut self, c: char) -> std::fmt::Result {
+        let slice =
+            unsafe { std::slice::from_raw_parts_mut(self.write_ptr(), self.writable_bytes()) };
+        c.encode_utf8(slice);
+        Ok(())
     }
 }

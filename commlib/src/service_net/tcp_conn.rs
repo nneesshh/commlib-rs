@@ -29,7 +29,6 @@ pub struct TcpConn {
 
     //
     pub conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
-    pub pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
     pub close_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
 
     // read_fn 对 input buffer 数据进行分包处理

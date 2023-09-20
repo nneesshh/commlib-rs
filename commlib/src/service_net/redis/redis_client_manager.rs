@@ -6,12 +6,13 @@ use uuid::Uuid;
 
 use message_io::network::Endpoint;
 
-use crate::{ClientStatus, ConnId, PinkySwear, RedisClient, ServiceNetRs, ServiceRs, TcpConn};
-use crate::{NetPacketGuard, PacketType};
+use crate::{ClientStatus, ConnId, NetPacketGuard, PacketType, TcpConn};
+use crate::{PinkySwear, ServiceNetRs, ServiceRs};
+use crate::{RedisClient, RedisReply};
 
 use crate::service_net::create_redis_client;
+use crate::service_net::redis::reply_builder::ReplyBuilder;
 use crate::service_net::tcp_conn_manager::insert_connection;
-use crate::service_net::ReplyBuilder;
 
 thread_local! {
      static G_REDIS_CLIENT_STORAGE: UnsafeCell<RedisClientStorage> = UnsafeCell::new(RedisClientStorage::new());
@@ -81,16 +82,15 @@ where
         };
 
         let cli3 = cli.clone();
-        let pkt_fn = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
-            let slice = pkt.peek();
-            //cli3.on_receive_reply(conn, slice);
+        let reply_fn = move |conn: Arc<TcpConn>, reply: RedisReply| {
+            cli3.on_receive_reply(conn, reply);
         };
 
         let cli4 = cli.clone();
         let close_fn = move |hd: ConnId| {
             cli4.on_disconnect(hd);
         };
-        cli.setup_callbacks(conn_fn, pkt_fn, close_fn);
+        cli.setup_callbacks(conn_fn, reply_fn, close_fn);
 
         // insert redis client
         with_tls_mut!(G_REDIS_CLIENT_STORAGE, g, {
@@ -137,7 +137,7 @@ pub fn redis_client_make_new_conn(
 
     //
     let cli_conn_fn = cli.clone_conn_fn();
-    let cli_pkt_fn = cli.clone_pkt_fn();
+    let cli_reply_fn = cli.clone_reply_fn();
     let cli_close_fn = cli.clone_close_fn();
 
     // insert tcp conn in srv net(同一线程便于观察 conn 生命周期)
@@ -145,8 +145,8 @@ pub fn redis_client_make_new_conn(
         let conn_fn = Arc::new(move |conn| {
             (*cli_conn_fn)(conn);
         });
-        let pkt_fn = Arc::new(move |conn, pkt| {
-            (*cli_pkt_fn)(conn, pkt);
+        let reply_fn = Arc::new(move |conn, reply| {
+            (*cli_reply_fn)(conn, reply);
         });
 
         let srv_net2 = srv_net.clone();
@@ -160,7 +160,7 @@ pub fn redis_client_make_new_conn(
 
         // use redis reply builder to handle input buffer
         let srv_net3 = srv_net.clone();
-        let reply_builder = ReplyBuilder::new();
+        let reply_builder = ReplyBuilder::new(reply_fn);
         let read_fn = Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
             reply_builder.build(srv_net3.as_ref(), conn, input_buffer);
         });
@@ -183,7 +183,6 @@ pub fn redis_client_make_new_conn(
 
             //
             conn_fn,
-            pkt_fn,
             close_fn: RwLock::new(close_fn),
 
             //

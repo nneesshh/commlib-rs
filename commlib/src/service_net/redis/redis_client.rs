@@ -15,14 +15,16 @@ use std::sync::Arc;
 
 use message_io::node::NodeHandler;
 
-use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
-
-use super::super::{
+use crate::service_net::MessageIoNetwork;
+use crate::service_net::{
     tcp_client_manager::tcp_client_reconnect, tcp_conn_manager::disconnect_connection,
 };
-use super::super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, TcpConn};
+use crate::{ClientStatus, ConnId, RedisReply, TcpConn};
+use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
 
-///
+use super::RedisCommand;
+
+/// Client for redis
 #[repr(C)]
 pub struct RedisClient {
     start: std::time::Instant,
@@ -43,11 +45,15 @@ pub struct RedisClient {
 
     //
     conn_fn: RwLock<Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>>,
-    pkt_fn: RwLock<Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>>,
+    reply_fn: RwLock<Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>>,
     close_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
 
     //
     inner_hd: Atomic<ConnId>,
+
+    //
+    redis_command: RedisCommand,
+    //t: std::cell::RefCell<u64>,
 }
 
 impl RedisClient {
@@ -81,10 +87,17 @@ impl RedisClient {
             auto_reconnect: true,
 
             conn_fn: RwLock::new(Arc::new(|_1| {})),
-            pkt_fn: RwLock::new(Arc::new(|_1, _2| {})),
+            reply_fn: RwLock::new(Arc::new(|_1, _2| {})),
             close_fn: RwLock::new(Arc::new(|_1| {})),
 
             inner_hd: Atomic::new(ConnId::from(0)),
+
+            redis_command: RedisCommand::new(
+                std::format!("{}:{}", name, raddr).as_str(),
+                pass,
+                dbindex,
+            ),
+            //t: std::cell::RefCell::new(0),
         }
     }
 
@@ -100,10 +113,13 @@ impl RedisClient {
             self.status().to_string(),
             conn.hd,
         );
+
+        //
+        //self.redis_command.on_link_connected(&conn);
     }
 
     /// Event: on_receive_reply
-    pub fn on_receive_reply(&self, conn: Arc<TcpConn>, data: &[u8]) {
+    pub fn on_receive_reply(&self, _conn: Arc<TcpConn>, _reply: RedisReply) {
         //
         log::info!(
             "id<{}>[hd={}]({}) redis client on_receive_reply ... raddr: {} status: {}",
@@ -116,7 +132,7 @@ impl RedisClient {
     }
 
     /// Event: on_disconnect
-    pub fn on_disconnect(&self, hd: ConnId) {
+    pub fn on_disconnect(&self, _hd: ConnId) {
         //
         log::info!(
             "id<{}>[hd={}]({}) redis client on_disconnect ... raddr: {} status: {}",
@@ -338,9 +354,9 @@ impl RedisClient {
 
     ///
     #[inline(always)]
-    pub fn clone_pkt_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync> {
-        let pkt_fn = self.pkt_fn.read();
-        pkt_fn.clone()
+    pub fn clone_reply_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync> {
+        let reply_fn = self.reply_fn.read();
+        reply_fn.clone()
     }
 
     ///
@@ -351,10 +367,10 @@ impl RedisClient {
     }
 
     ///
-    pub fn setup_callbacks<C, P, S>(&self, conn_fn: C, pkt_fn: P, close_fn: S)
+    pub fn setup_callbacks<C, R, S>(&self, conn_fn: C, reply_fn: R, close_fn: S)
     where
         C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-        P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+        R: Fn(Arc<TcpConn>, RedisReply) + Send + Sync + 'static,
         S: Fn(ConnId) + Send + Sync + 'static,
     {
         // conn_fn
@@ -363,10 +379,10 @@ impl RedisClient {
             (*conn_fn_mut) = Arc::new(conn_fn);
         }
 
-        // pkt_fn
+        // reply_fn
         {
-            let mut pkt_fn_mut = self.pkt_fn.write();
-            (*pkt_fn_mut) = Arc::new(pkt_fn);
+            let mut reply_fn_mut = self.reply_fn.write();
+            (*reply_fn_mut) = Arc::new(reply_fn);
         }
 
         // close_fn
@@ -400,5 +416,10 @@ impl RedisClient {
                 }
             }
         }
+    }
+
+    ///
+    pub fn command(&self) -> &RedisCommand {
+        &self.redis_command
     }
 }
