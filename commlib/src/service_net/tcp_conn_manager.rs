@@ -44,7 +44,7 @@ pub fn disconnect_connection<F>(
                     is_conn_closed = true;
                 } else {
                     // 修改 close_fn，运行 disconnect 回调函数: close_cb
-                    let mut close_fn_mut = conn.close_fn.write();
+                    let mut close_fn_mut = conn.connection_lost_fn.write();
                     (*close_fn_mut) = close_cb.clone();
 
                     // low level close
@@ -70,31 +70,6 @@ pub fn disconnect_connection<F>(
 }
 
 ///
-#[inline(always)]
-pub fn handle_raw_data_event(
-    srv_net: &Arc<ServiceNetRs>,
-    hd: ConnId,
-    input_buffer: NetPacketGuard,
-) {
-    // 在 srv_net 中运行
-    let srv_net2 = srv_net.clone();
-    let func = move || {
-        on_got_raw_data(srv_net2.as_ref(), hd, input_buffer);
-    };
-    srv_net.run_in_service(Box::new(func));
-}
-
-///
-pub fn handle_close_event(srv_net: &Arc<ServiceNetRs>, hd: ConnId) {
-    // 在 srv_net 中运行
-    let srv_net2 = srv_net.clone();
-    let func = move || {
-        on_connection_closed(srv_net2.as_ref(), hd);
-    };
-    srv_net.run_in_service(Box::new(func));
-}
-
-///
 pub fn insert_connection(srv_net: &ServiceNetRs, hd: ConnId, conn: &Arc<TcpConn>) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
@@ -115,16 +90,31 @@ pub fn remove_connection(srv_net: &ServiceNetRs, hd: ConnId) -> Option<Arc<TcpCo
         g.conn_table.remove(&hd)
     })
 }
+
 ///
 #[inline(always)]
-pub fn on_got_raw_data(srv_net: &ServiceNetRs, hd: ConnId, input_buffer: NetPacketGuard) {
+pub fn on_connection_established(srv_net: &ServiceNetRs, conn: Arc<TcpConn>) {
+    // 运行于 srv_net 线程
+    assert!(srv_net.is_in_service_thread());
+
+    // trigger conn_fn
+    let srv = conn.srv.clone();
+    srv.run_in_service(Box::new(move || {
+        let conn2 = conn.clone();
+        (conn.connection_establish_fn)(conn2);
+    }));
+}
+
+///
+#[inline(always)]
+pub fn on_connection_read_data(srv_net: &ServiceNetRs, hd: ConnId, input_buffer: NetPacketGuard) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
 
     with_tls_mut!(G_TCP_CONN_STORAGE, g, {
         if let Some(conn) = g.conn_table.get(&hd) {
             // input buffer 数据读取处理
-            (conn.read_fn)(conn, input_buffer)
+            (conn.connection_read_fn)(conn, input_buffer)
         } else {
             //
             log::error!("[on_got_message][hd={}] conn not found!!!", hd);
@@ -133,6 +123,7 @@ pub fn on_got_raw_data(srv_net: &ServiceNetRs, hd: ConnId, input_buffer: NetPack
 }
 
 ///
+#[inline(always)]
 pub fn on_connection_closed(srv_net: &ServiceNetRs, hd: ConnId) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
@@ -142,7 +133,7 @@ pub fn on_connection_closed(srv_net: &ServiceNetRs, hd: ConnId) {
         // trigger close_fn
         let f: Arc<dyn Fn(ConnId) + Send + Sync>;
         {
-            let close_fn = conn.close_fn.read();
+            let close_fn = conn.connection_lost_fn.read();
             f = (*close_fn).clone();
         }
 
@@ -158,23 +149,4 @@ pub fn on_connection_closed(srv_net: &ServiceNetRs, hd: ConnId) {
         //
         log::error!("[on_connection_closed][hd={}] conn not found!!!", hd);
     }
-}
-
-/// Trigger close_fn
-pub fn run_close_fn(conn: &Arc<TcpConn>) {
-    let conn = conn.clone();
-    let f: Arc<dyn Fn(ConnId) + Send + Sync>;
-    {
-        let close_fn = conn.close_fn.read();
-        f = (*close_fn).clone();
-    }
-
-    // 标记关闭
-    conn.set_closed(true);
-
-    //
-    let srv = conn.srv.clone();
-    srv.run_in_service(Box::new(move || {
-        (f)(conn.hd);
-    }));
 }

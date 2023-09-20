@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::ServiceNetRs;
+use crate::{ServiceNetRs, ServiceRs};
 
 use super::tcp_conn_manager::on_connection_closed;
 use super::NetPacketGuard;
@@ -53,6 +53,9 @@ impl PacketBuilder {
         conn: &Arc<TcpConn>,
         mut input_buffer: NetPacketGuard,
     ) {
+        // 运行于 srv_net 线程
+        assert!(srv_net.is_in_service_thread());
+
         let builder = unsafe { &mut *(self as *const Self as *mut Self) };
 
         let leading_field_size = get_leading_field_size(conn.packet_type());

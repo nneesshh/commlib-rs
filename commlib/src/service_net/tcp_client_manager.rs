@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use message_io::network::Endpoint;
 
+use crate::service_net::tcp_conn_manager::on_connection_established;
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
 use super::create_tcp_client;
@@ -129,27 +130,30 @@ pub fn tcp_client_make_new_conn(
 
     // insert tcp conn in srv net(同一线程便于观察 conn 生命周期)
     let func = move || {
-        let conn_fn = Arc::new(move |conn| {
+        //
+        let connection_establish_fn = Box::new(move |conn| {
             (*cli_conn_fn)(conn);
         });
+
+        // use packet builder to handle input buffer
+        let srv_net2 = srv_net.clone();
         let pkt_fn = Arc::new(move |conn, pkt| {
             (*cli_pkt_fn)(conn, pkt);
         });
+        let pkt_builder = PacketBuilder::new(pkt_fn);
+        let connection_read_fn =
+            Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
+                pkt_builder.build(srv_net2.as_ref(), conn, input_buffer)
+            });
 
-        let srv_net2 = srv_net.clone();
-        let close_fn = Arc::new(move |hd| {
+        //
+        let srv_net3 = srv_net.clone();
+        let connection_lost_fn = Arc::new(move |hd| {
             // close fn
             (*cli_close_fn)(hd);
 
             // check auto reconnect
-            tcp_client_check_auto_reconnect(&srv_net2, hd, cli_id);
-        });
-
-        // use packet builder to handle input buffer
-        let srv_net3 = srv_net.clone();
-        let pkt_builder = PacketBuilder::new(pkt_fn);
-        let read_fn = Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
-            pkt_builder.build(srv_net3.as_ref(), conn, input_buffer)
+            tcp_client_check_auto_reconnect(&srv_net3, hd, cli_id);
         });
 
         let conn = Arc::new(TcpConn {
@@ -169,11 +173,9 @@ pub fn tcp_client_make_new_conn(
             srv_net: srv_net.clone(),
 
             //
-            conn_fn,
-            close_fn: RwLock::new(close_fn),
-
-            //
-            read_fn,
+            connection_establish_fn,
+            connection_read_fn,
+            connection_lost_fn: RwLock::new(connection_lost_fn),
         });
 
         // add conn
@@ -192,12 +194,8 @@ pub fn tcp_client_make_new_conn(
             }
         });
 
-        // trigger conn_fn
-        let f = conn.conn_fn.clone();
-        let srv = conn.srv.clone();
-        srv.run_in_service(Box::new(move || {
-            (f)(conn);
-        }));
+        // connection ok
+        on_connection_established(srv_net.as_ref(), conn);
     };
     cli.srv_net().run_in_service(Box::new(func));
 }

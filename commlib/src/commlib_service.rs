@@ -192,7 +192,28 @@ where
         .spawn(move || {
             let handle = srv2.get_handle();
 
-            
+            // notify ready
+            let tid = get_current_tid();
+            log::info!("service({}) spawn on thread: {}", tname, tid);
+
+            // 服务线程初始化
+            (initializer)();
+
+            // 服务线程就绪通知
+            tid_pinky.swear(tid);
+
+            // run
+            run_service(srv2.as_ref(), tname.as_str());
+
+            // exit
+            {
+                // mark closed
+                handle.set_state(NodeState::Closed);
+
+                // notify exit
+                (&*exit_cv).1.notify_all();
+                log::info!("service exit: ID={} state={:?}", handle.id, handle.state());
+            }
         })
         .unwrap();
 

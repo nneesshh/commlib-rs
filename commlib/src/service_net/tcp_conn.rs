@@ -27,12 +27,14 @@ pub struct TcpConn {
     pub srv: Arc<dyn ServiceRs>,
     pub srv_net: Arc<ServiceNetRs>,
 
-    //
-    pub conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
-    pub close_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
+    // 处理连接事件
+    pub connection_establish_fn: Box<dyn Fn(Arc<TcpConn>) + Send + Sync>,
 
-    // read_fn 对 input buffer 数据进行分包处理
-    pub read_fn: Box<dyn Fn(&Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
+    // 对 input buffer 数据进行分包处理
+    pub connection_read_fn: Box<dyn Fn(&Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
+
+    // 处理连接断开事件
+    pub connection_lost_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
 }
 
 impl TcpConn {

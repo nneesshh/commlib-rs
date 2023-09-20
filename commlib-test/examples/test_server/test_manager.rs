@@ -47,7 +47,7 @@ impl TestManager {
     pub fn init(&mut self, srv: &Arc<TestService>) -> bool {
         let handle = srv.get_handle();
 
-        /// 消息处理
+        // 消息处理
         self.c2s_proxy.set_packet_handler(
             proto::EnumMsgType::EncryptToken as CmdId,
             Self::handle_encrypt_token,
@@ -79,7 +79,7 @@ impl TestManager {
 
         let key = msg.token();
 
-        log::info!("handle_encrypt_token: key: {} -- {:?}", key.len(), key);
+        log::info!("handle_encrypt_token: key: ({}){:?}", key.len(), key);
     }
 }
 

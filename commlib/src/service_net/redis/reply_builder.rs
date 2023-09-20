@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::service_net::tcp_conn_manager::on_connection_closed;
 use crate::RedisReply;
-use crate::{Buffer, NetPacketGuard, ServiceNetRs, TcpConn};
+use crate::{Buffer, NetPacketGuard, ServiceNetRs, ServiceRs, TcpConn};
 
 use super::sub_builder_impl::RootBuilder;
 
@@ -58,6 +58,9 @@ impl ReplyBuilder {
     /// 解析 RedisReply，触发回调函数
     #[inline(always)]
     pub fn build(&self, srv_net: &ServiceNetRs, conn: &Arc<TcpConn>, input_buffer: NetPacketGuard) {
+        // 运行于 srv_net 线程
+        assert!(srv_net.is_in_service_thread());
+
         let builder = unsafe { &mut *(self as *const Self as *mut Self) };
 
         //

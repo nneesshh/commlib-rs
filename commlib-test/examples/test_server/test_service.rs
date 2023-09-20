@@ -39,7 +39,7 @@ impl ServiceRs for TestService {
     fn conf(&self) {}
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync + 'static>) {
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + 'static>) {
         self.get_handle().run_in_service(cb);
     }
 

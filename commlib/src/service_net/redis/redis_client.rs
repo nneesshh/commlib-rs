@@ -53,7 +53,6 @@ pub struct RedisClient {
 
     //
     redis_command: RedisCommand,
-    //t: std::cell::RefCell<u64>,
 }
 
 impl RedisClient {
@@ -97,7 +96,6 @@ impl RedisClient {
                 pass,
                 dbindex,
             ),
-            //t: std::cell::RefCell::new(0),
         }
     }
 

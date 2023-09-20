@@ -72,7 +72,7 @@ impl NetProxy {
         let hd = conn.hd;
         {
             let peek = pkt.peek();
-            log::info!("[hd={}] on_net_packet: 1) {:?}", hd, peek);
+            log::info!("[hd={}] on_net_packet: 1) ({}){:?}", hd, peek.len(), peek);
         }
 
         if decode_packet(self.packet_type, hd, &mut pkt, &mut self.hd_encrypt_table) {
@@ -91,7 +91,12 @@ impl NetProxy {
         } else {
             //
             let peek = pkt.peek();
-            log::error!("[hd={}] on_net_packet failed!!! {:?}!!!", hd, peek);
+            log::error!(
+                "[hd={}] on_net_packet failed!!! ({}){:?}!!!",
+                hd,
+                peek.len(),
+                peek
+            );
         }
     }
 
@@ -189,15 +194,22 @@ impl NetProxy {
         //
         if encode_packet(conn.packet_type(), hd, &mut pkt, &mut self.hd_encrypt_table) {
             let slice = pkt.consume();
-            log::info!("[hd={}] send packet cmd({}) -- {:?}", hd, cmd, slice);
+            log::info!(
+                "[hd={}] send packet cmd({}) -- ({}){:?}",
+                hd,
+                cmd,
+                slice.len(),
+                slice
+            );
             conn.send(slice);
         } else {
             //
             let peek = pkt.peek();
             log::error!(
-                "[hd={}] send packet failed!!! cmd({})!!! {:?}!!!",
+                "[hd={}] send packet failed!!! cmd({})!!! ({}){:?}!!!",
                 hd,
                 cmd,
+                peek.len(),
                 peek
             );
         }

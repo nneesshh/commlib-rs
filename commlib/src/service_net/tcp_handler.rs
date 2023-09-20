@@ -3,14 +3,13 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
+use crate::{ServiceNetRs, ServiceRs};
+
 use super::take_packet;
 use super::tcp_client_manager::tcp_client_make_new_conn;
-use super::tcp_conn_manager::{handle_close_event, handle_raw_data_event};
+use super::tcp_conn_manager::{on_connection_closed, on_connection_read_data};
 use super::tcp_server_manager::tcp_server_make_new_conn;
-use super::{
-    ConnId, OsSocketAddr, PacketType, RedisClient, ServiceNetRs, TcpClient, TcpListenerId,
-    TcpServer,
-};
+use super::{ConnId, OsSocketAddr, PacketType, RedisClient, TcpClient, TcpListenerId, TcpServer};
 
 use super::redis::redis_client_manager::redis_client_make_new_conn;
 
@@ -148,13 +147,20 @@ extern "C" fn on_input_cb(
     let mut input_buffer = take_packet(input_len, 0);
     input_buffer.append(input_data, input_len);
 
-    //
-    handle_raw_data_event(srv_net, hd, input_buffer);
+    let srv_net2 = srv_net.clone();
+    let func = move || {
+        on_connection_read_data(srv_net2.as_ref(), hd, input_buffer);
+    };
+    srv_net.run_in_service(Box::new(func));
 }
 
 extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {
     let srv_net = unsafe { &*srv_net_ptr };
 
     //
-    handle_close_event(srv_net, hd);
+    let srv_net2 = srv_net.clone();
+    let func = move || {
+        on_connection_closed(srv_net2.as_ref(), hd);
+    };
+    srv_net.run_in_service(Box::new(func));
 }
