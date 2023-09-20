@@ -53,7 +53,7 @@ impl ServiceRs for ServiceNetRs {
 
     /// 在 service 线程中执行回调任务
     #[inline(always)]
-    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send>) {
         self.get_handle().run_in_service(cb);
     }
 

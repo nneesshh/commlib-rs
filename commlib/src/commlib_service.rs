@@ -28,7 +28,7 @@ pub enum NodeState {
     NodeLost,  // 节点丢失（world 管理节点用）
 }
 
-pub type ServiceFuncType = dyn FnOnce() + Send + Sync; // Note: tait object is always 'static, no need add 'static here
+pub type ServiceFuncType = dyn FnOnce() + Send; // Note: tait object is always 'static, no need add 'static here
 
 /// Service handle
 pub struct ServiceHandle {
@@ -113,7 +113,7 @@ impl ServiceHandle {
 
     /// 在 service 线程中执行回调任务
     #[inline(always)]
-    pub fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>) {
+    pub fn run_in_service(&self, cb: Box<dyn FnOnce() + Send>) {
         self.tx.send(cb).unwrap();
     }
 
@@ -152,7 +152,7 @@ pub trait ServiceRs: Send + Sync {
     fn conf(&self);
 
     /// 在 service 线程中执行回调任务
-    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + Sync>);
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send>);
 
     /// 当前代码是否运行于 service 线程中
     fn is_in_service_thread(&self) -> bool;
@@ -169,7 +169,7 @@ pub fn start_service<T, I>(
 ) -> (Option<JoinHandle<()>>, u64)
 where
     T: ServiceRs + 'static,
-    I: FnOnce() + Send + Sync + 'static,
+    I: FnOnce() + Send + 'static,
 {
     let (tid_prms, tid_pinky) = PinkySwear::<u64>::new();
 
@@ -192,28 +192,7 @@ where
         .spawn(move || {
             let handle = srv2.get_handle();
 
-            // notify ready
-            let tid = get_current_tid();
-            log::info!("service({}) spawn on thread: {}", tname, tid);
-
-            // 服务线程初始化
-            (initializer)();
-
-            // 服务线程就绪通知
-            tid_pinky.swear(tid);
-
-            // run
-            run_service(srv2.as_ref(), tname.as_str());
-
-            // exit
-            {
-                // mark closed
-                handle.set_state(NodeState::Closed);
-
-                // notify exit
-                (&*exit_cv).1.notify_all();
-                log::info!("service exit: ID={} state={:?}", handle.id, handle.state());
-            }
+            
         })
         .unwrap();
 
