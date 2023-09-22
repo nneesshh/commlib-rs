@@ -133,12 +133,12 @@ pub fn tcp_server_make_new_conn(
 
                 // use packet builder to handle input buffer
                 let tcp_server2 = tcp_server.clone();
-                let pkt_fn = Arc::new(move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
+                let build_cb = Arc::new(move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
                     // 运行于 srv_net 线程
                     assert!(conn.srv_net.is_in_service_thread());
                     tcp_server2.on_ll_receive_packet(conn, pkt);
                 });
-                let pkt_builder = PacketBuilder::new(pkt_fn);
+                let pkt_builder = PacketBuilder::new(build_cb);
                 let connection_read_fn =
                     Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
                         // 运行于 srv_net 线程

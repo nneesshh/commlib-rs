@@ -1,10 +1,10 @@
+use atomic::{Atomic, Ordering};
 use std::collections::VecDeque;
 use std::fmt::Write;
 use std::sync::Arc;
-use atomic::{Atomic, Ordering};
 
 use crate::pinky_swear::{Pinky, PinkySwear};
-use crate::{Buffer, RedisReply, ServiceRs, TcpConn, ServiceNetRs};
+use crate::{Buffer, RedisReply, ServiceNetRs, ServiceRs, TcpConn};
 
 const MAX_COMMAND_PART_NUM: usize = 64;
 
@@ -12,7 +12,7 @@ const CMD_BUFFER_INITIAL_SIZE: usize = 4096;
 const CMD_BUFFER_RESERVED_PREPEND_SIZE: usize = 0;
 
 ///
-pub type ReplyCallback = Box<dyn Fn(RedisReply) + Send + Sync>;
+pub type ReplyCallback = Box<dyn FnOnce(RedisReply) + Send + Sync>;
 
 ///
 pub struct Command {
@@ -28,7 +28,7 @@ pub struct RedisCommander {
     dbindex: isize, // redis db index
 
     //
-    srv_net:Arc<ServiceNetRs>,
+    srv_net: Arc<ServiceNetRs>,
     srv: Arc<dyn ServiceRs>,
 
     //
@@ -45,7 +45,13 @@ pub struct RedisCommander {
 
 impl RedisCommander {
     ///
-    pub fn new<T>(srv: &Arc<T>, name: &str, pass: &str, dbindex: isize, srv_net:&Arc<ServiceNetRs>) -> Self
+    pub fn new<T>(
+        srv: &Arc<T>,
+        name: &str,
+        pass: &str,
+        dbindex: isize,
+        srv_net: &Arc<ServiceNetRs>,
+    ) -> Self
     where
         T: ServiceRs + 'static,
     {
@@ -120,28 +126,33 @@ impl RedisCommander {
     }
 
     ///
-    pub fn send<F>(self:&Arc<Self>, cmd: Vec<String>, cb: F)
+    pub fn send<F>(self: &Arc<Self>, cmd: Vec<String>, cb: F)
     where
-        F: Fn(RedisReply) + Send + Sync + 'static,
+        F: FnOnce(RedisReply) + Send + Sync + 'static,
     {
         let cli = self.clone();
-        self.srv_net.run_in_service(Box::new(move ||{
-            cli.do_send(cmd, cb);
-        }));        
+        let srv = self.srv.clone();
+        self.srv_net.run_in_service(Box::new(move || {
+            cli.do_send(cmd, move |reply| {
+                srv.run_in_service(Box::new(move || {
+                    cb(reply);
+                }))
+            });
+        }));
     }
 
     /// 异步提交： 如果提交失败，则在连接成功后再提交一次
-    pub fn commit(self:&Arc<Self>, ) {
+    pub fn commit(self: &Arc<Self>) {
         let cli = self.clone();
-        self.srv_net.run_in_service(Box::new(move ||{
+        self.srv_net.run_in_service(Box::new(move || {
             cli.do_commit();
-        }));        
+        }));
     }
 
     ///
-    pub fn send_and_commit_blocking<F>(self:&Arc<Self>, cmd: Vec<String>) -> PinkySwear<RedisReply>
+    pub fn send_and_commit_blocking<F>(self: &Arc<Self>, cmd: Vec<String>) -> PinkySwear<RedisReply>
     where
-        F: Fn(RedisReply) + Send + Sync + 'static,
+        F: FnOnce(RedisReply) + Send + Sync + 'static,
     {
         // MUST not in srv_net thread，防止 blocking 导致死锁
         assert!(!self.srv_net.is_in_service_thread());
@@ -149,21 +160,21 @@ impl RedisCommander {
         let (prms, pinky) = PinkySwear::<RedisReply>::new();
 
         let cli = self.clone();
-        self.srv_net.run_in_service(Box::new(move ||{
-            cli.do_send(cmd, move|reply| {
+        self.srv_net.run_in_service(Box::new(move || {
+            cli.do_send(cmd, move |reply| {
                 pinky.swear(reply);
             });
-        }));   
+        }));
 
-        prms     
+        prms
     }
 
     /// 用户手工调用，清除 commands 缓存
-    pub fn clear_commands(self:&Arc<Self>, ) {
+    pub fn clear_commands(self: &Arc<Self>) {
         let cli = self.clone();
-        self.srv.run_in_service(Box::new(move ||{
+        self.srv.run_in_service(Box::new(move || {
             cli.do_clear_commands();
-        }));   
+        }));
     }
 
     fn do_auth(&mut self) {
@@ -265,7 +276,7 @@ impl RedisCommander {
 
     fn do_send<F>(&self, cmd: Vec<String>, cb: F)
     where
-        F: Fn(RedisReply) + Send + Sync + 'static,
+        F: FnOnce(RedisReply) + Send + Sync + 'static,
     {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
@@ -331,5 +342,4 @@ impl RedisCommander {
         // 清空
         commander.commands.clear();
     }
-
 }

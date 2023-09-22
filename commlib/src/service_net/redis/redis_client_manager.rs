@@ -126,12 +126,12 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, endpoint: 
 
         // use redis reply builder to handle input buffer
         let cli3 = cli2.clone();
-        let reply_fn = Arc::new(move |conn: Arc<TcpConn>, reply: RedisReply| {
+        let build_cb = Arc::new(move |conn: Arc<TcpConn>, reply: RedisReply| {
             // 运行于 srv_net 线程
             assert!(conn.srv_net.is_in_service_thread());
             cli3.on_ll_receive_reply(conn, reply);
         });
-        let reply_builder = ReplyBuilder::new(reply_fn);
+        let reply_builder = ReplyBuilder::new(build_cb);
         let connection_read_fn =
             Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
                 // 运行于 srv_net 线程

@@ -32,16 +32,16 @@ pub struct PacketBuilder {
 
     //
     pkt_opt: Option<NetPacketGuard>, // 使用 option 以便 pkt 移交
-    pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
+    build_cb: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
 }
 
 impl PacketBuilder {
     ///
-    pub fn new(pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>) -> Self {
+    pub fn new(build_cb: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>) -> Self {
         Self {
             state: PacketBuilderState::Null,
             pkt_opt: None,
-            pkt_fn,
+            build_cb,
         }
     }
 
@@ -60,14 +60,9 @@ impl PacketBuilder {
         match builder.build_once(input_buffer) {
             PacketResult::Ready(pkt_list) => {
                 for pkt in pkt_list {
-                    // trigger pkt_fn
-                    let conn = conn.clone();
-                    let f = self.pkt_fn.clone();
-                    let srv = conn.srv.clone();
-
-                    srv.run_in_service(Box::new(move || {
-                        (f)(conn, pkt);
-                    }));
+                    // trigger build_cb
+                    let conn2 = conn.clone();
+                    (self.build_cb)(conn2, pkt);
                 }
             }
 

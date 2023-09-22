@@ -31,7 +31,7 @@ pub trait ReplySubBuilder {
 ///
 pub struct ReplyBuilder {
     //
-    reply_fn: Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>,
+    build_cb: Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>,
 
     //
     buffer: Buffer,
@@ -42,9 +42,9 @@ pub struct ReplyBuilder {
 
 impl ReplyBuilder {
     ///
-    pub fn new(reply_fn: Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>) -> Self {
+    pub fn new(build_cb: Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>) -> Self {
         Self {
-            reply_fn,
+            build_cb,
 
             buffer: Buffer::new(
                 REDIS_BUFFER_INITIAL_SIZE,
@@ -67,14 +67,9 @@ impl ReplyBuilder {
         match builder.build_once(input_buffer) {
             ReplyResult::Ready(reply_list) => {
                 for reply in reply_list {
-                    // trigger reply_fn
-                    let conn = conn.clone();
-                    let f = self.reply_fn.clone();
-                    let srv = conn.srv.clone();
-
-                    srv.run_in_service(Box::new(move || {
-                        (f)(conn, reply);
-                    }));
+                    // trigger build_cb
+                    let conn2 = conn.clone();
+                    (self.build_cb)(conn2, reply);
                 }
             }
 
