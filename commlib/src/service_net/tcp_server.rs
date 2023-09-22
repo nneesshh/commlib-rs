@@ -13,6 +13,8 @@ use atomic::{Atomic, Ordering};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use message_io::node::NodeHandler;
+
 use super::MessageIoNetwork;
 use super::{ConnId, NetPacketGuard, ServerStatus, TcpConn, TcpListenerId};
 
@@ -53,7 +55,7 @@ impl TcpServer {
         close_fn: S,
         mi_network: &Arc<MessageIoNetwork>,
         srv_net: &Arc<ServiceNetRs>,
-    ) -> TcpServer
+    ) -> Self
     where
         T: ServiceRs + 'static,
         C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
@@ -79,6 +81,39 @@ impl TcpServer {
             pkt_fn: Arc::new(pkt_fn),
             close_fn: Arc::new(close_fn),
         }
+    }
+
+    ///
+    pub fn on_ll_connect(&self, conn: Arc<TcpConn>) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let conn_fn = self.clone_conn_fn();
+        self.srv().run_in_service(Box::new(move || {
+            (*conn_fn)(conn);
+        }))
+    }
+
+    ///
+    pub fn on_ll_receive_packet(&self, conn: Arc<TcpConn>, pkt: NetPacketGuard) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let pkt_fn = self.clone_pkt_fn();
+        self.srv().run_in_service(Box::new(move || {
+            (*pkt_fn)(conn, pkt);
+        }))
+    }
+
+    ///
+    pub fn on_ll_disconnect(&self, hd: ConnId) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let close_fn = self.clone_close_fn();
+        self.srv().run_in_service(Box::new(move || {
+            (*close_fn)(hd);
+        }))
     }
 
     /// Create a tcp server and listen on [ip:port]
@@ -114,7 +149,7 @@ impl TcpServer {
     }
 
     ///
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         // TODO:
     }
 
@@ -128,6 +163,24 @@ impl TcpServer {
     #[inline(always)]
     pub fn set_status(&self, status: ServerStatus) {
         self.status.store(status, Ordering::Relaxed);
+    }
+
+    ///
+    #[inline(always)]
+    pub fn netctrl(&self) -> &NodeHandler<()> {
+        &self.mi_network.node_handler
+    }
+
+    ///
+    #[inline(always)]
+    pub fn srv_net(&self) -> &Arc<ServiceNetRs> {
+        &self.srv_net
+    }
+
+    ///
+    #[inline(always)]
+    pub fn srv(&self) -> &Arc<dyn ServiceRs> {
+        &self.srv
     }
 
     ///

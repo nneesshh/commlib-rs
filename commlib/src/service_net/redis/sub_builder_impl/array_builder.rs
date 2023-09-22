@@ -12,7 +12,7 @@ enum ArrayBuildState {
 /// 构造 Array
 pub struct ArrayBuilder {
     integer_builder: IntegerBuilder,
-    root_builder: Box<RootBuilder>, // use Box to avoid recursive struct
+    root_builder: RootBuilder, // use Box to avoid recursive struct
     build_state: ArrayBuildState,
 
     //
@@ -25,7 +25,7 @@ impl ArrayBuilder {
     pub fn new() -> Self {
         Self {
             integer_builder: IntegerBuilder(),
-            root_builder: Box::new(RootBuilder::new()),
+            root_builder: RootBuilder::new(),
             build_state: ArrayBuildState::Size,
 
             reply_list: Vec::new(),

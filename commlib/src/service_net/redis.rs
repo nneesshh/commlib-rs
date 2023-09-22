@@ -11,8 +11,8 @@ pub mod redis_client_manager;
 pub use redis_client_manager::connect_to_redis;
 
 ///
-pub mod redis_command;
-pub use redis_command::RedisCommand;
+pub mod redis_commander;
+pub use redis_commander::RedisCommander;
 
 ///
 mod reply_builder;

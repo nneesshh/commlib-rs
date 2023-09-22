@@ -140,6 +140,10 @@ pub fn decode_packet(
             pkt.read_robot_ws_packet();
             true
         }
+
+        _ => {
+            std::unreachable!()
+        }
     }
 }
 
@@ -220,6 +224,11 @@ pub fn encode_packet(
         PacketType::ClientWs => {
             pkt.write_client_ws_packet();
             true
+        }
+
+        _ => {
+            //
+            std::unreachable!()
         }
     }
 }

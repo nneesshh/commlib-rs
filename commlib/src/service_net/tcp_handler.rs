@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use message_io::network::{Endpoint, ResourceId};
-use message_io::node::NodeHandler;
 
 use crate::{ServiceNetRs, ServiceRs};
 
@@ -17,19 +16,15 @@ use super::redis::redis_client_manager::redis_client_make_new_conn;
 pub type OnListenFuncType = extern "C" fn(*const TcpServer, TcpListenerId, OsSocketAddr);
 
 ///
-pub type OnAcceptFuncType = extern "C" fn(
-    *const Arc<ServiceNetRs>,
-    *const NodeHandler<()>,
-    TcpListenerId,
-    ConnId,
-    OsSocketAddr,
-);
+pub type OnAcceptFuncType =
+    extern "C" fn(*const Arc<ServiceNetRs>, TcpListenerId, ConnId, OsSocketAddr);
 
 ///
-pub type OnTcpClientConnectedFuncType = extern "C" fn(*const TcpClient, ConnId, OsSocketAddr);
+pub type OnTcpClientConnectedFuncType = extern "C" fn(*const Arc<TcpClient>, ConnId, OsSocketAddr);
 
 ///
-pub type OnRedisClientConnectedFuncType = extern "C" fn(*const RedisClient, ConnId, OsSocketAddr);
+pub type OnRedisClientConnectedFuncType =
+    extern "C" fn(*const Arc<RedisClient>, ConnId, OsSocketAddr);
 
 ///
 pub type OnInputFuncType = extern "C" fn(*const Arc<ServiceNetRs>, ConnId, *const u8, usize);
@@ -82,57 +77,48 @@ extern "C" fn on_listen_cb(
 
 extern "C" fn on_accept_cb(
     srv_net_ptr: *const Arc<ServiceNetRs>,
-    netctrl_ptr: *const NodeHandler<()>,
     listener_id: TcpListenerId,
     hd: ConnId,
     os_addr: OsSocketAddr,
 ) {
     let srv_net = unsafe { &*srv_net_ptr };
-    let netctrl = unsafe { &*netctrl_ptr };
 
     let id = ResourceId::from(hd.id);
     let sock_addr = os_addr.into_addr().unwrap();
     let endpoint = Endpoint::new(id, sock_addr);
 
     // make new conn
-    tcp_server_make_new_conn(
-        srv_net,
-        listener_id,
-        PacketType::Server,
-        hd,
-        endpoint,
-        netctrl,
-    );
+    tcp_server_make_new_conn(srv_net, listener_id, PacketType::Server, hd, endpoint);
 }
 
 extern "C" fn on_tcp_client_connected_cb(
-    tcp_client_ptr: *const TcpClient,
+    tcp_client_ptr: *const Arc<TcpClient>,
     hd: ConnId,
     os_addr: OsSocketAddr,
 ) {
-    let cli = unsafe { &mut *(tcp_client_ptr as *mut TcpClient) };
+    let cli = unsafe { &*tcp_client_ptr };
 
     let id = ResourceId::from(hd.id);
     let sock_addr = os_addr.into_addr().unwrap();
     let endpoint = Endpoint::new(id, sock_addr);
 
     // make new conn
-    tcp_client_make_new_conn(cli, PacketType::Server, hd, endpoint);
+    tcp_client_make_new_conn(cli, hd, endpoint);
 }
 
 extern "C" fn on_redis_client_connected_cb(
-    redis_client_ptr: *const RedisClient,
+    redis_client_ptr: *const Arc<RedisClient>,
     hd: ConnId,
     os_addr: OsSocketAddr,
 ) {
-    let cli = unsafe { &mut *(redis_client_ptr as *mut RedisClient) };
+    let cli = unsafe { &*redis_client_ptr };
 
     let id = ResourceId::from(hd.id);
     let sock_addr = os_addr.into_addr().unwrap();
     let endpoint = Endpoint::new(id, sock_addr);
 
     // make new conn
-    redis_client_make_new_conn(cli, PacketType::Server, hd, endpoint);
+    redis_client_make_new_conn(cli, hd, endpoint);
 }
 
 extern "C" fn on_input_cb(
@@ -147,6 +133,7 @@ extern "C" fn on_input_cb(
     let mut input_buffer = take_packet(input_len, 0);
     input_buffer.append(input_data, input_len);
 
+    // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let func = move || {
         on_connection_read_data(srv_net2.as_ref(), hd, input_buffer);
@@ -157,7 +144,7 @@ extern "C" fn on_input_cb(
 extern "C" fn on_close_cb(srv_net_ptr: *const Arc<ServiceNetRs>, hd: ConnId) {
     let srv_net = unsafe { &*srv_net_ptr };
 
-    //
+    // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let func = move || {
         on_connection_closed(srv_net2.as_ref(), hd);

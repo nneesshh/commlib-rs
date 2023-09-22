@@ -45,13 +45,15 @@ pub use service_signal::ServiceSignalRs;
 
 ///
 pub mod service_net;
-pub use service_net::{connect_to_tcp_server, listen_tcp_addr, start_network, stop_network};
+pub use service_net::{
+    connect_to_redis, connect_to_tcp_server, listen_tcp_addr, start_network, stop_network,
+};
 pub use service_net::{
     Buffer, ClientStatus, CmdId, ConnId, NetProxy, ServiceNetRs, TcpClient, TcpConn, TcpHandler,
     TcpListenerId, TcpServer,
 };
 pub use service_net::{NetPacket, NetPacketGuard, PacketType};
-pub use service_net::{RedisClient, RedisCommand, RedisReply, RedisReplyType};
+pub use service_net::{RedisClient, RedisCommander, RedisReply, RedisReplyType};
 pub use service_net::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
 /// 全局变量

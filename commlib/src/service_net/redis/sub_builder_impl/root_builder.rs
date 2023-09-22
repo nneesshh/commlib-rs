@@ -24,7 +24,7 @@ pub struct RootBuilder {
     error_builder: ErrorBuilder,                // '-'
     integer_builder: IntegerBuilder,            // ':'
     bulk_string_builder: BulkStringBuilder,     // '$'
-    array_builder: ArrayBuilder,                // '*'
+    array_builder: Option<Box<ArrayBuilder>>,   // '*'
 }
 
 impl RootBuilder {
@@ -37,7 +37,7 @@ impl RootBuilder {
             error_builder: ErrorBuilder::new(),
             integer_builder: IntegerBuilder(),
             bulk_string_builder: BulkStringBuilder::new(),
-            array_builder: ArrayBuilder::new(),
+            array_builder: None,
         }
     }
 }
@@ -76,6 +76,11 @@ impl ReplySubBuilder for RootBuilder {
                             '*' => {
                                 // state: array
                                 self.state = RootBuildState::ArrayBuilder;
+
+                                // create array builder when needed
+                                if self.array_builder.is_none() {
+                                    self.array_builder = Some(Box::new(ArrayBuilder::new()));
+                                }
                             }
                             _ => {
                                 // state: 中止
@@ -179,7 +184,8 @@ impl ReplySubBuilder for RootBuilder {
 
                 RootBuildState::ArrayBuilder => {
                     //
-                    match self.array_builder.try_build(&mut buffer) {
+                    let array_builder = self.array_builder.as_mut().unwrap();
+                    match array_builder.try_build(&mut buffer) {
                         BuildResult::Success(reply) => {
                             // state: 重新开始
                             self.state = RootBuildState::Leading;

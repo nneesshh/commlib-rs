@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{ServiceNetRs, ServiceRs};
+use crate::ServiceRs;
 
 use super::tcp_conn_manager::on_connection_closed;
 use super::NetPacketGuard;
@@ -47,14 +47,9 @@ impl PacketBuilder {
 
     /// 解析数据包，触发数据包回调函数
     #[inline(always)]
-    pub fn build(
-        &self,
-        srv_net: &ServiceNetRs,
-        conn: &Arc<TcpConn>,
-        mut input_buffer: NetPacketGuard,
-    ) {
+    pub fn build(&self, conn: &Arc<TcpConn>, mut input_buffer: NetPacketGuard) {
         // 运行于 srv_net 线程
-        assert!(srv_net.is_in_service_thread());
+        assert!(conn.srv_net.is_in_service_thread());
 
         let builder = unsafe { &mut *(self as *const Self as *mut Self) };
 
@@ -77,13 +72,14 @@ impl PacketBuilder {
             }
 
             PacketResult::Abort(err) => {
+                //
                 log::error!("[hd={}] build packet failed!!! error: {}", conn.hd, err);
 
                 // low level close
                 conn.close();
 
                 // trigger connetion closed event
-                on_connection_closed(srv_net, conn.hd);
+                on_connection_closed(&conn.srv_net, conn.hd);
             }
         }
     }
@@ -102,7 +98,7 @@ impl PacketBuilder {
         // debug only
         /*{
             let input = input_buffer.peek();
-            log::info!("input: {:?}", input);
+            log::info!("input: ({}){:?}", input.len(), input);
             let input_hex = hex::encode(input);
             log::info!("input_hex: {}", input_hex);
         }*/

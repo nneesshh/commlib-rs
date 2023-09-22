@@ -50,8 +50,9 @@ impl ServiceSignalRs {
     }
 
     /// Listen signal: sig_int
-    pub fn listen_sig_int<F>(&self, srv: &'static dyn ServiceRs, f: F)
+    pub fn listen_sig_int<T, F>(&self, srv: &'static T, f: F)
     where
+        T: ServiceRs + 'static,
         F: FnOnce() + Send + Sync + 'static,
     {
         self.run_in_service(Box::new(move || {

@@ -55,19 +55,19 @@ where
 }
 
 /// Listener of event
-pub struct EventListener<S, E>
+pub struct EventListener<T, E>
 where
-    S: ServiceRs,
+    T: ServiceRs,
     E: Event,
 {
     handlers: Vec<EventHandler<E>>,
-    _phantom: std::marker::PhantomData<S>,
+    _phantom: std::marker::PhantomData<T>,
 }
 
 /// Impl EventListener
-impl<S, E> EventListener<S, E>
+impl<T, E> EventListener<T, E>
 where
-    S: ServiceRs,
+    T: ServiceRs,
     E: Event,
 {
     pub fn new() -> Self {

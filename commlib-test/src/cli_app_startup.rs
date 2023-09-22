@@ -48,12 +48,15 @@ pub fn exec(srv: &Arc<CliService>, conf: &Arc<Conf>) {
     });
 
     // startup step by step
-    let srv2 = srv.clone();
     G_APP_STARTUP.with(|g| {
         let mut startup = g.borrow_mut();
 
-        //
-        startup.add_step("connect", move || do_connect_to_test_server(&srv2));
+        // step:
+        let step_srv = srv.clone();
+        startup.add_step("connect", move || {
+            //
+            do_connect_to_test_server(&step_srv)
+        });
 
         // run startup
         startup.exec();
@@ -108,8 +111,8 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
     };
 
     //
-    let hd_opt = connect_to_tcp_server(
-        srv,
+    let cli_opt = connect_to_tcp_server(
+        &srv,
         "cli",
         raddr.as_str(),
         conn_fn,
@@ -119,5 +122,5 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
     );
 
     //
-    hd_opt.is_some()
+    cli_opt.is_some()
 }

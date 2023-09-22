@@ -41,7 +41,7 @@ pub fn connect_to_tcp_server<T, C, P, S>(
     pkt_fn: P,
     close_fn: S,
     srv_net: &Arc<ServiceNetRs>,
-) -> Option<ConnId>
+) -> Option<Arc<TcpClient>>
 where
     T: ServiceRs + 'static,
     C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
@@ -50,9 +50,9 @@ where
 {
     log::info!("connect_to_tcp_server: {} -- {}...", name, raddr);
 
-    let (promise, pinky) = PinkySwear::<Option<ConnId>>::new();
+    let (promise, pinky) = PinkySwear::<Option<Arc<TcpClient>>>::new();
 
-    // 在 srv_net 中运行
+    // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let srv2 = srv.clone();
     let name = name.to_owned();
@@ -92,7 +92,7 @@ where
                 );
 
                 //
-                pinky.swear(Some(hd));
+                pinky.swear(Some(cli));
             }
             Err(err) => {
                 log::error!("[connect_to_tcp_server] connect failed!!! error: {}", err);
@@ -109,52 +109,48 @@ where
 }
 
 /// Make new tcp conn with callbacks from tcp client
-pub fn tcp_client_make_new_conn(
-    cli: &mut TcpClient,
-    packet_type: PacketType,
-    hd: ConnId,
-    endpoint: Endpoint,
-) {
+pub fn tcp_client_make_new_conn(cli: &Arc<TcpClient>, hd: ConnId, endpoint: Endpoint) {
     //
-    let cli_id = cli.id();
-
-    //
-    let netctrl = cli.netctrl().clone();
-    let srv_net = cli.srv_net().clone();
-    let srv = cli.srv().clone();
-
-    //
-    let cli_conn_fn = cli.clone_conn_fn();
-    let cli_pkt_fn = cli.clone_pkt_fn();
-    let cli_close_fn = cli.clone_close_fn();
+    let packet_type = Atomic::new(PacketType::Server);
 
     // insert tcp conn in srv net(同一线程便于观察 conn 生命周期)
+    let cli2 = cli.clone();
     let func = move || {
         //
-        let connection_establish_fn = Box::new(move |conn| {
-            (*cli_conn_fn)(conn);
+        let cli3 = cli2.clone();
+        let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
+            // 运行于 srv_net 线程
+            assert!(conn.srv_net.is_in_service_thread());
+            cli3.on_ll_connect(conn);
         });
 
         // use packet builder to handle input buffer
-        let srv_net2 = srv_net.clone();
-        let pkt_fn = Arc::new(move |conn, pkt| {
-            (*cli_pkt_fn)(conn, pkt);
+        let cli3 = cli2.clone();
+        let pkt_fn = Arc::new(move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
+            // 运行于 srv_net 线程
+            assert!(conn.srv_net.is_in_service_thread());
+            cli3.on_ll_receive_packet(conn, pkt);
         });
         let pkt_builder = PacketBuilder::new(pkt_fn);
         let connection_read_fn =
             Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
-                pkt_builder.build(srv_net2.as_ref(), conn, input_buffer)
+                // 运行于 srv_net 线程
+                assert!(conn.srv_net.is_in_service_thread());
+                pkt_builder.build(conn, input_buffer)
             });
 
         //
-        let srv_net3 = srv_net.clone();
-        let connection_lost_fn = Arc::new(move |hd| {
-            // close fn
-            (*cli_close_fn)(hd);
-
-            // check auto reconnect
-            tcp_client_check_auto_reconnect(&srv_net3, hd, cli_id);
+        let cli3 = cli2.clone();
+        let connection_lost_fn = Arc::new(move |hd: ConnId| {
+            // 运行于 srv_net 线程
+            assert!(cli3.srv_net().is_in_service_thread());
+            cli3.on_ll_disconnect(hd);
         });
+
+        //
+        let netctrl = cli2.netctrl().clone();
+        let srv_net = cli2.srv_net().clone();
+        let srv = cli2.srv().clone();
 
         let conn = Arc::new(TcpConn {
             //
@@ -165,7 +161,7 @@ pub fn tcp_client_make_new_conn(
             netctrl: netctrl.clone(),
 
             //
-            packet_type: Atomic::new(packet_type),
+            packet_type,
             closed: Atomic::new(false),
 
             //
@@ -182,27 +178,19 @@ pub fn tcp_client_make_new_conn(
         insert_connection(srv_net.as_ref(), conn.hd, &conn.clone());
 
         // update inner hd for TcpClient
-        with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
-            if let Some(cli) = g.client_table.get(&cli_id) {
-                cli.set_inner_hd(hd);
-            } else {
-                log::error!(
-                    "[hd={}] update inner hd failed!!! id<{}> not found!!!",
-                    hd,
-                    cli_id,
-                );
-            }
-        });
+        {
+            cli2.set_inner_hd(hd);
+        }
 
         // connection ok
-        on_connection_established(srv_net.as_ref(), conn);
+        on_connection_established(conn);
     };
     cli.srv_net().run_in_service(Box::new(func));
 }
 
 ///
 pub fn tcp_client_check_auto_reconnect(srv_net: &ServiceNetRs, hd: ConnId, cli_id: Uuid) {
-    // 在 srv_net 中运行
+    // 投递到 srv_net 线程
     let func = move || {
         // close tcp client
         with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {

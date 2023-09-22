@@ -3,10 +3,10 @@
 //! The typical usage is :
 //!      1. Create a TcpClient object
 //!      2. Set the message callback and connection callback
-//!      3. Call TcpClient::Connect() to try to establish a connection with remote server
-//!      4. Call TcpClient::Send(...) to send message to remote server
+//!      3. Call TcpClient::connect() to try to establish a connection with remote server
+//!      4. Call TcpClient::send(...) to send message to remote server
 //!      5. Handle the connection and message in callbacks
-//!      6. Call TcpClient::Disconnect() to disconnect from remote server
+//!      6. Call TcpClient::disconnect() to disconnect from remote server
 //!
 
 use atomic::{Atomic, Ordering};
@@ -16,7 +16,8 @@ use message_io::node::NodeHandler;
 
 use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
 
-use super::{tcp_client_manager::tcp_client_reconnect, tcp_conn_manager::disconnect_connection};
+use super::tcp_client_manager::{tcp_client_check_auto_reconnect, tcp_client_reconnect};
+use super::tcp_conn_manager::disconnect_connection;
 use super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, TcpConn};
 
 ///
@@ -56,7 +57,7 @@ impl TcpClient {
         pkt_fn: P,
         close_fn: S,
         srv_net: &Arc<ServiceNetRs>,
-    ) -> TcpClient
+    ) -> Self
     where
         T: ServiceRs + 'static,
         C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
@@ -85,8 +86,46 @@ impl TcpClient {
         }
     }
 
+    ///
+    pub fn on_ll_connect(&self, conn: Arc<TcpConn>) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let cli_conn_fn = self.clone_conn_fn();
+        self.srv().run_in_service(Box::new(move || {
+            (*cli_conn_fn)(conn);
+        }))
+    }
+
+    ///
+    pub fn on_ll_receive_packet(&self, conn: Arc<TcpConn>, pkt: NetPacketGuard) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let cli_pkt_fn = self.clone_pkt_fn();
+        self.srv().run_in_service(Box::new(move || {
+            (*cli_pkt_fn)(conn, pkt);
+        }))
+    }
+
+    ///
+    pub fn on_ll_disconnect(&self, hd: ConnId) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let cli_close_fn = self.clone_close_fn();
+        let srv_net = self.srv_net().clone();
+        let cli_id = self.id();
+        self.srv().run_in_service(Box::new(move || {
+            (*cli_close_fn)(hd);
+
+            // check auto reconnect
+            tcp_client_check_auto_reconnect(&srv_net, hd, cli_id);
+        }));
+    }
+
     /// Connect to [ip:port]
-    pub fn connect(&self) -> Result<ConnId, String> {
+    pub fn connect(self: &Arc<Self>) -> Result<ConnId, String> {
         log::info!(
             "[hd={}]({}) tcp client start connect to raddr: {} status: {} -- id<{}>",
             self.inner_hd(),
@@ -222,7 +261,7 @@ impl TcpClient {
             log::info!("[hd={}] tcp client disconnect over.", hd);
             disconneced_cb(hd);
         };
-        disconnect_connection(&G_SERVICE_NET, inner_hd, cb, &self.srv);
+        disconnect_connection(&self.srv, inner_hd, cb, &G_SERVICE_NET);
 
         //
         Ok(())

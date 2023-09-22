@@ -26,14 +26,14 @@ impl TcpConnStorage {
 
 ///
 pub fn disconnect_connection<F>(
-    srv_net: &Arc<ServiceNetRs>,
+    srv: &Arc<dyn ServiceRs>,
     hd: ConnId,
     close_cb: F,
-    srv: &Arc<dyn ServiceRs>,
+    srv_net: &Arc<ServiceNetRs>,
 ) where
     F: Fn(ConnId) + Send + Sync + 'static,
 {
-    // 在 srv_net 中运行
+    // 投递到 srv_net 线程
     let srv = srv.clone();
     let close_cb = Arc::new(close_cb);
     let func = move || {
@@ -93,16 +93,13 @@ pub fn remove_connection(srv_net: &ServiceNetRs, hd: ConnId) -> Option<Arc<TcpCo
 
 ///
 #[inline(always)]
-pub fn on_connection_established(srv_net: &ServiceNetRs, conn: Arc<TcpConn>) {
+pub fn on_connection_established(conn: Arc<TcpConn>) {
     // 运行于 srv_net 线程
-    assert!(srv_net.is_in_service_thread());
+    assert!(conn.srv_net.is_in_service_thread());
 
     // trigger conn_fn
-    let srv = conn.srv.clone();
-    srv.run_in_service(Box::new(move || {
-        let conn2 = conn.clone();
-        (conn.connection_establish_fn)(conn2);
-    }));
+    let conn2 = conn.clone();
+    (conn.connection_establish_fn)(conn2);
 }
 
 ///
@@ -131,20 +128,13 @@ pub fn on_connection_closed(srv_net: &ServiceNetRs, hd: ConnId) {
     // remove conn always
     if let Some(conn) = remove_connection(srv_net, hd) {
         // trigger close_fn
-        let f: Arc<dyn Fn(ConnId) + Send + Sync>;
-        {
-            let close_fn = conn.connection_lost_fn.read();
-            f = (*close_fn).clone();
-        }
+        let close_fn = conn.connection_lost_fn.read();
 
         // 标记关闭
         conn.set_closed(true);
 
         //
-        let srv = conn.srv.clone();
-        srv.run_in_service(Box::new(move || {
-            (f)(conn.hd);
-        }));
+        (*close_fn)(conn.hd);
     } else {
         //
         log::error!("[on_connection_closed][hd={}] conn not found!!!", hd);

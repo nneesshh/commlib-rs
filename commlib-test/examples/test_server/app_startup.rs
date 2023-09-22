@@ -11,9 +11,9 @@
 
 use std::sync::Arc;
 
-use commlib::listen_tcp_addr;
 use commlib::with_tls;
 use commlib::G_SERVICE_NET;
+use commlib::{connect_to_redis, listen_tcp_addr};
 use commlib::{ConnId, NetPacketGuard, ServiceRs, TcpConn};
 
 use app_helper::{conf::Conf, Startup};
@@ -52,13 +52,21 @@ pub fn exec(srv: &Arc<TestService>, conf: &Arc<Conf>) {
     });
 
     // startup step by step
-    let srv2 = srv.clone();
     G_APP_STARTUP.with(|g| {
         let mut startup = g.borrow_mut();
 
-        //
+        // step:
+        let step_srv = srv.clone();
+        startup.add_step("start redis to db", move || {
+            //
+            startup_redis_to_db(&step_srv)
+        });
+
+        // step:
+        let step_srv = srv.clone();
         startup.add_step("start network listen", move || {
-            startup_network_listen(&srv2)
+            //
+            startup_network_listen(&step_srv)
         });
 
         // run startup
@@ -68,8 +76,21 @@ pub fn exec(srv: &Arc<TestService>, conf: &Arc<Conf>) {
     // startup over, main manager lazy init
     G_MAIN.with(|g| {
         let mut main_manager = g.borrow_mut();
-        main_manager.lazy_init(srv);
+        main_manager.lazy_init(&srv);
     });
+}
+
+///
+pub fn startup_redis_to_db(srv: &Arc<TestService>) -> bool {
+    G_MAIN.with(|g| {
+        let mut main_manager = g.borrow_mut();
+
+        main_manager.redis_to_db =
+            connect_to_redis(srv, "127.0.0.1:6379", "pass1234", 1, &G_SERVICE_NET);
+
+        //
+        main_manager.redis_to_db.is_some()
+    })
 }
 
 ///

@@ -58,8 +58,8 @@ impl MessageIoNetwork {
     }
 
     /// tcp client connect
-    pub fn tcp_client_connect(&self, tcp_client: &TcpClient) -> Result<ConnId, String> {
-        let tcp_client_ptr = tcp_client as *const TcpClient;
+    pub fn tcp_client_connect(&self, tcp_client: &Arc<TcpClient>) -> Result<ConnId, String> {
+        let tcp_client_ptr = tcp_client as *const Arc<TcpClient>;
 
         let raddr = tcp_client.remote_addr();
         log::info!("tcp client start connect to raddr: {}", raddr);
@@ -100,8 +100,8 @@ impl MessageIoNetwork {
     }
 
     /// redis client connect
-    pub fn redis_client_connect(&self, redis_client: &RedisClient) -> Result<ConnId, String> {
-        let redis_client_ptr = redis_client as *const RedisClient;
+    pub fn redis_client_connect(&self, redis_client: &Arc<RedisClient>) -> Result<ConnId, String> {
+        let redis_client_ptr = redis_client as *const Arc<RedisClient>;
 
         let raddr = redis_client.remote_addr();
         log::info!("redis client start connect to raddr: {}", raddr);
@@ -176,8 +176,6 @@ impl MessageIoNetwork {
         let on_input = self.tcp_handler.on_input;
         let on_close = self.tcp_handler.on_close;
 
-        let node_handler = self.node_handler.clone();
-
         //
         let srv_net = srv_net.clone();
 
@@ -185,7 +183,6 @@ impl MessageIoNetwork {
         let node_task = node_listener.for_each_async(move |event| {
             //
             let srv_net_ptr = &srv_net as *const Arc<ServiceNetRs>;
-            let netctrl_ptr = &node_handler as *const NodeHandler<()>;
 
             //
             match event.network() {
@@ -216,13 +213,7 @@ impl MessageIoNetwork {
                     );
 
                     //
-                    (on_accept)(
-                        srv_net_ptr,
-                        netctrl_ptr,
-                        listener_id,
-                        hd,
-                        endpoint.addr().into(),
-                    );
+                    (on_accept)(srv_net_ptr, listener_id, hd, endpoint.addr().into());
                 } // NetEvent::Accepted
 
                 NetEvent::Message(endpoint, input_data) => {

@@ -224,7 +224,10 @@ where
 
 /// 线程启动完成，执行后续处理 (ThreadId.as_u64() is not stable yet, use ready_pair now)
 ///    ready_pair: (join_handle_opt, tid)
-pub fn proc_service_ready(srv: &dyn ServiceRs, ready_pair: (Option<JoinHandle<()>>, u64)) -> bool {
+pub fn proc_service_ready<T>(srv: &T, ready_pair: (Option<JoinHandle<()>>, u64)) -> bool
+where
+    T: ServiceRs + 'static,
+{
     let (join_handle_opt, tid) = ready_pair;
 
     if join_handle_opt.is_some() {
@@ -244,7 +247,10 @@ pub fn proc_service_ready(srv: &dyn ServiceRs, ready_pair: (Option<JoinHandle<()
     }
 }
 
-fn run_service(srv: &dyn ServiceRs, service_name: &str) {
+fn run_service<T>(srv: &T, service_name: &str)
+where
+    T: ServiceRs + 'static,
+{
     let handle = srv.get_handle();
     log::info!("[{}] run ... ID={}", service_name, handle.id);
 

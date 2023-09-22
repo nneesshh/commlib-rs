@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use commlib::{with_tls, with_tls_mut};
+use commlib::{with_tls, with_tls_mut, RedisClient};
 use commlib::{Blowfish, CmdId, ConnId, NetProxy, NodeState, PacketType, ServiceRs, TcpConn};
 use commlib::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
@@ -28,6 +28,8 @@ thread_local! {
 ///
 pub struct TestManager {
     pub c2s_proxy: NetProxy, // client to server
+
+    pub redis_to_db: Option<Arc<RedisClient>>,
 }
 
 impl TestManager {
@@ -40,6 +42,8 @@ impl TestManager {
 
         TestManager {
             c2s_proxy: c2s_proxy,
+
+            redis_to_db: None,
         }
     }
 

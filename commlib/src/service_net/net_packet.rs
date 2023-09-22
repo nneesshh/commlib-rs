@@ -57,6 +57,8 @@ pub enum PacketType {
 
     ClientWs = 3, // 处理客户端包（WS）：收包解密，发包不加密
     RobotWs = 4,  // 模拟客户端包（WS）：发包加密，收包不需要解密
+
+    Redis = 5, // Redis客户端
 }
 
 ///

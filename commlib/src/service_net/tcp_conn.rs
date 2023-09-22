@@ -27,13 +27,13 @@ pub struct TcpConn {
     pub srv: Arc<dyn ServiceRs>,
     pub srv_net: Arc<ServiceNetRs>,
 
-    // 处理连接事件
+    // 运行于 srv_net 线程：处理连接事件
     pub connection_establish_fn: Box<dyn Fn(Arc<TcpConn>) + Send + Sync>,
 
-    // 对 input buffer 数据进行分包处理
+    // 运行于 srv_net 线程：对 input buffer 数据进行分包处理
     pub connection_read_fn: Box<dyn Fn(&Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
 
-    // 处理连接断开事件
+    // 运行于 srv_net 线程：处理连接断开事件
     pub connection_lost_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
 }
 
