@@ -10,7 +10,9 @@
 //!
 
 use atomic::{Atomic, Ordering};
+use std::cell::UnsafeCell;
 use std::sync::Arc;
+use thread_local::ThreadLocal;
 
 use message_io::node::NodeHandler;
 
@@ -18,7 +20,7 @@ use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
 
 use super::tcp_client_manager::{tcp_client_check_auto_reconnect, tcp_client_reconnect};
 use super::tcp_conn_manager::disconnect_connection;
-use super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, TcpConn};
+use super::{ClientStatus, ConnId, MessageIoNetwork, NetPacketGuard, PacketBuilder, TcpConn};
 
 ///
 #[repr(C)]
@@ -38,12 +40,15 @@ pub struct TcpClient {
     auto_reconnect: bool,
 
     //
+    inner_hd: Atomic<ConnId>,
+
+    //
     conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
     pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
     close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
 
     //
-    inner_hd: Atomic<ConnId>,
+    tls_pkt_builder: ThreadLocal<UnsafeCell<PacketBuilder>>,
 }
 
 impl TcpClient {
@@ -83,37 +88,38 @@ impl TcpClient {
             close_fn: Arc::new(close_fn),
 
             inner_hd: Atomic::new(ConnId::from(0)),
+
+            tls_pkt_builder: ThreadLocal::new(),
         }
     }
 
     ///
-    pub fn on_ll_connect(&self, conn: Arc<TcpConn>) {
+    pub fn on_ll_connect(self: &Arc<Self>, conn: Arc<TcpConn>) {
         // 运行于 srv_net 线程
         assert!(self.srv_net().is_in_service_thread());
 
-        let cli_conn_fn = self.clone_conn_fn();
+        // post 到指定 srv 工作线程中执行
+        let cli_conn_fn = self.conn_fn.clone();
         self.srv().run_in_service(Box::new(move || {
             (*cli_conn_fn)(conn);
-        }))
+        }));
     }
 
     ///
-    pub fn on_ll_receive_packet(&self, conn: Arc<TcpConn>, pkt: NetPacketGuard) {
+    pub fn on_ll_input(self: &Arc<Self>, conn: Arc<TcpConn>, input_buffer: NetPacketGuard) {
         // 运行于 srv_net 线程
         assert!(self.srv_net().is_in_service_thread());
 
-        let cli_pkt_fn = self.clone_pkt_fn();
-        self.srv().run_in_service(Box::new(move || {
-            (*cli_pkt_fn)(conn, pkt);
-        }))
+        self.get_packet_builder().build(&conn, input_buffer);
     }
 
     ///
-    pub fn on_ll_disconnect(&self, hd: ConnId) {
+    pub fn on_ll_disconnect(self: &Arc<Self>, hd: ConnId) {
         // 运行于 srv_net 线程
         assert!(self.srv_net().is_in_service_thread());
 
-        let cli_close_fn = self.clone_close_fn();
+        // post 到指定 srv 工作线程中执行
+        let cli_close_fn = self.close_fn.clone();
         let srv_net = self.srv_net().clone();
         let cli_id = self.id();
         self.srv().run_in_service(Box::new(move || {
@@ -326,24 +332,6 @@ impl TcpClient {
     }
 
     ///
-    #[inline(always)]
-    pub fn clone_conn_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>) + Send + Sync> {
-        self.conn_fn.clone()
-    }
-
-    ///
-    #[inline(always)]
-    pub fn clone_pkt_fn(&self) -> Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync> {
-        self.pkt_fn.clone()
-    }
-
-    ///
-    #[inline(always)]
-    pub fn clone_close_fn(&self) -> Arc<dyn Fn(ConnId) + Send + Sync> {
-        self.close_fn.clone()
-    }
-
-    ///
     pub fn check_auto_reconnect(&self) {
         if self.auto_reconnect {
             //
@@ -367,5 +355,30 @@ impl TcpClient {
                 }
             }
         }
+    }
+
+    ///
+    #[inline(always)]
+    pub fn get_packet_builder<'a>(self: &'a Arc<Self>) -> &'a mut PacketBuilder {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let builder = self.tls_pkt_builder.get_or(|| {
+            let srv = self.srv().clone();
+            let pkt_fn = self.pkt_fn.clone();
+
+            let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
+                // 运行于 srv_net 线程
+                assert!(conn.srv_net.is_in_service_thread());
+
+                // post 到指定 srv 工作线程中执行
+                let pkt_fn2 = pkt_fn.clone();
+                srv.run_in_service(Box::new(move || {
+                    (*pkt_fn2)(conn, pkt);
+                }));
+            };
+            UnsafeCell::new(PacketBuilder::new(Box::new(build_cb)))
+        });
+        unsafe { &mut *(builder.get()) }
     }
 }

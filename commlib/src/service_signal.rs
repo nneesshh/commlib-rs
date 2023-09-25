@@ -62,7 +62,7 @@ impl ServiceSignalRs {
             EventSignalInt::add_callback(move |_e| {
                 // use option trick to take "f" from FnMut() closure
                 if let Some(f) = f_opt.take() {
-                    // 事件触发时，将 f post 到工作线程执行
+                    // 事件触发时，将 f post 到指定 srv 工作线程中执行
                     srv.run_in_service(Box::new(move || {
                         // Notice: f() only works one time because using option trick, see "let f = f_opt.take()"
                         f();

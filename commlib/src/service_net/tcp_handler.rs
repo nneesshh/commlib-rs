@@ -13,7 +13,7 @@ use super::{ConnId, OsSocketAddr, PacketType, RedisClient, TcpClient, TcpListene
 use super::redis::redis_client_manager::redis_client_make_new_conn;
 
 ///
-pub type OnListenFuncType = extern "C" fn(*const TcpServer, TcpListenerId, OsSocketAddr);
+pub type OnListenFuncType = extern "C" fn(*mut TcpServer, TcpListenerId, OsSocketAddr);
 
 ///
 pub type OnAcceptFuncType =
@@ -64,11 +64,11 @@ impl TcpHandler {
 
 ///
 extern "C" fn on_listen_cb(
-    tcp_server_ptr: *const TcpServer,
+    tcp_server_ptr: *mut TcpServer,
     listener_id: TcpListenerId,
     os_addr: OsSocketAddr,
 ) {
-    let tcp_server = unsafe { &mut *(tcp_server_ptr as *mut TcpServer) };
+    let tcp_server = unsafe { &mut *tcp_server_ptr };
 
     // trigger listen_fn in main service
     let sock_addr = os_addr.into_addr().unwrap();

@@ -35,12 +35,13 @@ impl MessageIoNetwork {
     ///
     pub fn listen(&self, tcp_server: &mut TcpServer) -> bool {
         //
-        let addr = tcp_server.addr.as_str();
-        let ret = self.node_handler.network().listen(Transport::Tcp, addr);
+        let addr = tcp_server.addr.to_owned();
+        let ret = self
+            .node_handler
+            .network()
+            .listen(Transport::Tcp, addr.as_str());
 
-        log::info!("network listening at {}", addr);
-
-        let tcp_server_ptr = tcp_server as *const TcpServer;
+        let tcp_server_ptr = tcp_server as *mut TcpServer;
 
         //
         match ret {

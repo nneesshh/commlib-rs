@@ -54,6 +54,7 @@ prost = { path = "../prost" }
 rand = { path = "../rand", features = ["small_rng"]}
 roxmltree = { path = "../roxmltree" }
 spdlog-rs = { path = "../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location", "flexible-string"] }
+thread_local = { path = "../thread_local-rs" }
 openssl = { path = "../rust-openssl/openssl" }
 commlib-sys = { path = "../commlib-sys" }
 

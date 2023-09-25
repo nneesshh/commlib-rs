@@ -6,12 +6,11 @@ use uuid::Uuid;
 
 use message_io::network::Endpoint;
 
+use crate::RedisClient;
 use crate::{ClientStatus, ConnId, NetPacketGuard, PacketType, TcpConn};
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
-use crate::{RedisClient, RedisReply};
 
 use crate::service_net::create_redis_client;
-use crate::service_net::redis::reply_builder::ReplyBuilder;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
 
 thread_local! {
@@ -126,17 +125,11 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, endpoint: 
 
         // use redis reply builder to handle input buffer
         let cli3 = cli2.clone();
-        let build_cb = Arc::new(move |conn: Arc<TcpConn>, reply: RedisReply| {
-            // 运行于 srv_net 线程
-            assert!(conn.srv_net.is_in_service_thread());
-            cli3.on_ll_receive_reply(conn, reply);
-        });
-        let reply_builder = ReplyBuilder::new(build_cb);
         let connection_read_fn =
-            Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
+            Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
                 // 运行于 srv_net 线程
                 assert!(conn.srv_net.is_in_service_thread());
-                reply_builder.build(conn, input_buffer);
+                cli3.on_ll_input(conn, input_buffer);
             });
 
         //

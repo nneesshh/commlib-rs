@@ -60,6 +60,7 @@ pub fn disconnect_connection<F>(
 
             // 连接已经关闭，直接回调
             if is_conn_closed {
+                // post 到指定 srv 工作线程中执行
                 srv.run_in_service(Box::new(move || {
                     (*close_cb)(hd);
                 }));
@@ -111,7 +112,7 @@ pub fn on_connection_read_data(srv_net: &ServiceNetRs, hd: ConnId, input_buffer:
     with_tls_mut!(G_TCP_CONN_STORAGE, g, {
         if let Some(conn) = g.conn_table.get(&hd) {
             // input buffer 数据读取处理
-            (conn.connection_read_fn)(conn, input_buffer)
+            (conn.connection_read_fn)(conn.clone(), input_buffer)
         } else {
             //
             log::error!("[on_got_message][hd={}] conn not found!!!", hd);

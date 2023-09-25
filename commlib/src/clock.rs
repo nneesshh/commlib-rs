@@ -52,7 +52,7 @@ impl Clock {
         T: ServiceRs + 'static,
         F: FnMut() + Send + Sync + 'static,
     {
-        //
+        // post 到指定 srv 工作线程中执行
         srv.run_in_service(Box::new(move || {
             with_tls_mut!(G_CLOCK, clock, {
                 let wheel_timer = &mut clock.wheel_timer;
@@ -75,7 +75,7 @@ impl Clock {
         T: ServiceRs + 'static,
         F: FnMut() + Send + Sync + 'static,
     {
-        //
+        // post 到指定 srv 工作线程中执行
         srv.run_in_service(Box::new(move || {
             with_tls_mut!(G_CLOCK, clock, {
                 let wheel_timer = &mut clock.wheel_timer;
@@ -98,7 +98,7 @@ impl Clock {
         T: ServiceRs + 'static,
         F: FnOnce() + Send + Sync + 'static,
     {
-        //
+        // post 到指定 srv 工作线程中执行
         srv.run_in_service(Box::new(move || {
             with_tls_mut!(G_CLOCK, clock, {
                 let wheel_timer = &mut clock.wheel_timer;

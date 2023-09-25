@@ -22,7 +22,7 @@ impl TcpListenerId {
         // 状态：Running
         tcp_server.set_status(ServerStatus::Running);
 
-        //
+        // post 到指定 srv 工作线程中执行
         let listen_fn_opt = Some(tcp_server.listen_fn.clone());
         let status = tcp_server.status();
         srv.run_in_service(Box::new(move || {

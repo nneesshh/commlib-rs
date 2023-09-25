@@ -10,7 +10,7 @@ use crate::{PinkySwear, ServiceNetRs, ServiceRs, TcpListenerId};
 use super::create_tcp_server;
 use super::tcp_conn_manager::{insert_connection, on_connection_established};
 use super::{ConnId, TcpConn, TcpServer};
-use super::{NetPacketGuard, PacketBuilder, PacketType};
+use super::{NetPacketGuard, PacketType};
 
 thread_local! {
     static G_TCP_SERVER_STORAGE: UnsafeCell<TcpServerStorage> = UnsafeCell::new(TcpServerStorage::new());
@@ -133,17 +133,11 @@ pub fn tcp_server_make_new_conn(
 
                 // use packet builder to handle input buffer
                 let tcp_server2 = tcp_server.clone();
-                let build_cb = Arc::new(move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
-                    // 运行于 srv_net 线程
-                    assert!(conn.srv_net.is_in_service_thread());
-                    tcp_server2.on_ll_receive_packet(conn, pkt);
-                });
-                let pkt_builder = PacketBuilder::new(build_cb);
                 let connection_read_fn =
-                    Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
+                    Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
                         // 运行于 srv_net 线程
                         assert!(conn.srv_net.is_in_service_thread());
-                        pkt_builder.build(conn, input_buffer)
+                        tcp_server2.on_ll_input(conn, input_buffer);
                     });
 
                 //

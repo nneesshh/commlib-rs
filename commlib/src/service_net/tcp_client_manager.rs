@@ -12,7 +12,7 @@ use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 use super::create_tcp_client;
 use super::tcp_conn_manager::insert_connection;
 use super::{ClientStatus, ConnId, TcpClient, TcpConn};
-use super::{NetPacketGuard, PacketBuilder, PacketType};
+use super::{NetPacketGuard, PacketType};
 
 thread_local! {
      static G_TCP_CLIENT_STORAGE: UnsafeCell<TcpClientStorage> = UnsafeCell::new(TcpClientStorage::new());
@@ -126,17 +126,11 @@ pub fn tcp_client_make_new_conn(cli: &Arc<TcpClient>, hd: ConnId, endpoint: Endp
 
         // use packet builder to handle input buffer
         let cli3 = cli2.clone();
-        let build_cb = Arc::new(move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
-            // 运行于 srv_net 线程
-            assert!(conn.srv_net.is_in_service_thread());
-            cli3.on_ll_receive_packet(conn, pkt);
-        });
-        let pkt_builder = PacketBuilder::new(build_cb);
         let connection_read_fn =
-            Box::new(move |conn: &Arc<TcpConn>, input_buffer: NetPacketGuard| {
+            Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
                 // 运行于 srv_net 线程
                 assert!(conn.srv_net.is_in_service_thread());
-                pkt_builder.build(conn, input_buffer)
+                cli3.on_ll_input(conn, input_buffer);
             });
 
         //

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::service_net::tcp_conn_manager::on_connection_closed;
 use crate::RedisReply;
 use crate::{Buffer, NetPacketGuard, ServiceRs, TcpConn};
 
@@ -31,7 +30,7 @@ pub trait ReplySubBuilder {
 ///
 pub struct ReplyBuilder {
     //
-    build_cb: Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>,
+    build_cb: Box<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>,
 
     //
     buffer: Buffer,
@@ -42,7 +41,7 @@ pub struct ReplyBuilder {
 
 impl ReplyBuilder {
     ///
-    pub fn new(build_cb: Arc<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>) -> Self {
+    pub fn new(build_cb: Box<dyn Fn(Arc<TcpConn>, RedisReply) + Send + Sync>) -> Self {
         Self {
             build_cb,
 
@@ -57,19 +56,16 @@ impl ReplyBuilder {
 
     /// 解析 RedisReply，触发回调函数
     #[inline(always)]
-    pub fn build(&self, conn: &Arc<TcpConn>, input_buffer: NetPacketGuard) {
+    pub fn build(&mut self, conn: &Arc<TcpConn>, input_buffer: NetPacketGuard) {
         // 运行于 srv_net 线程
         assert!(conn.srv_net.is_in_service_thread());
 
-        let builder = unsafe { &mut *(self as *const Self as *mut Self) };
-
         //
-        match builder.build_once(input_buffer) {
+        match self.build_once(input_buffer) {
             ReplyResult::Ready(reply_list) => {
                 for reply in reply_list {
                     // trigger build_cb
-                    let conn2 = conn.clone();
-                    (self.build_cb)(conn2, reply);
+                    (self.build_cb)(conn.clone(), reply);
                 }
             }
 
@@ -79,9 +75,6 @@ impl ReplyBuilder {
 
                 // low level close
                 conn.close();
-
-                // trigger connetion closed event
-                on_connection_closed(&conn.srv_net, conn.hd);
             }
         }
     }

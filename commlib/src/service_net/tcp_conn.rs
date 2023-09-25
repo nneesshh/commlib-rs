@@ -7,6 +7,7 @@ use message_io::node::NodeHandler;
 
 use crate::ServiceRs;
 
+use super::tcp_conn_manager::on_connection_closed;
 use super::{ConnId, ServiceNetRs};
 use super::{NetPacketGuard, PacketType};
 
@@ -31,7 +32,7 @@ pub struct TcpConn {
     pub connection_establish_fn: Box<dyn Fn(Arc<TcpConn>) + Send + Sync>,
 
     // 运行于 srv_net 线程：对 input buffer 数据进行分包处理
-    pub connection_read_fn: Box<dyn Fn(&Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
+    pub connection_read_fn: Box<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
 
     // 运行于 srv_net 线程：处理连接断开事件
     pub connection_lost_fn: RwLock<Arc<dyn Fn(ConnId) + Send + Sync>>,
@@ -43,6 +44,15 @@ impl TcpConn {
     pub fn close(&self) {
         log::info!("[hd={}] low level close", self.hd);
         self.netctrl.network().remove(self.endpoint.resource_id());
+
+        let srv_net2 = self.srv_net.clone();
+        let hd = self.hd;
+
+        // trigger connetion closed event
+        // 运行于 srv_net 线程 (不管当前是否已经位于 srv_net 线程中，始终投递)
+        self.srv_net.run_in_service(Box::new(move || {
+            on_connection_closed(&srv_net2, hd);
+        }));
     }
 
     ///
