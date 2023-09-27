@@ -80,6 +80,18 @@ impl RedisReply {
 
     ///
     #[inline(always)]
+    pub fn reply_type(&self) -> RedisReplyType {
+        self.rpl_type
+    }
+
+    ///
+    pub fn error(&self) -> &str {
+        assert!(self.is_error());
+        &self.str_val
+    }
+
+    ///
+    #[inline(always)]
     pub fn is_string(&self) -> bool {
         self.rpl_type == RedisReplyType::BulkString
             || self.rpl_type == RedisReplyType::SimpleString
@@ -130,13 +142,13 @@ impl RedisReply {
 
     ///
     pub fn as_integer(&self) -> i64 {
-        assert!(self.is_string());
+        assert!(self.is_integer());
         self.int_val
     }
 
     ///
     pub fn as_array(&self) -> &Vec<RedisReply> {
-        assert!(self.is_string());
+        assert!(self.is_array());
         &self.arr_val
     }
 }

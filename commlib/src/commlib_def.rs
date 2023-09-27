@@ -15,7 +15,8 @@ pub type GroupId = u32;
 pub type PlayerId = u64;
 
 /// 特殊区服 id
-#[repr(C)]
+#[derive(PartialEq, Copy, Clone)]
+#[repr(i8)]
 pub enum SpecialZone {
     Cross = -1,            // 跨服操作：组队/实时 pvp
     WorldChatMng = -2,     // 跨服世界聊天管理节点

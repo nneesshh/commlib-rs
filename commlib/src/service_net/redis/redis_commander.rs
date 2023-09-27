@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::fmt::Write;
 use std::sync::Arc;
 
-use crate::{Buffer, RedisReply, ServiceNetRs, ServiceRs, TcpConn};
+use crate::{Buffer, RedisReply, TcpConn};
 
 const MAX_COMMAND_PART_NUM: usize = 64;
 
@@ -26,10 +26,6 @@ pub struct RedisCommander {
     dbindex: isize, // redis db index
 
     //
-    srv_net: Arc<ServiceNetRs>,
-    srv: Arc<dyn ServiceRs>,
-
-    //
     conn_opt: Option<Arc<TcpConn>>,
     commands: VecDeque<Command>,
     running_cb_num: usize,
@@ -44,20 +40,11 @@ pub struct RedisCommander {
 
 impl RedisCommander {
     ///
-    pub fn new(
-        srv: &Arc<dyn ServiceRs>,
-        name: &str,
-        pass: &str,
-        dbindex: isize,
-        srv_net: &Arc<ServiceNetRs>,
-    ) -> Self {
+    pub fn new(name: &str, pass: &str, dbindex: isize) -> Self {
         Self {
             name: name.to_owned(),
             pass: pass.to_owned(),
             dbindex,
-
-            srv_net: srv_net.clone(),
-            srv: srv.clone(),
 
             conn_opt: None,
             commands: VecDeque::new(),
@@ -72,10 +59,6 @@ impl RedisCommander {
 
     /// 连接成功
     pub fn on_connect(&mut self, conn: &Arc<TcpConn>) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
-        //
         self.bind_conn(conn);
         self.do_auth();
         self.do_select();
@@ -83,9 +66,7 @@ impl RedisCommander {
 
     /// 收到 reply
     pub fn on_receive_reply(&mut self, reply: RedisReply) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
+        //
         if let Some(mut command) = self.commands.pop_front() {
             //
             self.running_cb_num -= 1;
@@ -98,9 +79,6 @@ impl RedisCommander {
 
     ///
     pub fn on_disconnect(&mut self) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
         //
         self.reset();
     }
@@ -131,10 +109,79 @@ impl RedisCommander {
     }
 
     ///
-    pub fn do_auth(&mut self) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
+    pub fn do_send<F>(&mut self, cmd: Vec<String>, cb: F)
+    where
+        F: FnOnce(&mut RedisCommander, RedisReply) + Send + Sync + 'static,
+    {
+        assert!(cmd.len() > 0);
+        assert!(self.commands.len() < MAX_COMMAND_PART_NUM);
 
+        // build at once
+        self.build_one_command(&cmd);
+
+        // cache command
+        let command = Command {
+            cmd,
+            cb_opt: Some(Box::new(cb)),
+        };
+        self.commands.push_back(command);
+        self.running_cb_num += 1;
+    }
+
+    pub fn do_commit(&mut self) -> bool {
+        //
+        if let Some(conn) = self.conn_opt.as_ref() {
+            let conn = conn.clone();
+            if !conn.is_closed() {
+                //
+                let data = self.buffer.next_all();
+                {
+                    let s = unsafe { std::str::from_utf8_unchecked(data) };
+                    log::info!(
+                        "cmdr{} send: ({}){:?} -- cmds_num={}, running_cb_num={}",
+                        self.name,
+                        s.len(),
+                        s,
+                        self.commands.len(),
+                        self.running_cb_num
+                    );
+                }
+                conn.send(data);
+
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    ///
+    pub fn do_clear_commands(&mut self) {
+        //
+        let commander = unsafe { &mut *(self as *const Self as *mut Self) };
+
+        //
+        for command in &commander.commands {
+            let cmd_tips = &command.cmd[0];
+
+            log::info!(
+                "cmdr{} command:{} cleared -- cmds_num={}, running_cb_num={}",
+                commander.name,
+                cmd_tips,
+                commander.commands.len(),
+                commander.running_cb_num
+            );
+        }
+
+        // 清空
+        commander.commands.clear();
+        commander.running_cb_num = 0;
+    }
+
+    fn do_auth(&mut self) {
+        //
         if self.pass.is_empty() {
             log::info!("cmdr{} AUTH pass: None", self.name,);
             return;
@@ -174,11 +221,8 @@ impl RedisCommander {
         }
     }
 
-    ///
-    pub fn do_select(&mut self) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
+    fn do_select(&mut self) {
+        //
         if self.pass.is_empty() {
             return;
         }
@@ -221,85 +265,7 @@ impl RedisCommander {
         self.do_commit();
     }
 
-    ///
-    pub fn do_send<F>(&mut self, cmd: Vec<String>, cb: F)
-    where
-        F: FnOnce(&mut RedisCommander, RedisReply) + Send + Sync + 'static,
-    {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
-        assert!(cmd.len() > 0);
-        assert!(self.commands.len() < MAX_COMMAND_PART_NUM);
-
-        self.build_one_command(&cmd);
-        self.commands.push_back(Command {
-            cmd,
-            cb_opt: Some(Box::new(cb)),
-        });
-        self.running_cb_num += 1;
-    }
-
-    pub fn do_commit(&mut self) -> bool {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
-        if let Some(conn) = self.conn_opt.as_ref() {
-            let conn = conn.clone();
-            if !conn.is_closed() {
-                //
-                let data = self.buffer.next_all();
-                {
-                    let s = unsafe { std::str::from_utf8_unchecked(data) };
-                    log::info!(
-                        "cmdr{} send: ({}){:?} -- cmds_num={}, running_cb_num={}",
-                        self.name,
-                        s.len(),
-                        s,
-                        self.commands.len(),
-                        self.running_cb_num
-                    );
-                }
-                conn.send(data);
-
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-
-    ///
-    pub fn do_clear_commands(&mut self) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
-        let commander = unsafe { &mut *(self as *const Self as *mut Self) };
-
-        //
-        for command in &commander.commands {
-            let cmd_tips = &command.cmd[0];
-
-            log::info!(
-                "cmdr{} command:{} cleared -- cmds_num={}, running_cb_num={}",
-                commander.name,
-                cmd_tips,
-                commander.commands.len(),
-                commander.running_cb_num
-            );
-        }
-
-        // 清空
-        commander.commands.clear();
-        commander.running_cb_num = 0;
-    }
-
     fn reset(&mut self) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
         //
         self.set_auth_ready(false);
         self.set_select_ready(false);
@@ -308,16 +274,10 @@ impl RedisCommander {
     }
 
     fn bind_conn(&mut self, conn: &Arc<TcpConn>) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
         self.conn_opt = Some(conn.clone());
     }
 
     fn build_one_command(&mut self, cmd: &Vec<String>) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
         // part num in a cmd vec
         let part_num = cmd.len();
         self.buffer

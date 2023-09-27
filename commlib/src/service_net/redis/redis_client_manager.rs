@@ -32,16 +32,13 @@ impl RedisClientStorage {
 }
 
 ///
-pub fn connect_to_redis<T>(
-    srv: &Arc<T>,
+pub fn connect_to_redis(
+    srv: &Arc<dyn ServiceRs>,
     raddr: &str,
     pass: &str,
     dbindex: isize,
     srv_net: &Arc<ServiceNetRs>,
-) -> Option<Arc<RedisClient>>
-where
-    T: ServiceRs + 'static,
-{
+) -> Option<Arc<RedisClient>> {
     log::info!(
         "connect_to_redis: {} ... pass({}) dbindex({})",
         raddr,
@@ -50,9 +47,6 @@ where
     );
 
     let (promise, pinky) = PinkySwear::<Option<Arc<RedisClient>>>::new();
-
-    let conn_fn = |_1| {};
-    let close_fn = |_1| {};
 
     // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
@@ -67,8 +61,6 @@ where
             raddr.as_str(),
             pass.as_str(),
             dbindex,
-            conn_fn,
-            close_fn,
             &srv_net2,
         ));
         log::info!(

@@ -11,6 +11,14 @@
     <!--16字节加密密钥（BASE64编码）-->
     <encrypt_token>YWJjZGVmZ2hpamtsbW5vcA==</encrypt_token>
 
+    <!-- redis -->
+    <redis>
+        <!-- 缓存 -->
+        <db addr="127.0.0.1" port="6379" auth="" db="4"></db>
+        <!-- 消息队列 -->
+        <db addr="127.0.0.1" port="6379" auth="" db="5"></db>
+    </redis>
+
     <!-- test -->
     <node srv="999" id="999" name="test">
         <addr>0.0.0.0</addr>

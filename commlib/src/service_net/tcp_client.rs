@@ -357,9 +357,10 @@ impl TcpClient {
         }
     }
 
-    ///
+    ////////////////////////////////////////////////////////////////
+
     #[inline(always)]
-    pub fn get_packet_builder<'a>(self: &'a Arc<Self>) -> &'a mut PacketBuilder {
+    fn get_packet_builder<'a>(self: &'a Arc<Self>) -> &'a mut PacketBuilder {
         // 运行于 srv_net 线程
         assert!(self.srv_net().is_in_service_thread());
 

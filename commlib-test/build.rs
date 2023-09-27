@@ -49,7 +49,14 @@ fn main() -> miette::Result<()> {
         .build_server(false)
         .build_transport(false)
         .out_dir("protos/out")
-        .compile(&["protos/cmd.proto", "protos/base.proto"], &["protos"])
+        .compile(
+            &[
+                "protos/cmd.proto",
+                "protos/base.proto",
+                "protos/inner/commlib.proto",
+            ],
+            &["protos"],
+        )
         .unwrap();
 
     Ok(())

@@ -4,6 +4,8 @@ pub mod proto {
     include!("../../protos/out/proto.rs");
 }
 
+mod cross_manager;
+
 mod test_conf;
 mod test_service;
 
@@ -33,7 +35,7 @@ fn main() {
     app.init(
         || test_service::G_TEST_SERVICE.clone(),
         |conf| {
-            app_startup::exec(&test_service::G_TEST_SERVICE, conf);
+            app_startup::launch(&test_service::G_TEST_SERVICE, conf);
         },
     );
     app.run();

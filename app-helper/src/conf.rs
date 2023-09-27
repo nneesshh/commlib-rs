@@ -62,6 +62,24 @@ pub struct WebUrl {
 }
 
 #[allow(dead_code)]
+pub struct RedisAddr {
+    pub addr: String,
+    pub port: u16,
+    pub pass: String,
+    pub dbindex: isize,
+}
+
+impl RedisAddr {
+    ///
+    pub fn from_xml(&mut self, xr: &XmlReader) {
+        self.addr = xr.get(vec!["addr"], "127.0.0.1".to_owned());
+        self.port = xr.get_u64(vec!["port"], 6379_u64) as u16;
+        self.pass = xr.get(vec!["auth"], "".to_owned());
+        self.dbindex = xr.get_u64(vec!["db"], 0_u64) as isize;
+    }
+}
+
+#[allow(dead_code)]
 pub struct Conf {
     pub job_params_: String, // 测试用例所需的工作参数字符串，用引号包围起来
 
@@ -84,6 +102,9 @@ pub struct Conf {
 
     pub version: String,     // 服务器版本号
     pub version_check: bool, // 是否检查版本号
+
+    pub db_redis: RedisAddr,    // db cache 用
+    pub queue_redis: RedisAddr, // 消息队列用
 
     pub local_xml_nodes: hashbrown::HashMap<NodeId, XmlReader>, // xml 配置数据
 
@@ -142,6 +163,19 @@ impl Conf {
 
             version: "".to_owned(),
             version_check: false,
+
+            db_redis: RedisAddr {
+                addr: "".to_owned(),
+                port: 0,
+                pass: "".to_owned(),
+                dbindex: 0,
+            },
+            queue_redis: RedisAddr {
+                addr: "".to_owned(),
+                port: 0,
+                pass: "".to_owned(),
+                dbindex: 0,
+            },
 
             local_xml_nodes: hashbrown::HashMap::new(),
 
@@ -320,6 +354,12 @@ impl Conf {
         if !token_str.is_empty() {
             self.encrypt_token = Base64::decode(token_str).unwrap();
         }
+
+        //
+        self.db_redis
+            .from_xml(config_xml.get_child(vec!["redis", "db"]).unwrap());
+        self.queue_redis
+            .from_xml(config_xml.get_child(vec!["redis", "queue"]).unwrap());
 
         //
         if srv_name.is_empty() {

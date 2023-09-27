@@ -38,8 +38,6 @@ pub struct ServiceHandle {
     pub tx: channel::Sender<Box<ServiceFuncType>>,
     pub rx: channel::Receiver<Box<ServiceFuncType>>,
 
-    pub clock: Clock,
-
     pub xml_config: RwLock<XmlReader>,
 
     //
@@ -58,8 +56,6 @@ impl ServiceHandle {
 
             tx,
             rx,
-
-            clock: Clock::new(),
 
             xml_config: RwLock::new(XmlReader::new()),
 
@@ -280,7 +276,7 @@ where
             handle.quit_service();
             break;
         } else {
-            // update clock
+            // update thread local Clock
             Clock::update();
 
             // dispatch cb -- process async tasks

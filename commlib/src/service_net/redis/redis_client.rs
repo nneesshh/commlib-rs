@@ -62,8 +62,8 @@ pub struct RedisClient {
 
 impl RedisClient {
     ///
-    pub fn new<T, C, S>(
-        srv: &Arc<T>,
+    pub fn new<C, S>(
+        srv: &Arc<dyn ServiceRs>,
         name: &str,
         raddr: &str,
         pass: &str,
@@ -74,7 +74,6 @@ impl RedisClient {
         srv_net: &Arc<ServiceNetRs>,
     ) -> Self
     where
-        T: ServiceRs + 'static,
         C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
         S: Fn(ConnId) + Send + Sync + 'static,
     {
@@ -381,6 +380,12 @@ impl RedisClient {
 
     ///
     #[inline(always)]
+    pub fn is_connected(&self) -> bool {
+        self.status() == ClientStatus::Connected
+    }
+
+    ///
+    #[inline(always)]
     pub fn id(&self) -> uuid::Uuid {
         self.id
     }
@@ -415,49 +420,12 @@ impl RedisClient {
         &self.srv
     }
 
-    ///
-    #[inline(always)]
-    pub fn get_commander<'a>(self: &'a Arc<Self>) -> &'a mut RedisCommander {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
-
-        let commander = self.tls_redis_commander.get_or(|| {
-            //
-            UnsafeCell::new(RedisCommander::new(
-                self.srv(),
-                std::format!("@({})", self.name).as_str(),
-                self.pass.as_str(),
-                self.dbindex,
-                self.srv_net(),
-            ))
-        });
-        unsafe { &mut *(commander.get()) }
-    }
-
-    ///
-    #[inline(always)]
-    pub fn get_reply_builder<'a>(self: &'a Arc<Self>) -> &'a mut ReplyBuilder {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
-
-        let builder = self.tls_reply_builder.get_or(|| {
-            let cli = self.clone();
-
-            let build_cb = move |conn: Arc<TcpConn>, reply: RedisReply| {
-                // 运行于 srv_net 线程
-                assert!(conn.srv_net.is_in_service_thread());
-                cli.on_receive_reply(reply);
-            };
-            UnsafeCell::new(ReplyBuilder::new(Box::new(build_cb)))
-        });
-        unsafe { &mut *(builder.get()) }
-    }
-
     /// Send redis command
     pub fn send<F>(self: &Arc<Self>, cmd: Vec<String>, cb: F)
     where
         F: FnOnce(RedisReply) + Send + Sync + 'static,
     {
+        // 投递到 srv_net 线程
         let cli = self.clone();
         let srv = self.srv.clone();
         self.srv_net.run_in_service(Box::new(move || {
@@ -474,6 +442,7 @@ impl RedisClient {
 
     /// 异步提交： 如果提交失败，则在连接成功后再提交一次
     pub fn commit(self: &Arc<Self>) {
+        // 投递到 srv_net 线程
         let cli = self.clone();
         self.srv_net.run_in_service(Box::new(move || {
             //
@@ -483,15 +452,13 @@ impl RedisClient {
     }
 
     ///
-    pub fn send_and_commit_blocking<F>(self: &Arc<Self>, cmd: Vec<String>) -> PinkySwear<RedisReply>
-    where
-        F: FnOnce(RedisReply) + Send + Sync + 'static,
-    {
-        // MUST not in srv_net thread，防止 blocking 导致死锁
+    pub fn send_and_commit_blocking(self: &Arc<Self>, cmd: Vec<String>) -> PinkySwear<RedisReply> {
+        // MUST NOT in srv_net thread，防止 blocking 导致死锁
         assert!(!self.srv_net.is_in_service_thread());
 
         let (prms, pinky) = PinkySwear::<RedisReply>::new();
 
+        // 投递到 srv_net 线程
         let cli = self.clone();
         self.srv_net.run_in_service(Box::new(move || {
             //
@@ -506,6 +473,7 @@ impl RedisClient {
 
     /// 用户手工调用，清除 commands 缓存
     pub fn clear_commands(self: &Arc<Self>) {
+        // 投递到 srv_net 线程
         let cli = self.clone();
         self.srv_net.run_in_service(Box::new(move || {
             //
@@ -514,12 +482,39 @@ impl RedisClient {
         }));
     }
 
-    ///
+    ////////////////////////////////////////////////////////////////
+
     #[inline(always)]
-    pub fn hset<F>(self: &Arc<Self>, key: &str, field: &str, value: &str, cb: F)
-    where
-        F: Fn(RedisReply) + Send + Sync + 'static,
-    {
-        self.send(vec![key.to_owned(), field.to_owned(), value.to_owned()], cb);
+    fn get_commander<'a>(self: &'a Arc<Self>) -> &'a mut RedisCommander {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let commander = self.tls_redis_commander.get_or(|| {
+            //
+            UnsafeCell::new(RedisCommander::new(
+                std::format!("@({})", self.name).as_str(),
+                self.pass.as_str(),
+                self.dbindex,
+            ))
+        });
+        unsafe { &mut *(commander.get()) }
+    }
+
+    #[inline(always)]
+    fn get_reply_builder<'a>(self: &'a Arc<Self>) -> &'a mut ReplyBuilder {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net().is_in_service_thread());
+
+        let builder = self.tls_reply_builder.get_or(|| {
+            let cli = self.clone();
+
+            let build_cb = move |conn: Arc<TcpConn>, reply: RedisReply| {
+                // 运行于 srv_net 线程
+                assert!(conn.srv_net.is_in_service_thread());
+                cli.on_receive_reply(reply);
+            };
+            UnsafeCell::new(ReplyBuilder::new(Box::new(build_cb)))
+        });
+        unsafe { &mut *(builder.get()) }
     }
 }

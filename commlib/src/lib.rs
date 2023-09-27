@@ -45,6 +45,7 @@ pub use service_signal::ServiceSignalRs;
 
 ///
 pub mod service_net;
+pub use service_net::redis_cmds as redis;
 pub use service_net::{
     connect_to_redis, connect_to_tcp_server, listen_tcp_addr, start_network, stop_network,
 };

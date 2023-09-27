@@ -35,14 +35,24 @@ pub struct Clock {
 
     // 用于计算 elapsed
     last_time: SystemTime,
+
+    // now stamp
+    now_stamp: u64,
 }
 
 impl Clock {
     /// New clock
     pub fn new() -> Self {
+        let now = SystemTime::now();
+        let now_stamp = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+
         Self {
             wheel_timer: WheelTimer::new(),
-            last_time: SystemTime::now(),
+            last_time: now,
+            now_stamp,
         }
     }
 
@@ -116,22 +126,27 @@ impl Clock {
     /// 更新计时器 tick
     pub fn update() {
         with_tls_mut!(G_CLOCK, clock, {
-            let wheel_timer = &mut clock.wheel_timer;
-            let last_time = &mut clock.last_time;
-
             //
-            match last_time.elapsed() {
+            match clock.last_time.elapsed() {
                 Ok(d) => {
                     // wheel timer update
-                    wheel_timer.update(d);
+                    clock.wheel_timer.update(d);
 
                     // advance last time
-                    last_time.add_assign(d);
+                    clock.last_time.add_assign(d);
+
+                    // advance now stamp
+                    clock.now_stamp += d.as_millis() as u64;
                 }
                 Err(err) => {
                     log::error!("clock update error: {:?}!!!", err);
                 }
             }
         });
+    }
+
+    ///
+    pub fn now_stamp() -> u64 {
+        with_tls_mut!(G_CLOCK, clock, { clock.now_stamp })
     }
 }

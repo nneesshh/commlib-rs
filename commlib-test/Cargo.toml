@@ -25,7 +25,8 @@ hashbrown = { path="../hashbrown" }
 parking_lot = { path="../parking_lot" }
 prost = { path="../prost"}
 roxmltree = { path="../roxmltree" }
-spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
+spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location", "flexible-string"] }
+thread_local = { path = "../thread_local-rs" }
 commlib = { path="../commlib" }
 app-helper = { path="../app-helper" }
 

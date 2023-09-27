@@ -19,3 +19,6 @@ mod reply_builder;
 
 ///
 mod sub_builder_impl;
+
+///
+pub mod cmds;

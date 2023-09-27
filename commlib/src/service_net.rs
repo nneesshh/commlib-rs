@@ -87,6 +87,7 @@ pub mod low_level_network;
 pub use low_level_network::*;
 
 ///
-pub mod redis;
+mod redis;
+pub use redis::cmds as redis_cmds;
 pub use redis::connect_to_redis;
 pub use redis::{RedisClient, RedisCommander, RedisReply, RedisReplyType};

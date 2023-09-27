@@ -1,0 +1,16 @@
+syntax = "proto3";
+package Proto;
+
+// 跨服消息包
+message InnerCrossCall {
+  uint64 node         = 1;   // (目标)节点类型
+  int32 zone          = 2;   // (目标)区
+  uint64 id           = 3;   // 唯一消息 ID 
+  int32 type          = 4;   // 消息类型
+  bytes msg           = 5;   // 消息体
+  uint64 source_node  = 6;   // (源)节点类型
+  int32 source_zone   = 7;   // (源)区
+  bool resp           = 8;   // 回包标记(某个消息的回包还是发起包)
+  int32 trans_zone    = 9;   // 转发的目标所在区
+  uint64 trans_node   = 10;  // 转发的目标所在节点
+}

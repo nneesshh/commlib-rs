@@ -35,7 +35,7 @@ fn main() {
     app.init(
         || cli_service::G_CLI_SERVICE.clone(),
         |conf| {
-            cli_app_startup::exec(&cli_service::G_CLI_SERVICE, conf);
+            cli_app_startup::launch(&cli_service::G_CLI_SERVICE, conf);
         },
     );
     app.run();

@@ -145,22 +145,18 @@ where
 }
 
 /// Create redis client: mi_network is private
-pub fn create_redis_client<T, C, S>(
-    srv: &Arc<T>,
+pub fn create_redis_client(
+    srv: &Arc<dyn ServiceRs>,
     raddr: &str,
     pass: &str,
     dbindex: isize,
-    conn_fn: C,
-    close_fn: S,
     srv_net: &Arc<ServiceNetRs>,
-) -> RedisClient
-where
-    T: ServiceRs + 'static,
-    C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-    S: Fn(ConnId) + Send + Sync + 'static,
-{
+) -> RedisClient {
     let next_id = NEXT_CLIENT_ID.fetch_add(1, Ordering::Relaxed);
     let name = std::format!("redis{}", next_id);
+
+    let conn_fn = |_1| {};
+    let close_fn = |_1| {};
 
     RedisClient::new(
         srv,

@@ -40,7 +40,7 @@ pub fn resume(srv: &Arc<CliService>) {
 }
 
 ///
-pub fn exec(srv: &Arc<CliService>, conf: &Arc<Conf>) {
+pub fn launch(srv: &Arc<CliService>, conf: &Arc<Conf>) {
     // pre-startup, main manager init
     G_MAIN.with(|g| {
         let mut main_manager = g.borrow_mut();

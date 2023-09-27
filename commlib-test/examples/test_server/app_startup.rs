@@ -13,8 +13,8 @@ use std::sync::Arc;
 
 use commlib::with_tls;
 use commlib::G_SERVICE_NET;
-use commlib::{connect_to_redis, listen_tcp_addr};
-use commlib::{ConnId, NetPacketGuard, RedisReply, ServiceRs, TcpConn};
+use commlib::{connect_to_redis, listen_tcp_addr, redis};
+use commlib::{ConnId, NetPacketGuard, ServiceRs, TcpConn};
 
 use app_helper::{conf::Conf, Startup};
 
@@ -42,7 +42,7 @@ pub fn resume(srv: &Arc<TestService>) {
 }
 
 ///
-pub fn exec(srv: &Arc<TestService>, conf: &Arc<Conf>) {
+pub fn launch(srv: &Arc<TestService>, conf: &Arc<Conf>) {
     // pre-startup, main manager init
     commlib::ossl_init();
 
@@ -82,20 +82,23 @@ pub fn exec(srv: &Arc<TestService>, conf: &Arc<Conf>) {
 
 ///
 pub fn startup_redis_to_db(srv: &Arc<TestService>) -> bool {
+    let srv: Arc<dyn ServiceRs> = srv.clone();
     G_MAIN.with(|g| {
         let mut main_manager = g.borrow_mut();
 
         main_manager.redis_to_db =
-            connect_to_redis(srv, "127.0.0.1:6379", "pass1234", 1, &G_SERVICE_NET);
+            connect_to_redis(&srv, "127.0.0.1:6379", "pass1234", 1, &G_SERVICE_NET);
 
-        main_manager
-            .redis_to_db
-            .as_ref()
-            .unwrap()
-            .hset("test", "testk", "testv", |r| {
+        redis::hset(
+            main_manager.redis_to_db.as_ref().unwrap(),
+            "test",
+            "testk",
+            "testv",
+            |r| {
                 //
                 log::info!("r={:?}", r);
-            });
+            },
+        );
 
         //
         main_manager.redis_to_db.is_some()
