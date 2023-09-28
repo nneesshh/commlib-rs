@@ -74,7 +74,7 @@ pub fn get_down_stream_name(zone: ZoneId) -> String {
 
 ///
 #[inline(always)]
-pub fn get_up_stream_id(sp_zone: SpecialZone, node: NodeId, channel: i32) -> String {
+pub fn get_up_stream_name(sp_zone: SpecialZone, node: NodeId, channel: i32) -> String {
     assert!((sp_zone as i8) < 0_i8);
     match sp_zone {
         SpecialZone::Cross => {

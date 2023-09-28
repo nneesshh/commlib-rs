@@ -8,14 +8,6 @@ use super::{decode_packet, encode_packet, get_leading_field_size, take_packet};
 use super::{CmdId, ConnId, EncryptData, NetPacketGuard, PacketType};
 
 ///
-pub struct CrossRoutInfo {
-    zone: crate::ZoneId,
-    node: crate::NodeId,
-    rpcid: u64,
-    pid: crate::PlayerId,
-}
-
-///
 pub type EncryptTokenHander = Box<dyn Fn(&mut NetProxy, &TcpConn) + Send + Sync>;
 pub type PacketHander = Box<dyn Fn(&mut NetProxy, &TcpConn, CmdId, &[u8]) + Send + Sync>;
 

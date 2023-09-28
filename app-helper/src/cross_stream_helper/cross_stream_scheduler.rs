@@ -2,11 +2,14 @@ use atomic::{Atomic, Ordering};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::thread::JoinHandle;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use commlib::{connect_to_redis, redis, string_to_value, Clock};
+use commlib::{connect_to_redis, redis, string_to_value, NodeId, SpecialZone};
 use commlib::{RedisClient, RedisReply, RedisReplyType, ServiceNetRs, ServiceRs, ZoneId};
 
-use crate::cross_stream_keys::*;
+use crate::cross_stream_keys::{
+    get_down_stream_name, get_up_stream_name, make_streams_ids_pair, stream_id_for_zone,
+};
 use crate::G_CONF;
 
 const READ_MSG_COUNT: usize = 10;
@@ -86,10 +89,20 @@ impl CrossStreamScheduler {
         }
     }
 
-    ///
-    pub fn send_low_level(&self, zone: ZoneId, data: String) {
-        let now = Clock::now_stamp();
-        let key = get_down_stream_name(zone);
+    /// 通过redis中，向上发送到跨服
+    pub fn send_to_up_stream(
+        &self,
+        sp_zone: SpecialZone,
+        node: NodeId,
+        channel: i32,
+        data: Vec<u8>,
+    ) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let key = get_up_stream_name(sp_zone, node, channel);
+        let data = unsafe { String::from_utf8_unchecked(data) };
 
         //
         redis::xadd(
@@ -100,11 +113,54 @@ impl CrossStreamScheduler {
             move |rpl| {
                 //
                 if rpl.is_error() {
-                    log::error!("cross(XADD) send_low_level error: {}", rpl.error());
+                    log::error!(
+                        "cross(XADD) send_to_up_stream sp_zone {} node {} channel {} error: {}",
+                        sp_zone as i8,
+                        node,
+                        channel,
+                        rpl.error()
+                    );
                 } else {
                     //
                     log::debug!(
-                        "cross(XADD) send_low_level ok -- zone:{} reply:{:?}",
+                        "cross(XADD) send_to_stream sp_zone {} node {} channel {} ok -- reply:{:?}",
+                        sp_zone as i8,
+                        node,
+                        channel,
+                        rpl
+                    );
+                }
+            },
+        )
+    }
+
+    /// 通过redis中转到下行区服
+    pub fn send_to_down_stream(&self, zone: ZoneId, data: Vec<u8>) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let key = get_down_stream_name(zone);
+        let data = unsafe { String::from_utf8_unchecked(data) };
+
+        //
+        redis::xadd(
+            self.cli_send_to_queue.as_ref().unwrap(),
+            key.as_str(),
+            "*",
+            vec!["time".to_owned(), now.to_string(), "msg".to_owned(), data],
+            move |rpl| {
+                //
+                if rpl.is_error() {
+                    log::error!(
+                        "cross(XADD) send_to_down_stream zone {} error: {}",
+                        zone,
+                        rpl.error()
+                    );
+                } else {
+                    //
+                    log::debug!(
+                        "cross(XADD) send_to_down_stream zone {} ok -- reply:{:?}",
                         zone,
                         rpl
                     );

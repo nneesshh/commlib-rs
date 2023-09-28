@@ -57,13 +57,6 @@ pub fn launch(srv: &Arc<TestService>, conf: &Arc<Conf>) {
 
         // step:
         let step_srv = srv.clone();
-        startup.add_step("start redis to db", move || {
-            //
-            startup_redis_to_db(&step_srv)
-        });
-
-        // step:
-        let step_srv = srv.clone();
         startup.add_step("start network listen", move || {
             //
             startup_network_listen(&step_srv)
@@ -76,33 +69,8 @@ pub fn launch(srv: &Arc<TestService>, conf: &Arc<Conf>) {
     // startup over, main manager lazy init
     G_MAIN.with(|g| {
         let mut main_manager = g.borrow_mut();
-        main_manager.lazy_init(&srv);
+        main_manager.lazy_init();
     });
-}
-
-///
-pub fn startup_redis_to_db(srv: &Arc<TestService>) -> bool {
-    let srv: Arc<dyn ServiceRs> = srv.clone();
-    G_MAIN.with(|g| {
-        let mut main_manager = g.borrow_mut();
-
-        main_manager.redis_to_db =
-            connect_to_redis(&srv, "127.0.0.1:6379", "pass1234", 1, &G_SERVICE_NET);
-
-        redis::hset(
-            main_manager.redis_to_db.as_ref().unwrap(),
-            "test",
-            "testk",
-            "testv",
-            |r| {
-                //
-                log::info!("r={:?}", r);
-            },
-        );
-
-        //
-        main_manager.redis_to_db.is_some()
-    })
 }
 
 ///

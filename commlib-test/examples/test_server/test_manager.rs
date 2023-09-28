@@ -4,8 +4,10 @@
 
 use std::sync::Arc;
 
-use commlib::{with_tls, with_tls_mut, RedisClient};
-use commlib::{Blowfish, CmdId, ConnId, NetProxy, NodeState, PacketType, ServiceRs, TcpConn};
+use commlib::{connect_to_redis, redis, with_tls, with_tls_mut};
+use commlib::{
+    Blowfish, CmdId, ConnId, NetProxy, NodeState, PacketType, RedisClient, ServiceRs, TcpConn,
+};
 use commlib::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
@@ -14,6 +16,7 @@ use app_helper::G_CONF;
 use crate::proto;
 use prost::Message;
 
+use super::cross_manager::CrossManager;
 use super::test_conf::G_TEST_CONF;
 use super::test_service::TestService;
 use super::test_service::G_TEST_SERVICE;
@@ -30,6 +33,7 @@ pub struct TestManager {
     pub c2s_proxy: NetProxy, // client to server
 
     pub redis_to_db: Option<Arc<RedisClient>>,
+    pub cross_mgr: Option<Arc<CrossManager>>,
 }
 
 impl TestManager {
@@ -44,6 +48,7 @@ impl TestManager {
             c2s_proxy: c2s_proxy,
 
             redis_to_db: None,
+            cross_mgr: None,
         }
     }
 
@@ -63,8 +68,14 @@ impl TestManager {
         });
         log::info!("\nTest init ...\n");
 
-        //
+        // 初始化节点配置
         with_tls_mut!(G_TEST_CONF, cfg, { cfg.init(handle.xml_config()) });
+
+        // init redis
+        self.init_redis_to_db();
+
+        // init cross
+        self.init_cross_manager();
 
         //
         handle.set_state(NodeState::Start);
@@ -72,12 +83,44 @@ impl TestManager {
     }
 
     ///
-    pub fn lazy_init(&mut self, srv: &Arc<TestService>) {
+    pub fn lazy_init(&mut self) {
         log::info!("lazy init:");
+
+        let cross_mgr = self.cross_mgr.as_ref().unwrap();
+        cross_mgr.lazy_init();
+
+        // debug
+        //cross_mgr.send_to_zone()
     }
 
-    /// 消息处理: encrypt token
-    pub fn handle_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn, cmd: CmdId, slice: &[u8]) {
+    fn init_redis_to_db(&mut self) {
+        let srv: Arc<dyn ServiceRs> = G_TEST_SERVICE.clone();
+
+        //
+        self.redis_to_db = connect_to_redis(&srv, "127.0.0.1:6379", "pass1234", 1, &G_SERVICE_NET);
+
+        redis::hset(
+            self.redis_to_db.as_ref().unwrap(),
+            "test",
+            "testk",
+            "testv",
+            |r| {
+                //
+                log::info!("r={:?}", r);
+            },
+        );
+    }
+
+    fn init_cross_manager(&mut self) {
+        let srv: Arc<dyn ServiceRs> = G_TEST_SERVICE.clone();
+
+        //
+        let cross_mgr = Arc::new(CrossManager::new(&srv, &G_SERVICE_NET));
+        cross_mgr.init();
+        self.cross_mgr = Some(cross_mgr);
+    }
+
+    fn handle_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn, cmd: CmdId, slice: &[u8]) {
         // 消息包加密 key
         let msg = proto::S2cEncryptToken::decode(slice).unwrap();
 
