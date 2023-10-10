@@ -28,7 +28,7 @@ pub struct NetPacketPool;
 
 impl PoolAllocator<NetPacket> for NetPacketPool {
     ///
-    //#[inline(always)]
+    #[inline(always)]
     fn allocate(&self) -> NetPacket {
         let mut pkt = NetPacket::new();
         pkt.init(true);
@@ -36,7 +36,7 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
     }
 
     /// OPTIONAL METHODS:
-    //#[inline(always)]
+    #[inline(always)]
     fn reset(&self, pkt: &mut NetPacket) {
         pkt.release();
     }
@@ -50,7 +50,7 @@ impl PoolAllocator<NetPacket> for NetPacketPool {
 }
 
 ///
-//#[inline(always)]
+#[inline(always)]
 pub fn take_packet(size: usize, leading_filed_size: u8) -> NetPacketGuard {
     if size <= SMALL_PACKET_MAX_SIZE {
         take_small_packet(leading_filed_size)
@@ -60,7 +60,7 @@ pub fn take_packet(size: usize, leading_filed_size: u8) -> NetPacketGuard {
 }
 
 /// 申请 small packet
-//#[inline(always)]
+#[inline(always)]
 pub fn take_small_packet(leading_filed_size: u8) -> NetPacketGuard {
     let mut pkt = G_PACKET_POOL_SMALL.get();
     pkt.set_size_type(PacketSizeType::Small);
@@ -69,7 +69,7 @@ pub fn take_small_packet(leading_filed_size: u8) -> NetPacketGuard {
 }
 
 /// 申请 large packet
-//#[inline(always)]
+#[inline(always)]
 pub fn take_large_packet(
     leading_filed_size: u8,
     ensure_bytes: usize,

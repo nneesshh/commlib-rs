@@ -59,6 +59,10 @@ pub mod tcp_server_manager;
 pub use tcp_server_manager::listen_tcp_addr;
 
 ///
+pub mod connector;
+pub use connector::Connector;
+
+///
 pub mod tcp_client;
 pub use tcp_client::TcpClient;
 

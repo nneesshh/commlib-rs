@@ -44,14 +44,18 @@ pub mod service_signal;
 pub use service_signal::ServiceSignalRs;
 
 ///
+pub mod service_dns_resolver;
+pub use service_dns_resolver::ServiceDnsResolverRs;
+
+///
 pub mod service_net;
 pub use service_net::redis_cmds as redis;
 pub use service_net::{
     connect_to_redis, connect_to_tcp_server, listen_tcp_addr, start_network, stop_network,
 };
 pub use service_net::{
-    Buffer, ClientStatus, CmdId, ConnId, NetProxy, ServiceNetRs, TcpClient, TcpConn, TcpHandler,
-    TcpListenerId, TcpServer,
+    Buffer, ClientStatus, CmdId, ConnId, Connector, NetProxy, ServiceNetRs, TcpClient, TcpConn,
+    TcpHandler, TcpListenerId, TcpServer,
 };
 pub use service_net::{NetPacket, NetPacketGuard, PacketType};
 pub use service_net::{RedisClient, RedisCommander, RedisReply, RedisReplyType};

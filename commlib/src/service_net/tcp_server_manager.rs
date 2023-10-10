@@ -1,9 +1,8 @@
 use atomic::Atomic;
 use parking_lot::RwLock;
 use std::cell::UnsafeCell;
+use std::net::SocketAddr;
 use std::sync::Arc;
-
-use message_io::network::Endpoint;
 
 use crate::{PinkySwear, ServiceNetRs, ServiceRs, TcpListenerId};
 
@@ -106,82 +105,81 @@ pub fn tcp_server_make_new_conn(
     listener_id: TcpListenerId,
     packet_type: PacketType,
     hd: ConnId,
-    endpoint: Endpoint,
+    sock_addr: SocketAddr,
 ) {
-    // 投递到 srv_net 线程 (同一线程便于观察 conn 生命周期)
-    let func = move || {
-        //
-        with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
-            // check listener id
-            let mut tcp_server_opt: Option<&Arc<TcpServer>> = None;
-            for tcp_server in &g.tcp_server_vec {
-                if tcp_server.listener_id == listener_id {
-                    tcp_server_opt = Some(tcp_server);
-                    break;
-                }
-            }
+    // 运行于 srv_net 线程
+    assert!(srv_net0.is_in_service_thread());
 
-            // 根据 tcp server 创建 tcp conn
-            if let Some(tcp_server) = tcp_server_opt {
-                //
-                let tcp_server2 = tcp_server.clone();
-                let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
+    //
+    with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
+        // check listener id
+        let mut tcp_server_opt: Option<&Arc<TcpServer>> = None;
+        for tcp_server in &g.tcp_server_vec {
+            if tcp_server.listener_id == listener_id {
+                tcp_server_opt = Some(tcp_server);
+                break;
+            }
+        }
+
+        // 根据 tcp server 创建 tcp conn
+        if let Some(tcp_server) = tcp_server_opt {
+            //
+            let tcp_server2 = tcp_server.clone();
+            let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
+                // 运行于 srv_net 线程
+                assert!(conn.srv_net.is_in_service_thread());
+                tcp_server2.on_ll_connect(conn);
+            });
+
+            // use packet builder to handle input buffer
+            let tcp_server2 = tcp_server.clone();
+            let connection_read_fn =
+                Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
                     // 运行于 srv_net 线程
                     assert!(conn.srv_net.is_in_service_thread());
-                    tcp_server2.on_ll_connect(conn);
+                    tcp_server2.on_ll_input(conn, input_buffer);
                 });
 
-                // use packet builder to handle input buffer
-                let tcp_server2 = tcp_server.clone();
-                let connection_read_fn =
-                    Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
-                        // 运行于 srv_net 线程
-                        assert!(conn.srv_net.is_in_service_thread());
-                        tcp_server2.on_ll_input(conn, input_buffer);
-                    });
+            //
+            let tcp_server2 = tcp_server.clone();
+            let connection_lost_fn = Arc::new(move |hd: ConnId| {
+                // 运行于 srv_net 线程
+                assert!(tcp_server2.srv_net().is_in_service_thread());
+                tcp_server2.on_ll_disconnect(hd);
+            });
+
+            //
+            let netctrl = tcp_server.netctrl().clone();
+            let srv_net = tcp_server.srv_net().clone();
+            let srv = tcp_server.srv().clone();
+
+            let conn = Arc::new(TcpConn {
+                //
+                hd,
 
                 //
-                let tcp_server2 = tcp_server.clone();
-                let connection_lost_fn = Arc::new(move |hd: ConnId| {
-                    // 运行于 srv_net 线程
-                    assert!(tcp_server2.srv_net().is_in_service_thread());
-                    tcp_server2.on_ll_disconnect(hd);
-                });
+                sock_addr,
+                netctrl: netctrl.clone(),
 
                 //
-                let netctrl = tcp_server.netctrl().clone();
-                let srv_net = tcp_server.srv_net().clone();
-                let srv = tcp_server.srv().clone();
+                packet_type: Atomic::new(packet_type),
+                closed: Atomic::new(false),
 
-                let conn = Arc::new(TcpConn {
-                    //
-                    hd,
+                //
+                srv: srv.clone(),
+                srv_net: srv_net.clone(),
 
-                    //
-                    endpoint,
-                    netctrl: netctrl.clone(),
+                //
+                connection_establish_fn,
+                connection_read_fn,
+                connection_lost_fn: RwLock::new(connection_lost_fn),
+            });
 
-                    //
-                    packet_type: Atomic::new(packet_type),
-                    closed: Atomic::new(false),
+            // add conn
+            insert_connection(&srv_net, hd, &conn);
 
-                    //
-                    srv: srv.clone(),
-                    srv_net: srv_net.clone(),
-
-                    //
-                    connection_establish_fn,
-                    connection_read_fn,
-                    connection_lost_fn: RwLock::new(connection_lost_fn),
-                });
-
-                // add conn
-                insert_connection(&srv_net, hd, &conn);
-
-                // connection ok
-                on_connection_established(conn);
-            }
-        });
-    };
-    srv_net0.run_in_service(Box::new(func));
+            // connection ok
+            on_connection_established(conn);
+        }
+    });
 }

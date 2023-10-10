@@ -1,8 +1,9 @@
 use atomic::{Atomic, Ordering};
 use parking_lot::RwLock;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
-use message_io::network::Endpoint;
+use message_io::network::{Endpoint, ResourceId};
 use message_io::node::NodeHandler;
 
 use crate::ServiceRs;
@@ -17,7 +18,7 @@ pub struct TcpConn {
     pub hd: ConnId,
 
     //
-    pub endpoint: Endpoint,
+    pub sock_addr: SocketAddr,
     pub netctrl: NodeHandler<()>,
 
     //
@@ -43,7 +44,8 @@ impl TcpConn {
     #[inline(always)]
     pub fn close(&self) {
         log::info!("[hd={}] low level close", self.hd);
-        self.netctrl.network().remove(self.endpoint.resource_id());
+        let rid = ResourceId::from(self.hd.id);
+        self.netctrl.network().remove(rid);
 
         let srv_net2 = self.srv_net.clone();
         let hd = self.hd;
@@ -60,7 +62,9 @@ impl TcpConn {
     pub fn send(&self, data: &[u8]) {
         log::debug!("[hd={}] send data ...", self.hd);
 
-        self.netctrl.network().send(self.endpoint, data);
+        let rid = ResourceId::from(self.hd.id);
+        let endpoint = Endpoint::new(rid, self.sock_addr);
+        self.netctrl.network().send(endpoint, data);
     }
 
     ///

@@ -157,26 +157,27 @@ pub trait ServiceRs: Send + Sync {
     fn join(&self);
 }
 
-/// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move
+/// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move.
+/// (采用独立函数是因为 self: &Arc<T> 和 泛型 会导致 ServiceRs 不是 object safe)
 pub fn start_service<T, I>(
     srv: &Arc<T>,
     name_of_thread: &str,
     initializer: I,
-) -> (Option<JoinHandle<()>>, u64)
+) -> Option<JoinHandle<()>>
 where
     T: ServiceRs + 'static,
     I: FnOnce() + Send + 'static,
 {
-    let (tid_prms, tid_pinky) = PinkySwear::<u64>::new();
-
-    {
-        let handle = srv.get_handle();
-        let tid = handle.tid();
-        if tid > 0u64 {
-            log::error!("service already started!!! tid={}", tid);
-            return (None, 0);
-        }
+    //
+    let handle = srv.get_handle();
+    let tid = handle.tid();
+    if tid > 0u64 {
+        log::error!("service already started!!! tid={}", tid);
+        return None;
     }
+
+    //
+    let (ready_prms, ready_pinky) = PinkySwear::<()>::new();
 
     //
     let srv2 = srv.clone();
@@ -188,15 +189,17 @@ where
         .spawn(move || {
             let handle = srv2.get_handle();
 
-            // notify ready
+            // update tid
             let tid = get_current_tid();
+            handle.set_tid(tid);
+
             log::info!("service({}) spawn on thread: {}", tname, tid);
 
             // 服务线程初始化
             (initializer)();
 
-            // 服务线程就绪通知
-            tid_pinky.swear(tid);
+            // 服务线程就绪通知( notify ready )
+            ready_pinky.swear(());
 
             // run
             run_service(srv2.as_ref(), tname.as_str());
@@ -214,23 +217,19 @@ where
         .unwrap();
 
     //
-    let tid = tid_prms.wait();
-    (Some(join_handle), tid)
+    ready_prms.wait();
+    Some(join_handle)
 }
 
 /// 线程启动完成，执行后续处理 (ThreadId.as_u64() is not stable yet, use ready_pair now)
 ///    ready_pair: (join_handle_opt, tid)
-pub fn proc_service_ready<T>(srv: &T, ready_pair: (Option<JoinHandle<()>>, u64)) -> bool
+pub fn proc_service_ready<T>(srv: &T, join_handle_opt: Option<JoinHandle<()>>) -> bool
 where
     T: ServiceRs + 'static,
 {
-    let (join_handle_opt, tid) = ready_pair;
+    let handle = srv.get_handle();
 
     if join_handle_opt.is_some() {
-        // update tid
-        let handle = srv.get_handle();
-        handle.set_tid(tid);
-
         // update join_handle
         {
             let mut join_handle_opt_mut = handle.join_handle_opt.write();
@@ -238,7 +237,7 @@ where
         }
         true
     } else {
-        log::error!("[proc_service_ready] failed!!! tid: {}", tid);
+        log::error!("[proc_service_ready] failed!!! tid: {}", handle.tid());
         false
     }
 }

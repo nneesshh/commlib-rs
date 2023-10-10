@@ -17,7 +17,7 @@ pub struct CliService {
 
 impl CliService {
     ///
-    pub fn new(id: u64) -> CliService {
+    pub fn new(id: u64) -> Self {
         Self {
             handle: ServiceHandle::new(id, NodeState::Idle),
         }

@@ -243,7 +243,7 @@ impl NetPacket {
     }
 
     ///
-    //#[inline(always)]
+    #[inline(always)]
     pub fn set_body(&mut self, slice: &[u8]) {
         let len = slice.len();
         self.buffer.write_slice(slice);

@@ -1,10 +1,9 @@
 use atomic::Atomic;
 use parking_lot::RwLock;
 use std::cell::UnsafeCell;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use uuid::Uuid;
-
-use message_io::network::Endpoint;
 
 use crate::service_net::tcp_conn_manager::on_connection_established;
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
@@ -33,6 +32,30 @@ impl TcpClientStorage {
 }
 
 ///
+pub fn insert_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid, cli: &Arc<TcpClient>) {
+    // 运行于 srv_net 线程
+    assert!(srv_net.is_in_service_thread());
+
+    with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
+        log::info!("add client: id<{}>", cli_id);
+        g.client_table.insert(cli_id, cli.clone());
+    });
+}
+
+/*
+///
+pub fn remove_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<TcpClient>> {
+    // 运行于 srv_net 线程
+    assert!(srv_net.is_in_service_thread());
+
+    with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
+        log::info!("remove client: id<{}>", cli_id);
+        g.client_table.remove(&cli_id)
+    })
+}
+*/
+
+///
 pub fn connect_to_tcp_server<T, C, P, S>(
     srv: &Arc<T>,
     name: &str,
@@ -48,7 +71,7 @@ where
     P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
     S: Fn(ConnId) + Send + Sync + 'static,
 {
-    log::info!("connect_to_tcp_server: {} -- {}...", name, raddr);
+    log::info!("({})[connect_to_tcp_server] raddr: {} ...", name, raddr);
 
     let (promise, pinky) = PinkySwear::<Option<Arc<TcpClient>>>::new();
 
@@ -70,38 +93,35 @@ where
             &srv_net2,
         ));
         log::info!(
-            "[connect_to_tcp_server] [hd={}]({}) start connect to {} -- id<{}> ... ",
-            cli.inner_hd(),
+            "id<{}>({}) start connect to raddr: {} ... ",
+            cli.id(),
             cli.name(),
             raddr,
-            cli.id(),
         );
 
         // insert tcp client
-        with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
-            log::info!("add client: id<{}>", cli.id());
-            g.client_table.insert(cli.id(), cli.clone());
-        });
+        insert_tcp_client(&srv_net2, cli.id(), &cli);
 
         //
-        match cli.connect() {
-            Ok(hd) => {
-                log::info!(
-                    "[connect_to_tcp_server][hd={}] client added to service net.",
-                    hd
+        let cli2 = cli.clone();
+        cli.connect(move |cli, err_opt| {
+            if let Some(err) = err_opt {
+                log::error!(
+                    "id<{}>({}) connect failed!!! error: {}!!!",
+                    cli.id(),
+                    cli.name(),
+                    err
                 );
 
                 //
-                pinky.swear(Some(cli));
-            }
-            Err(err) => {
-                log::error!("[connect_to_tcp_server] connect failed!!! error: {}", err);
-
-                //
                 pinky.swear(None);
+            } else {
+                // success
+                pinky.swear(Some(cli2.clone()));
             }
-        }
+        });
     };
+
     srv_net.run_in_service(Box::new(func));
 
     //
@@ -109,81 +129,78 @@ where
 }
 
 /// Make new tcp conn with callbacks from tcp client
-pub fn tcp_client_make_new_conn(cli: &Arc<TcpClient>, hd: ConnId, endpoint: Endpoint) {
+pub fn tcp_client_make_new_conn(cli: &Arc<TcpClient>, hd: ConnId, sock_addr: SocketAddr) {
+    // 运行于 srv_net 线程
+    assert!(cli.srv_net().is_in_service_thread());
+
     //
     let packet_type = Atomic::new(PacketType::Server);
 
-    // insert tcp conn in srv net(同一线程便于观察 conn 生命周期)
+    //
     let cli2 = cli.clone();
-    let func = move || {
+    let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
+        // 运行于 srv_net 线程
+        assert!(conn.srv_net.is_in_service_thread());
+        cli2.on_ll_connect(conn);
+    });
+
+    // use packet builder to handle input buffer
+    let cli2 = cli.clone();
+    let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
+        // 运行于 srv_net 线程
+        assert!(conn.srv_net.is_in_service_thread());
+        cli2.on_ll_input(conn, input_buffer);
+    });
+
+    //
+    let cli2 = cli.clone();
+    let connection_lost_fn = Arc::new(move |hd: ConnId| {
+        // 运行于 srv_net 线程
+        assert!(cli2.srv_net().is_in_service_thread());
+        cli2.on_ll_disconnect(hd);
+    });
+
+    //
+    let netctrl = cli.netctrl().clone();
+    let srv_net = cli.srv_net().clone();
+    let srv = cli.srv().clone();
+
+    let conn = Arc::new(TcpConn {
         //
-        let cli3 = cli2.clone();
-        let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
-            // 运行于 srv_net 线程
-            assert!(conn.srv_net.is_in_service_thread());
-            cli3.on_ll_connect(conn);
-        });
-
-        // use packet builder to handle input buffer
-        let cli3 = cli2.clone();
-        let connection_read_fn =
-            Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
-                // 运行于 srv_net 线程
-                assert!(conn.srv_net.is_in_service_thread());
-                cli3.on_ll_input(conn, input_buffer);
-            });
+        hd,
 
         //
-        let cli3 = cli2.clone();
-        let connection_lost_fn = Arc::new(move |hd: ConnId| {
-            // 运行于 srv_net 线程
-            assert!(cli3.srv_net().is_in_service_thread());
-            cli3.on_ll_disconnect(hd);
-        });
+        sock_addr,
+        netctrl: netctrl.clone(),
 
         //
-        let netctrl = cli2.netctrl().clone();
-        let srv_net = cli2.srv_net().clone();
-        let srv = cli2.srv().clone();
+        packet_type,
+        closed: Atomic::new(false),
 
-        let conn = Arc::new(TcpConn {
-            //
-            hd,
+        //
+        srv: srv.clone(),
+        srv_net: srv_net.clone(),
 
-            //
-            endpoint,
-            netctrl: netctrl.clone(),
+        //
+        connection_establish_fn,
+        connection_read_fn,
+        connection_lost_fn: RwLock::new(connection_lost_fn),
+    });
 
-            //
-            packet_type,
-            closed: Atomic::new(false),
+    // add conn
+    insert_connection(srv_net.as_ref(), conn.hd, &conn.clone());
 
-            //
-            srv: srv.clone(),
-            srv_net: srv_net.clone(),
+    // update inner hd for TcpClient
+    {
+        cli.set_inner_hd(hd);
+    }
 
-            //
-            connection_establish_fn,
-            connection_read_fn,
-            connection_lost_fn: RwLock::new(connection_lost_fn),
-        });
-
-        // add conn
-        insert_connection(srv_net.as_ref(), conn.hd, &conn.clone());
-
-        // update inner hd for TcpClient
-        {
-            cli2.set_inner_hd(hd);
-        }
-
-        // connection ok
-        on_connection_established(conn);
-    };
-    cli.srv_net().run_in_service(Box::new(func));
+    // connection ok
+    on_connection_established(conn);
 }
 
 ///
-pub fn tcp_client_check_auto_reconnect(srv_net: &ServiceNetRs, hd: ConnId, cli_id: Uuid) {
+pub fn tcp_client_check_auto_reconnect(hd: ConnId, cli_id: Uuid, srv_net: &Arc<ServiceNetRs>) {
     // 投递到 srv_net 线程
     let func = move || {
         // close tcp client
@@ -191,17 +208,21 @@ pub fn tcp_client_check_auto_reconnect(srv_net: &ServiceNetRs, hd: ConnId, cli_i
             if let Some(cli) = g.client_table.get(&cli_id) {
                 cli.set_status(ClientStatus::Disconnected);
                 log::info!(
-                    "[hd={}] close_fn ok -- id<{}> [inner_hd={}]({})",
+                    "[hd={}] check_auto_reconnect ... id<{}>({}) [inner_hd={}]",
                     hd,
                     cli_id,
-                    cli.inner_hd(),
                     cli.name(),
+                    cli.inner_hd(),
                 );
 
                 // check auto reconnect
                 cli.check_auto_reconnect();
             } else {
-                log::error!("[hd={}] close_fn failed!!! id<{}> not found!!!", hd, cli_id,);
+                log::error!(
+                    "[hd={}] check_auto_reconnect failed!!! id<{}> not found!!!",
+                    hd,
+                    cli_id,
+                );
             }
         });
     };
@@ -209,7 +230,7 @@ pub fn tcp_client_check_auto_reconnect(srv_net: &ServiceNetRs, hd: ConnId, cli_i
 }
 
 ///
-pub fn tcp_client_reconnect(srv_net: &ServiceNetRs, hd: ConnId, name: String, cli_id: Uuid) {
+pub fn tcp_client_reconnect(hd: ConnId, name: &str, cli_id: Uuid, srv_net: &Arc<ServiceNetRs>) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
 
@@ -218,33 +239,38 @@ pub fn tcp_client_reconnect(srv_net: &ServiceNetRs, hd: ConnId, name: String, cl
         if let Some(cli) = client_opt {
             if cli.status().is_connected() {
                 log::error!(
-                    "[hd={}]({}) reconnect failed -- id<{}>!!! already connected!!!",
+                    "[hd={}] tcp client reconnect failed!!! id<{}>({})!!! already connected!!!",
                     hd,
-                    name,
-                    cli_id
+                    cli_id,
+                    name
                 );
             } else {
-                match cli.connect() {
-                    Ok(hd) => {
-                        log::info!("[hd={}]({}) reconnect success -- id<{}>.", hd, name, cli_id);
-                    }
-                    Err(err) => {
+                let name = name.to_owned();
+                cli.connect(move |_cli, err_opt| {
+                    if let Some(err) = err_opt {
                         log::error!(
-                            "[hd={}]({}) reconnect failed -- id<{}>!!! error: {}!!!",
+                            "[hd={}] tcp client reconnect failed!!! id<{}>({})!!! error: {}!!!",
                             hd,
-                            name,
                             cli_id,
+                            name,
                             err
                         );
+                    } else {
+                        log::info!(
+                            "[hd={}] tcp client reconnect success ... id<{}>({}).",
+                            hd,
+                            cli_id,
+                            name
+                        );
                     }
-                }
+                });
             }
         } else {
             log::error!(
-                "[hd={}]({}) reconnect failed -- id<{}>!!! client not exist!!!",
+                "[hd={}] redis client reconnect failed!!! id<{}>({})!!! client not exist!!!",
                 hd,
-                name,
-                cli_id
+                cli_id,
+                name
             );
         }
     });

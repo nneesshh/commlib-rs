@@ -62,6 +62,9 @@ impl RedisCommander {
         self.bind_conn(conn);
         self.do_auth();
         self.do_select();
+
+        //
+        self.do_commit();
     }
 
     /// 收到 reply
@@ -138,7 +141,7 @@ impl RedisCommander {
                 {
                     let s = unsafe { std::str::from_utf8_unchecked(data) };
                     log::info!(
-                        "cmdr{} send: ({}){:?} -- cmds_num={}, running_cb_num={}",
+                        "[do_commit]({}) send: ({}){:?} -- cmds_num={}, running_cb_num={}",
                         self.name,
                         s.len(),
                         s,
@@ -167,7 +170,7 @@ impl RedisCommander {
             let cmd_tips = &command.cmd[0];
 
             log::info!(
-                "cmdr{} command:{} cleared -- cmds_num={}, running_cb_num={}",
+                "[do_clear_commands]({}) command:{} cleared -- cmds_num={}, running_cb_num={}",
                 commander.name,
                 cmd_tips,
                 commander.commands.len(),
@@ -183,16 +186,14 @@ impl RedisCommander {
     fn do_auth(&mut self) {
         //
         if self.pass.is_empty() {
-            log::info!("cmdr{} AUTH pass: None", self.name,);
+            log::info!("[do_auth]({}) AUTH pass: None", self.name);
+
+            self.set_auth_ready(true);
             return;
         }
 
         if let Some(conn) = &self.conn_opt {
-            log::info!(
-                "++++++++++++++++++++++++++++++++ cmdr{} AUTH pass({})",
-                self.name,
-                self.pass
-            );
+            log::info!("[do_auth]({}) AUTH pass({})", self.name, self.pass);
 
             let conn = conn.clone();
             let name = self.name.clone();
@@ -200,11 +201,15 @@ impl RedisCommander {
                 vec!["AUTH".to_owned(), self.pass.clone()],
                 move |commander, rpl| {
                     if rpl.is_string() && rpl.as_string() == "OK" {
-                        log::info!("cmdr{} AUTH OK", name);
+                        log::info!("[do_auth]({}) AUTH OK", name);
 
                         commander.set_auth_ready(true);
                     } else {
-                        log::error!("cmdr{} AUTH error!!! result: {:?}", name, rpl);
+                        log::error!(
+                            "[do_auth]({}) AUTH error!!! result: {:?}!!! close connection!!!",
+                            name,
+                            rpl
+                        );
 
                         // disconnect
                         conn.close();
@@ -214,7 +219,7 @@ impl RedisCommander {
             self.do_commit();
         } else {
             log::error!(
-                "cmdr{} AUTH pass({}) failed!!! conn error!!!",
+                "[do_auth]({}) AUTH pass({}) failed!!! conn error!!!",
                 self.name,
                 self.pass
             );
@@ -223,12 +228,8 @@ impl RedisCommander {
 
     fn do_select(&mut self) {
         //
-        if self.pass.is_empty() {
-            return;
-        }
-
         log::info!(
-            "++++++++++++++++++++++++++++++++ cmdr{} SELECT dbindex({})",
+            "[do_select]({}) SELECT dbindex({})",
             self.name,
             self.dbindex
         );
@@ -239,22 +240,12 @@ impl RedisCommander {
             vec!["SELECT".to_owned(), self.dbindex.to_string()],
             move |commander, rpl| {
                 if rpl.is_string() && rpl.as_string() == "OK" {
-                    log::info!("cmdr{} SELECT dbindex({}) OK", name, dbindex);
+                    log::info!("[do_select]({}) SELECT dbindex({}) OK", name, dbindex);
 
                     commander.set_select_ready(true);
-                    if commander.is_ready() {
-                        // commit once when ready
-                        log::info!(
-                            "cmdr{} commit once when ready -- cmds_num={}, running_cb_num={}",
-                            name,
-                            commander.commands.len(),
-                            commander.running_cb_num
-                        );
-                        commander.do_commit();
-                    }
                 } else {
                     log::error!(
-                        "cmdr{} SELECT dbindex({}) error!!! result: {:?}",
+                        "[do_select]({}) SELECT dbindex({}) error!!! result: {:?}",
                         name,
                         dbindex,
                         rpl
@@ -262,7 +253,6 @@ impl RedisCommander {
                 }
             },
         );
-        self.do_commit();
     }
 
     fn reset(&mut self) {

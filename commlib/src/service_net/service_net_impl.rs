@@ -1,7 +1,7 @@
 use atomic::{Atomic, Ordering};
 use std::sync::Arc;
 
-use crate::{Clock, NodeState, ServiceHandle, ServiceRs};
+use crate::{NodeState, ServiceHandle, ServiceRs};
 
 use super::tcp_server_manager::notify_tcp_server_stop;
 use super::MessageIoNetwork;
@@ -24,14 +24,6 @@ impl ServiceNetRs {
             handle: ServiceHandle::new(id, NodeState::Idle),
             mi_network: Arc::new(MessageIoNetwork::new()),
         }
-    }
-
-    ///
-    pub fn set_timeout<F>(&self, delay: u64, f: F)
-    where
-        F: FnMut() + Send + Sync + 'static,
-    {
-        Clock::set_timeout(self, delay, f);
     }
 }
 

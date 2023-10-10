@@ -51,6 +51,7 @@ impl CrossStreamScheduler {
         let dbindex = g_conf.queue_redis.dbindex;
 
         //
+        log::info!("init cli_send_to_queue ...");
         self.cli_send_to_queue =
             connect_to_redis(&self.srv, raddr.as_str(), pass, dbindex, &self.srv_net);
     }
@@ -189,6 +190,7 @@ fn run_receive<F>(
     let zone = g_conf.zone_id;
 
     //
+    log::info!("init cli_receive_from_queue ...");
     let cli_receive_from_queue =
         connect_to_redis(srv, raddr.as_str(), pass, dbindex, &srv_net).unwrap();
 
@@ -218,12 +220,14 @@ fn run_receive<F>(
         // process
         match rpl.reply_type() {
             RedisReplyType::Error => {
-                // retry after 1 second
+                // retry after N second
+                const DELAY_SECS: u64 = 5_u64;
                 log::error!(
-                    "read redis queue(XREAD) error: {}, retry after 1 second ...",
-                    rpl.error()
+                    "read redis queue(XREAD) error: {}, retry after {} seconds ...",
+                    rpl.error(),
+                    DELAY_SECS
                 );
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                std::thread::sleep(std::time::Duration::from_secs(DELAY_SECS));
             }
 
             RedisReplyType::Null => {

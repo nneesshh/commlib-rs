@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use commlib::{init_logger, proc_service_ready, start_network, start_service};
 use commlib::{NodeState, ServiceRs};
-use commlib::{G_EXIT_CV, G_SERVICE_NET, G_SERVICE_SIGNAL};
+use commlib::{G_EXIT_CV, G_SERVICE_DNS_RESOLVER, G_SERVICE_NET, G_SERVICE_SIGNAL};
 
 use crate::conf::Conf;
 use crate::G_CONF;
@@ -35,6 +35,14 @@ impl App {
             || G_SERVICE_NET.clone(),
             |_conf| {
                 start_network(&G_SERVICE_NET);
+            },
+        );
+
+        // attach default services -- dns resolver
+        app.attach(
+            || G_SERVICE_DNS_RESOLVER.clone(),
+            |_conf| {
+                // do nothing
             },
         );
 
@@ -145,10 +153,10 @@ impl App {
 
         //
         let g_conf2 = g_conf.clone();
-        let ready_pair = start_service(&srv, srv.name(), move || {
+        let join_handle_opt = start_service(&srv, srv.name(), move || {
             initializer(&g_conf2);
         });
-        proc_service_ready(srv.as_ref(), ready_pair);
+        proc_service_ready(srv.as_ref(), join_handle_opt);
 
         // add service (nudge the compiler to infer the correct type)
         Self::add_service(&mut self.services, &srv);

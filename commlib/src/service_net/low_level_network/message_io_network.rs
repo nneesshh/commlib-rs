@@ -1,7 +1,10 @@
 use parking_lot::RwLock;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{ConnId, RedisClient, ServiceNetRs, TcpClient, TcpHandler, TcpListenerId, TcpServer};
+use crate::{ConnId, Connector, ServiceNetRs, TcpHandler, TcpListenerId, TcpServer};
+
+use crate::service_net::connector::insert_connector;
 
 use message_io::network::{NetEvent, Transport};
 use message_io::node::{split, NodeHandler, NodeListener, NodeTask};
@@ -58,88 +61,43 @@ impl MessageIoNetwork {
         }
     }
 
-    /// tcp client connect
-    pub fn tcp_client_connect(&self, tcp_client: &Arc<TcpClient>) -> Result<ConnId, String> {
-        let tcp_client_ptr = tcp_client as *const Arc<TcpClient>;
-
-        let raddr = tcp_client.remote_addr();
-        log::info!("tcp client start connect to raddr: {}", raddr);
-
+    /// connect with connector
+    pub fn connect_with_connector(
+        &self,
+        connector: &Arc<Connector>,
+        sock_addr: SocketAddr,
+        srv_net: &ServiceNetRs,
+    ) {
         //
         match self
             .node_handler
             .network()
-            .connect_sync(Transport::Tcp, raddr)
+            .connect(Transport::Tcp, sock_addr)
         {
-            Ok((endpoint, sock_addr)) => {
-                //
+            //
+            Ok((endpoint, _sock_addr)) => {
+                // async, add connector only, see "NetEvent::Connected" for real callback
                 let raw_id = endpoint.resource_id().raw();
                 let hd = ConnId::from(raw_id);
-                log::info!(
-                    "[hd={}] client connected, raddr: {} sock_addr: {}",
-                    hd,
-                    raddr,
-                    sock_addr
-                );
-
-                // call on_connected directly
-                let on_connected = self.tcp_handler.on_tcp_client_connected;
-                on_connected(tcp_client_ptr, hd, sock_addr.into());
-
-                //
-                Ok(hd)
+                insert_connector(srv_net, hd, connector);
             }
             Err(err) if err.kind() == std::io::ErrorKind::ConnectionRefused => {
-                log::error!("Could not connect to raddr: {}!!! error: {}", raddr, err);
-                Err("ConnectionRefused".to_owned())
-            }
-            Err(err) => {
-                log::error!("Could not connect to raddr: {}!!! error: {}", raddr, err);
-                Err(err.to_string())
-            }
-        }
-    }
-
-    /// redis client connect
-    pub fn redis_client_connect(&self, redis_client: &Arc<RedisClient>) -> Result<ConnId, String> {
-        let redis_client_ptr = redis_client as *const Arc<RedisClient>;
-
-        let raddr = redis_client.remote_addr();
-        log::info!("redis client start connect to raddr: {}", raddr);
-
-        //
-        match self
-            .node_handler
-            .network()
-            .connect_sync(Transport::Tcp, raddr)
-        {
-            Ok((endpoint, sock_addr)) => {
-                //
-                let raw_id = endpoint.resource_id().raw();
-                let hd = ConnId::from(raw_id);
-                log::info!(
-                    "[hd={}] client connected, raddr: {} sock_addr: {}",
-                    hd,
-                    raddr,
-                    sock_addr
+                log::error!(
+                    "Could not connect to sock_addr: {}!!! error: {}",
+                    sock_addr,
+                    err
                 );
-
-                // call on_connected directly
-                let on_connected = self.tcp_handler.on_redis_client_connected;
-                on_connected(redis_client_ptr, hd, sock_addr.into());
-
-                //
-                Ok(hd)
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::ConnectionRefused => {
-                log::error!("Could not connect to raddr: {}!!! error: {}", raddr, err);
-                Err("ConnectionRefused".to_owned())
+                (connector.ready_cb)(Err("ConnectionRefused".to_owned()));
             }
             Err(err) => {
-                log::error!("Could not connect to raddr: {}!!! error: {}", raddr, err);
-                Err(err.to_string())
+                log::error!(
+                    "Could not connect to sock_addr: {}!!! error: {}",
+                    sock_addr,
+                    err
+                );
+                (connector.ready_cb)(Err(err.to_string()));
             }
-        }
+        };
     }
 
     ///
@@ -173,6 +131,8 @@ impl MessageIoNetwork {
         }
 
         //
+        let on_connect_ok = self.tcp_handler.on_connect_ok;
+        let on_connect_err = self.tcp_handler.on_connect_err;
         let on_accept = self.tcp_handler.on_accept;
         let on_input = self.tcp_handler.on_input;
         let on_close = self.tcp_handler.on_close;
@@ -188,9 +148,11 @@ impl MessageIoNetwork {
             //
             match event.network() {
                 NetEvent::Connected(endpoint, handshake) => {
-                    // just log
+                    //
                     let raw_id = endpoint.resource_id().raw();
+                    let os_addr = endpoint.addr().into();
                     let hd = ConnId::from(raw_id);
+
                     log::info!(
                         "[hd={}] {} endpoint {} handshake={}.",
                         hd,
@@ -198,6 +160,14 @@ impl MessageIoNetwork {
                         endpoint,
                         handshake
                     );
+
+                    if handshake {
+                        // connect ok
+                        (on_connect_ok)(srv_net_ptr, hd, os_addr);
+                    } else {
+                        // connect err
+                        (on_connect_err)(srv_net_ptr, hd);
+                    }
                 }
 
                 NetEvent::Accepted(endpoint, id) => {

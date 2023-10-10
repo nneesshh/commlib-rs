@@ -97,7 +97,19 @@ impl TestManager {
         let srv: Arc<dyn ServiceRs> = G_TEST_SERVICE.clone();
 
         //
-        self.redis_to_db = connect_to_redis(&srv, "127.0.0.1:6379", "pass1234", 1, &G_SERVICE_NET);
+        let g_conf = G_CONF.load();
+        let db_redis = &g_conf.db_redis;
+        let db_redis_addr = std::format!("{}:{}", db_redis.addr, db_redis.port);
+
+        //
+        log::info!("init_redis_to_db ...");
+        self.redis_to_db = connect_to_redis(
+            &srv,
+            db_redis_addr.as_str(),
+            db_redis.pass.as_str(),
+            db_redis.dbindex,
+            &G_SERVICE_NET,
+        );
 
         redis::hset(
             self.redis_to_db.as_ref().unwrap(),
@@ -139,6 +151,7 @@ fn send_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn) {
 
     //
     let g_conf = G_CONF.load();
+
     // 发送前先加密
     let mut encrypt_buf =
         Blowfish::encrypt(g_conf.encrypt_token.as_slice(), code_buf.as_slice()).unwrap();
