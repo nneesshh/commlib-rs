@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Blend for Visual Studio Version 17
 VisualStudioVersion = 17.5.33530.505
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "commlib", "src\commlib\commlib.vcxproj", "{12BE461F-C267-4305-BA28-BD8F93A4F1F9}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "commlib_cxx", "src\commlib_cxx\commlib_cxx.vcxproj", "{12BE461F-C267-4305-BA28-BD8F93A4F1F9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

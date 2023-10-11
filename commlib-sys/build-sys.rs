@@ -29,13 +29,13 @@ fn main() -> miette::Result<()> {
     // Define path to resolve #include relative position
     let include_paths = vec![
         manifest_path.join("../../rust"),
-        manifest_path.join("../cpplibs/src/commlib"),
+        manifest_path.join("../cpplibs/mylibs/src/commlib_cxx"),
     ];
 
     // Include headers path
     println!(
         "cargo:include={}",
-        dunce::canonicalize("../cpplibs/src/commlib")
+        dunce::canonicalize("../cpplibs/mylibs/src/commlib_cxx")
             .unwrap()
             .display()
     );

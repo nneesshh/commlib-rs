@@ -31,13 +31,13 @@ fn main() -> miette::Result<()> {
         println!(
             "cargo:rustc-link-search=native={}",
             manifest_path
-                .join("../cpplibs/libs/win/Release")
+                .join("../cpplibs/mylibs/libs/win/Release")
                 .as_path()
                 .display()
         );
 
         // Link static cpplib library
-        println!("cargo:rustc-link-lib=static=commlib");
+        println!("cargo:rustc-link-lib=static=commlib_cxx");
     }
 
     // Re-run

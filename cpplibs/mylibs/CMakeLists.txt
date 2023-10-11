@@ -19,9 +19,9 @@ message( STATUS "CMAKE_RUNTIME_OUTPUT_DIRECTORY = ${CMAKE_RUNTIME_OUTPUT_DIRECTO
 
 
 # 项目名称
-project( cpplibs_proj )
+project( mylibs_proj )
 ################################
-# cpplibs_proj
+# mylibs_proj
 ################################
 
 if (CMAKE_BUILD_TYPE MATCHES "Debug" OR CMAKE_BUILD_TYPE MATCHES "None")
@@ -111,5 +111,5 @@ endif()
 #
 # libs
 #
-add_subdirectory(${CMAKE_SOURCE_DIR}/commlib)
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/commlib_cxx)
 

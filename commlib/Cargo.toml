@@ -45,8 +45,11 @@ bytes = "1"
 atomic = { path = "../atomic-rs" }
 bytemuck = { path = "../bytemuck", features = ["derive"]}
 base64 = { path = "../rust-base64" }
+curl = { path = "../curl-rust" }
 hashbrown = { path = "../hashbrown" }
 hex = { path = "../rust-hex" }
+http = { path = "../http" }
+httparse = { path = "../httparse" }
 message-io = { path = "../message-io" }
 opool = { path = "../opool" }
 parking_lot = { path = "../parking_lot" }
