@@ -55,3 +55,6 @@
 [submodule "thread_local-rs"]
 	path = thread_local-rs
 	url = https://github.com/nneesshh/thread_local-rs
+[submodule "http"]
+	path = http
+	url = https://github.com/nneesshh/http

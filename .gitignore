@@ -12,15 +12,15 @@ Cargo.lock
 # vscode
 .vscode/
 
+# vs
+.vs/
+
 # idea
 .idea/
 
+# obj
+obj/
+
 *.stackdump
 
-cpplibs/.vs/
-
-cpplibs/obj/
-
 commlib-test/log/
-
-commlib/.vs/
