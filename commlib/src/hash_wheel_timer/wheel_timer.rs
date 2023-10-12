@@ -297,7 +297,7 @@ mod tests {
     use crate::hash_wheel_timer::test_helpers::*;
     use crate::hash_wheel_timer::timers::ClosureTimer;
     use crate::hash_wheel_timer::wheel_timer::*;
-    use parking_lot::{Condvar, Mutex, RwLock};
+    use parking_lot::Mutex;
     use uuid::Uuid;
     use Arc;
 
@@ -317,7 +317,7 @@ mod tests {
                 *guard = true;
             });
         }
-        let mut running = true;
+        let running = true;
         let mut count = 0;
         while running && count < 1000 {
             timer.update(Duration::from_millis(1));
@@ -353,7 +353,7 @@ mod tests {
                 }
             });
         }
-        let mut running = true;
+        let running = true;
         let mut count = 0;
         while running && count < 1000 {
             timer.update(Duration::from_millis(1));

@@ -43,6 +43,10 @@ impl ServiceRs for ServiceNetRs {
     /// 配置 service
     fn conf(&self) {}
 
+    /// update
+    #[inline(always)]
+    fn update(&self) {}
+
     /// 在 service 线程中执行回调任务
     #[inline(always)]
     fn run_in_service(&self, cb: Box<dyn FnOnce() + Send>) {

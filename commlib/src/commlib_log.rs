@@ -165,11 +165,9 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u16, log_to_co
 
 #[cfg(test)]
 mod tests {
-    //use chrono::prelude::*;
 
-    //use spdlog::*;
     use crate::init_logger;
-    use spdlog::{Level, EOL};
+    use spdlog::Level;
 
     #[test]
     fn format() {

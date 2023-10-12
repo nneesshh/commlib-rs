@@ -61,6 +61,10 @@ pub use service_net::{NetPacket, NetPacketGuard, PacketType};
 pub use service_net::{RedisClient, RedisCommander, RedisReply, RedisReplyType};
 pub use service_net::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
+///
+pub mod service_http_client;
+pub use service_http_client::{HttpRequestType, ServiceHttpClientRs};
+
 /// 全局变量
 pub mod globals;
 pub use globals::*;

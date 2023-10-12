@@ -279,7 +279,7 @@ where
 mod tests {
     use crate::hash_wheel_timer::simulation::*;
     use crate::hash_wheel_timer::test_helpers::*;
-    use parking_lot::{Condvar, Mutex, RwLock};
+    use parking_lot::Mutex;
     use std::sync::Arc;
     use uuid::Uuid;
 

@@ -147,6 +147,9 @@ pub trait ServiceRs: Send + Sync {
     /// 配置 service
     fn conf(&self);
 
+    /// update
+    fn update(&self);
+
     /// 在 service 线程中执行回调任务
     fn run_in_service(&self, cb: Box<dyn FnOnce() + Send>);
 
@@ -277,6 +280,9 @@ where
         } else {
             // update thread local Clock
             Clock::update();
+
+            // update
+            srv.update();
 
             // dispatch cb -- process async tasks
             let mut count = 4096_i32;

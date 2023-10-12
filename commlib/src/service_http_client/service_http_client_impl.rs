@@ -1,21 +1,13 @@
-//!
-//! TestService
-//!
+use crate::{NodeState, ServiceHandle, ServiceRs};
 
-use std::sync::Arc;
+use super::http_client_update;
 
-use commlib::{NodeState, ServiceHandle, ServiceRs};
-
-pub const SERVICE_ID_TEST_SERVICE: u64 = 10001_u64;
-lazy_static::lazy_static! {
-    pub static ref G_TEST_SERVICE: Arc<TestService> = Arc::new(TestService::new(SERVICE_ID_TEST_SERVICE));
-}
-
-pub struct TestService {
+/// ServiceHttpClientRs
+pub struct ServiceHttpClientRs {
     pub handle: ServiceHandle,
 }
 
-impl TestService {
+impl ServiceHttpClientRs {
     ///
     pub fn new(id: u64) -> Self {
         Self {
@@ -24,11 +16,11 @@ impl TestService {
     }
 }
 
-impl ServiceRs for TestService {
-    /// 获取 service name
+impl ServiceRs for ServiceHttpClientRs {
+    /// 获取 service nmae
     #[inline(always)]
     fn name(&self) -> &str {
-        "test_service"
+        "service_http"
     }
 
     /// 获取 service 句柄
@@ -42,11 +34,14 @@ impl ServiceRs for TestService {
 
     /// update
     #[inline(always)]
-    fn update(&self) {}
+    fn update(&self) {
+        //
+        http_client_update(self);
+    }
 
     /// 在 service 线程中执行回调任务
     #[inline(always)]
-    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send + 'static>) {
+    fn run_in_service(&self, cb: Box<dyn FnOnce() + Send>) {
         self.get_handle().run_in_service(cb);
     }
 
@@ -58,6 +53,7 @@ impl ServiceRs for TestService {
 
     /// 等待线程结束
     fn join(&self) {
+        //
         self.get_handle().join_service();
     }
 }

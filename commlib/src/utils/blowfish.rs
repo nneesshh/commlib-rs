@@ -52,7 +52,7 @@ mod test {
     use hex::FromHex;
     use openssl::symm::{Cipher, Crypter, Mode};
 
-    use crate::{Blowfish, PlayerId};
+    use crate::Blowfish;
 
     #[test]
     fn test_bf_cfb64() {
