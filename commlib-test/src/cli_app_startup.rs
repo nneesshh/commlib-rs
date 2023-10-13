@@ -41,6 +41,8 @@ pub fn resume(srv: &Arc<CliService>) {
 
 ///
 pub fn launch(srv: &Arc<CliService>, conf: &Arc<Conf>) {
+    test_http_client(srv);
+
     // pre-startup, main manager init
     G_MAIN.with(|g| {
         let mut main_manager = g.borrow_mut();
@@ -123,4 +125,22 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
 
     //
     cli_opt.is_some()
+}
+
+use serde_json::json;
+
+use commlib::G_SERVICE_HTTP_CLIENT;
+
+fn test_http_client(srv: &Arc<CliService>) {
+    let body =
+        json!({"foo": false, "bar": null, "answer": 42, "list": [null, "world", true]}).to_string();
+
+    //
+    let srv2 = srv.clone();
+    G_SERVICE_HTTP_CLIENT.http_post("http://127.0.0.1:7878", body, move |code, resp| {
+        //
+        srv2.run_in_service(Box::new(move || {
+            log::info!("hello http code: {}, resp: {}", code, resp);
+        }));
+    })
 }

@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
 use crate::{NodeState, ServiceHandle, ServiceRs};
 
-use super::http_client_update;
+use super::http_client::{http_client_get, http_client_post, http_client_update};
+
+///
+pub type HttpCallback = dyn Fn(u32, &str) + Send + Sync;
 
 /// ServiceHttpClientRs
 pub struct ServiceHttpClientRs {
@@ -13,6 +18,36 @@ impl ServiceHttpClientRs {
         Self {
             handle: ServiceHandle::new(id, NodeState::Idle),
         }
+    }
+
+    ///
+    pub fn http_get<F>(self: &Arc<Self>, url: &str, cb: F)
+    where
+        F: Fn(u32, String) + Send + Sync + 'static,
+    {
+        // 投递到 srv_http_cli 线程
+        let srv_http_cli = self.clone();
+        let url = url.to_owned();
+        self.run_in_service(Box::new(move || {
+            //
+            let headers = vec![];
+            http_client_get(url, headers, cb, &srv_http_cli);
+        }));
+    }
+
+    ///
+    pub fn http_post<F>(self: &Arc<Self>, url: &str, data: String, cb: F)
+    where
+        F: Fn(u32, String) + Send + Sync + 'static,
+    {
+        // 投递到 srv_http_cli 线程
+        let srv_http_cli = self.clone();
+        let url = url.to_owned();
+        self.run_in_service(Box::new(move || {
+            //
+            let headers = vec![];
+            http_client_post(url, data, headers, cb, &srv_http_cli);
+        }));
     }
 }
 

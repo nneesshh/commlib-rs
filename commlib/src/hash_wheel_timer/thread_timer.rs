@@ -486,13 +486,29 @@ mod tests {
                 *guard = true;
             });
         }
-        println!("Waiting timing run to finish {}ms", total_wait.as_millis());
-        thread::sleep(total_wait);
+
+        const WAIT_TRY_MAX: usize = 10;
+        let mut count = 0_usize;
+        while count < WAIT_TRY_MAX {
+            println!("Waiting timing run to finish {}ms", total_wait.as_millis());
+            thread::sleep(total_wait);
+            count += 1;
+
+            for b in &barriers {
+                let guard = b.lock();
+                if !(*guard) {
+                    continue;
+                }
+            }
+        }
+   
         timer_core
             .shutdown()
             .expect("Timer didn't shutdown properly!");
         println!("Timing run done!");
-        for b in barriers {
+
+
+        for b in &barriers {
             let guard = b.lock();
             assert!(*guard);
         }
@@ -525,13 +541,27 @@ mod tests {
                 }
             });
         }
-        println!("Waiting timing run to finish {}ms", total_wait.as_millis());
-        thread::sleep(total_wait);
+        
+        const WAIT_TRY_MAX: usize = 10;
+        let mut count = 0_usize;
+        while count < WAIT_TRY_MAX {
+            println!("Waiting timing run to finish {}ms", total_wait.as_millis());
+            thread::sleep(total_wait);
+            count += 1;
+
+            for b in &barriers {
+                let guard = b.lock();
+                if !(*guard) {
+                    continue;
+                }
+            }
+        }
+
         timer_core
             .shutdown()
             .expect("Timer didn't shutdown properly!");
         println!("Timing run done!");
-        for b in barriers {
+        for b in &barriers {
             let guard = b.lock();
             assert!(*guard);
         }

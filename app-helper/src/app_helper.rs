@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use commlib::{init_logger, proc_service_ready, start_network, start_service};
 use commlib::{NodeState, ServiceRs};
-use commlib::{G_EXIT_CV, G_SERVICE_DNS_RESOLVER, G_SERVICE_NET, G_SERVICE_SIGNAL};
+use commlib::{
+    G_EXIT_CV, G_SERVICE_DNS_RESOLVER, G_SERVICE_HTTP_CLIENT, G_SERVICE_NET, G_SERVICE_SIGNAL,
+};
 
 use crate::conf::Conf;
 use crate::G_CONF;
@@ -35,6 +37,14 @@ impl App {
             || G_SERVICE_NET.clone(),
             |_conf| {
                 start_network(&G_SERVICE_NET);
+            },
+        );
+
+        // attach default services -- http_client
+        app.attach(
+            || G_SERVICE_HTTP_CLIENT.clone(),
+            |_conf| {
+                // do nothing
             },
         );
 

@@ -6,6 +6,7 @@ use atomic::{Atomic, Ordering};
 use parking_lot::RwLock;
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
+use std::mem;
 use std::sync::Arc;
 
 use curl::easy::{Easy as CurlEasy, List as CurlList};
@@ -155,7 +156,8 @@ impl HttpClient {
                                 context_mut.response.succeed = true;
 
                                 //
-                                (context_mut.request.request_cb)(&context_mut);
+                                let request_cb = context_mut.request.request_cb.clone();
+                                (*request_cb)(&mut context_mut);
                             }
                         }
                         Err(error) => {
@@ -192,6 +194,69 @@ pub fn http_client_update(srv_http_cli: &ServiceHttpClientRs) {
     });
 }
 
+///
+pub fn http_client_get<F>(
+    url: String,
+    headers: Vec<String>,
+    cb: F,
+    srv_http_cli: &Arc<ServiceHttpClientRs>,
+) where
+    F: Fn(u32, String) + Send + Sync + 'static,
+{
+    // 运行于 srv_http_cli 线程
+    assert!(srv_http_cli.is_in_service_thread());
+
+    let request_cb = move |context: &mut HttpContext| {
+        //
+        let resp_code = context.response.response_code;
+        let resp_data = mem::replace(&mut context.response.response_rawdata, "".to_owned());
+        cb(resp_code, resp_data);
+    };
+    let req = HttpRequest {
+        r#type: HttpRequestType::GET, // Method: GET
+        url,
+        data_opt: None,
+        headers,
+        request_cb: Arc::new(request_cb),
+    };
+
+    with_tls_mut!(G_HTTP_CLIENT, g, {
+        g.send(req, srv_http_cli);
+    });
+}
+
+///
+pub fn http_client_post<F>(
+    url: String,
+    data: String,
+    headers: Vec<String>,
+    cb: F,
+    srv_http_cli: &Arc<ServiceHttpClientRs>,
+) where
+    F: Fn(u32, String) + Send + Sync + 'static,
+{
+    // 运行于 srv_http_cli 线程
+    assert!(srv_http_cli.is_in_service_thread());
+
+    let request_cb = move |context: &mut HttpContext| {
+        //
+        let resp_code = context.response.response_code;
+        let resp_data = mem::replace(&mut context.response.response_rawdata, "".to_owned());
+        cb(resp_code, resp_data);
+    };
+    let req = HttpRequest {
+        r#type: HttpRequestType::POST, // Method: POST
+        url,
+        data_opt: Some(data),
+        headers,
+        request_cb: Arc::new(request_cb),
+    };
+
+    with_tls_mut!(G_HTTP_CLIENT, g, {
+        g.send(req, srv_http_cli);
+    });
+}
+
 fn configure_easy(
     context: &Arc<RwLock<HttpContext>>,
     easy: &mut CurlEasy,
@@ -206,7 +271,7 @@ fn configure_easy(
         easy.connect_timeout(std::time::Duration::from_secs(10))?;
         easy.ssl_verify_peer(true)?;
         easy.ssl_verify_host(true)?;
-        easy.signal(true)?;
+        easy.signal(false)?; // NOTICE: timeouts during name resolution will not work unless libcurl is built against c-ares
     }
 
     // 设置 headers
@@ -226,25 +291,28 @@ fn configure_easy(
         HttpRequestType::GET => {
             easy.follow_location(true)?;
             easy.custom_request("GET")?;
-            easy.post(false)?;
+            easy.get(true)?;
         }
         HttpRequestType::POST => {
             easy.custom_request("POST")?;
             easy.post(true)?;
 
-            easy.post_fields_copy(req.reuqest_data.as_bytes())?;
-            easy.post_field_size(req.reuqest_data.len() as u64)?;
+            if let Some(data) = req.data_opt.as_ref() {
+                easy.post_fields_copy(data.as_bytes())?;
+                easy.post_field_size(data.len() as u64)?;
+            }
         }
         HttpRequestType::PUT => {
             easy.custom_request("PUT")?;
-            easy.post(false)?;
+            easy.put(true)?;
 
-            easy.post_fields_copy(req.reuqest_data.as_bytes())?;
-            easy.post_field_size(req.reuqest_data.len() as u64)?;
+            if let Some(data) = req.data_opt.as_ref() {
+                easy.post_fields_copy(data.as_bytes())?;
+                easy.post_field_size(data.len() as u64)?;
+            }
         }
         HttpRequestType::DEL => {
             easy.custom_request("DELETE")?;
-            easy.post(false)?;
             easy.follow_location(true)?;
         }
         HttpRequestType::UNKNOWN => {
@@ -253,7 +321,7 @@ fn configure_easy(
         }
     }
 
-    // 设置 write callback
+    // 设置 write callback（回调函数会被多次调用）
     let context2 = context.clone();
     easy.write_function(move |data: &[u8]| {
         //
@@ -269,7 +337,7 @@ fn configure_easy(
         Ok(data.len())
     })?;
 
-    // 设置 header callback
+    // 设置 header callback（回调函数会被多次调用）
     let context2 = context.clone();
     easy.header_function(move |data: &[u8]| {
         //
@@ -317,13 +385,23 @@ fn remove_curl_payload(srv_http_cli: &ServiceHttpClientRs, token: usize) -> Opti
 mod http_test {
     use serde_json::json;
 
-    use crate::G_SERVICE_HTTP_CLIENT;
+    use crate::{start_service, G_SERVICE_HTTP_CLIENT};
 
     #[test]
-    fn curl_test() {
-        let body = json!({"foo": false, "bar": null, "answer": 42, "list": [null, "world", true]});
+    fn test_http_client() {
+        let body = json!({"foo": false, "bar": null, "answer": 42, "list": [null, "world", true]})
+            .to_string();
 
         //
         let srv_http_cli = G_SERVICE_HTTP_CLIENT.clone();
+
+        start_service(&srv_http_cli, "srv_http_cli", || {
+            //
+        });
+
+        srv_http_cli.http_post("http://127.0.0.1:7878", body, |code, resp| {
+            //
+            log::info!("hello http code: {}, resp: {}", code, resp);
+        })
     }
 }

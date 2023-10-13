@@ -16,7 +16,6 @@ pub use http_context::HttpContext;
 
 ///
 pub mod http_client;
-pub use http_client::http_client_update;
 pub use http_client::HttpClient;
 
 ///
