@@ -36,7 +36,7 @@ impl ServiceHttpClientRs {
     }
 
     ///
-    pub fn http_post<F>(self: &Arc<Self>, url: &str, data: String, cb: F)
+    pub fn http_post<F>(self: &Arc<Self>, url: &str, headers: Vec<String>, data: String, cb: F)
     where
         F: Fn(u32, String) + Send + Sync + 'static,
     {
@@ -45,7 +45,6 @@ impl ServiceHttpClientRs {
         let url = url.to_owned();
         self.run_in_service(Box::new(move || {
             //
-            let headers = vec![];
             http_client_post(url, data, headers, cb, &srv_http_cli);
         }));
     }

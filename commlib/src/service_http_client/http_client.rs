@@ -83,14 +83,14 @@ impl HttpClient {
                 let mut easy = CurlEasy::new();
                 configure_easy(&context, &mut easy).unwrap();
 
-                // handle 交给 multi_handler 处理
+                // easy 交给 multi_handler 处理, 返回 easy_handle
                 let mut easy_handle = self.multi_handler.add(easy).unwrap();
 
-                // easy handle <-- token
+                // easy_handle <-- token
                 let token = NEXT_TOKEN_ID.fetch_add(1, Ordering::Relaxed);
                 easy_handle.set_token(token).unwrap();
 
-                // insert easy handle
+                // insert easy_handle
                 insert_curl_payload(
                     srv_http_cli,
                     token,
@@ -298,8 +298,8 @@ fn configure_easy(
             easy.post(true)?;
 
             if let Some(data) = req.data_opt.as_ref() {
-                easy.post_fields_copy(data.as_bytes())?;
                 easy.post_field_size(data.len() as u64)?;
+                easy.post_fields_copy(data.as_bytes())?;
             }
         }
         HttpRequestType::PUT => {
@@ -307,8 +307,8 @@ fn configure_easy(
             easy.put(true)?;
 
             if let Some(data) = req.data_opt.as_ref() {
-                easy.post_fields_copy(data.as_bytes())?;
                 easy.post_field_size(data.len() as u64)?;
+                easy.post_fields_copy(data.as_bytes())?;
             }
         }
         HttpRequestType::DEL => {
