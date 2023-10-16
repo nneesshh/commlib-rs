@@ -58,3 +58,9 @@
 [submodule "http"]
 	path = http
 	url = https://github.com/nneesshh/http
+[submodule "rlua"]
+	path = rlua
+	url = https://github.com/nneesshh/rlua
+[submodule "hecs"]
+	path = hecs
+	url = https://github.com/nneesshh/hecs
