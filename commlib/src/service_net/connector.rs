@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use crate::{ServiceNetRs, ServiceRs, G_SERVICE_DNS_RESOLVER};
 
-use super::{ConnId, MessageIoNetwork};
+use super::low_level_network::MessageIoNetwork;
+use super::ConnId;
 
 thread_local! {
     static G_CONNECTOR_STORAGE: UnsafeCell<ConnectorStorage> = UnsafeCell::new(ConnectorStorage::new());
@@ -28,8 +29,8 @@ impl ConnectorStorage {
 #[repr(C)]
 pub struct Connector {
     //
+    netctrl: Arc<MessageIoNetwork>,
     srv_net: Arc<ServiceNetRs>,
-    mi_network: Arc<MessageIoNetwork>,
 
     //
     pub name: String,
@@ -39,7 +40,7 @@ pub struct Connector {
 impl Connector {
     ///
     pub fn new<F>(
-        mi_network: &Arc<MessageIoNetwork>,
+        netctrl: &Arc<MessageIoNetwork>,
         name: &str,
         ready_cb: F,
         srv_net: &Arc<ServiceNetRs>,
@@ -48,8 +49,8 @@ impl Connector {
         F: Fn(Result<(ConnId, SocketAddr), String>) + Send + Sync + 'static,
     {
         Self {
+            netctrl: netctrl.clone(),
             srv_net: srv_net.clone(),
-            mi_network: mi_network.clone(),
 
             name: name.to_owned(),
             ready_cb: Box::new(ready_cb),
@@ -64,7 +65,7 @@ impl Connector {
         // it is a regular SocketAddr, start connect directly
         let srv_net = self.srv_net.clone();
         let connector = self.clone();
-        self.mi_network
+        self.netctrl
             .connect_with_connector(&connector, addr, &srv_net);
     }
 

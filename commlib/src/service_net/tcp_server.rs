@@ -15,12 +15,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
-use message_io::node::NodeHandler;
-
-use super::MessageIoNetwork;
-use super::{ConnId, NetPacketGuard, PacketBuilder, ServerStatus, TcpConn, TcpListenerId};
-
 use crate::{ServiceNetRs, ServiceRs};
+
+use super::low_level_network::MessageIoNetwork;
+use super::{ConnId, NetPacketGuard, PacketBuilder, ServerStatus, TcpConn, TcpListenerId};
 
 ///
 #[repr(C)]
@@ -37,9 +35,9 @@ pub struct TcpServer {
     pub listen_fn: Arc<dyn Fn(SocketAddr, ServerStatus) + Send + Sync>,
 
     //
-    pub srv: Arc<dyn ServiceRs>,
-    pub mi_network: Arc<MessageIoNetwork>,
-    pub srv_net: Arc<ServiceNetRs>,
+    srv: Arc<dyn ServiceRs>,
+    netctrl: Arc<MessageIoNetwork>,
+    srv_net: Arc<ServiceNetRs>,
 
     //
     conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
@@ -58,7 +56,7 @@ impl TcpServer {
         conn_fn: C,
         pkt_fn: P,
         close_fn: S,
-        mi_network: &Arc<MessageIoNetwork>,
+        netctrl: &Arc<MessageIoNetwork>,
         srv_net: &Arc<ServiceNetRs>,
     ) -> Self
     where
@@ -79,7 +77,7 @@ impl TcpServer {
             listen_fn: Arc::new(|_sock_addr, _status| {}),
 
             srv: srv.clone(),
-            mi_network: mi_network.clone(),
+            netctrl: netctrl.clone(),
             srv_net: srv_net.clone(),
 
             conn_fn: Arc::new(conn_fn),
@@ -93,11 +91,11 @@ impl TcpServer {
     ///
     pub fn on_ll_connect(self: &Arc<Self>, conn: Arc<TcpConn>) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         // post 到指定 srv 工作线程中执行
         let conn_fn = self.conn_fn.clone();
-        self.srv().run_in_service(Box::new(move || {
+        self.srv.run_in_service(Box::new(move || {
             (*conn_fn)(conn);
         }));
     }
@@ -105,7 +103,7 @@ impl TcpServer {
     ///
     pub fn on_ll_input(self: &Arc<Self>, conn: Arc<TcpConn>, input_buffer: NetPacketGuard) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         self.get_packet_builder().build(&conn, input_buffer);
     }
@@ -113,10 +111,10 @@ impl TcpServer {
     ///
     pub fn on_ll_disconnect(self: &Arc<Self>, hd: ConnId) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         // post 到指定 srv 工作线程中执行
-        let srv = self.srv().clone();
+        let srv = self.srv.clone();
         let close_fn = self.close_fn.clone();
         srv.run_in_service(Box::new(move || {
             (*close_fn)(hd);
@@ -142,8 +140,8 @@ impl TcpServer {
         });
 
         // inner server listen
-        let mi_network = self.mi_network.clone();
-        if !mi_network.listen(self) {
+        let netctrl = self.netctrl().clone();
+        if !netctrl.listen(self) {
             self.set_status(ServerStatus::Down);
 
             //
@@ -174,20 +172,20 @@ impl TcpServer {
 
     ///
     #[inline(always)]
-    pub fn netctrl(&self) -> &NodeHandler<()> {
-        &self.mi_network.node_handler
+    pub fn srv(&self) -> &Arc<dyn ServiceRs> {
+        &self.srv
+    }
+
+    ///
+    #[inline(always)]
+    pub fn netctrl(&self) -> &Arc<MessageIoNetwork> {
+        &self.netctrl
     }
 
     ///
     #[inline(always)]
     pub fn srv_net(&self) -> &Arc<ServiceNetRs> {
         &self.srv_net
-    }
-
-    ///
-    #[inline(always)]
-    pub fn srv(&self) -> &Arc<dyn ServiceRs> {
-        &self.srv
     }
 
     ///
@@ -207,11 +205,11 @@ impl TcpServer {
     #[inline(always)]
     fn get_packet_builder<'a>(self: &'a Arc<Self>) -> &'a mut PacketBuilder {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         //
         let builder = self.tls_pkt_builder.get_or(|| {
-            let srv = self.srv().clone();
+            let srv = self.srv.clone();
             let pkt_fn = self.pkt_fn.clone();
 
             let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {

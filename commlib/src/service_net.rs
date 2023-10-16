@@ -83,12 +83,14 @@ pub mod os_socket_addr;
 pub use os_socket_addr::OsSocketAddr;
 
 ///
-pub mod service_net_impl;
-pub use service_net_impl::*;
+pub mod low_level_network;
 
 ///
-pub mod low_level_network;
-pub use low_level_network::*;
+pub mod service_net_impl;
+pub use service_net_impl::ServiceNetRs;
+pub use service_net_impl::{
+    create_redis_client, create_tcp_client, create_tcp_server, start_network, stop_network,
+};
 
 ///
 mod redis;

@@ -159,7 +159,6 @@ pub fn tcp_server_make_new_conn(
 
                 //
                 sock_addr,
-                netctrl: netctrl.clone(),
 
                 //
                 packet_type: Atomic::new(packet_type),
@@ -167,6 +166,7 @@ pub fn tcp_server_make_new_conn(
 
                 //
                 srv: srv.clone(),
+                netctrl: netctrl.clone(),
                 srv_net: srv_net.clone(),
 
                 //

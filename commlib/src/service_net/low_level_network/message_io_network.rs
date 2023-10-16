@@ -2,12 +2,11 @@ use parking_lot::RwLock;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{ConnId, Connector, ServiceNetRs, TcpHandler, TcpListenerId, TcpServer};
+use message_io::network::{Endpoint, NetEvent, ResourceId, Transport};
+use message_io::node::{split, NodeHandler, NodeListener, NodeTask};
 
 use crate::service_net::connector::insert_connector;
-
-use message_io::network::{NetEvent, Transport};
-use message_io::node::{split, NodeHandler, NodeListener, NodeTask};
+use crate::{ConnId, Connector, ServiceNetRs, TcpHandler, TcpListenerId, TcpServer};
 
 /// message io
 pub struct MessageIoNetwork {
@@ -109,6 +108,21 @@ impl MessageIoNetwork {
             let node_task = node_task_mut.take().unwrap();
             drop(node_task);
         }
+    }
+
+    ///
+    #[inline(always)]
+    pub fn close(&self, hd: ConnId) {
+        let rid = ResourceId::from(hd.id);
+        self.node_handler.network().remove(rid);
+    }
+
+    ///
+    #[inline(always)]
+    pub fn send(&self, hd: ConnId, sock_addr: SocketAddr, data: &[u8]) {
+        let rid = ResourceId::from(hd.id);
+        let endpoint = Endpoint::new(rid, sock_addr);
+        self.node_handler.network().send(endpoint, data);
     }
 
     /// 异步启动 message io network

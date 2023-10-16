@@ -13,7 +13,7 @@ pub struct TcpListenerId {
 impl TcpListenerId {
     /// Trigger listen_fn of tcp server
     pub fn run_listen_fn(&self, tcp_server: &mut TcpServer, sock_addr: SocketAddr) {
-        let srv = tcp_server.srv.as_ref();
+        let srv = tcp_server.srv().clone();
         let listener_id = *self;
 
         // update listener id

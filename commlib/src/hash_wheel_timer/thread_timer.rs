@@ -501,12 +501,11 @@ mod tests {
                 }
             }
         }
-   
+
         timer_core
             .shutdown()
             .expect("Timer didn't shutdown properly!");
         println!("Timing run done!");
-
 
         for b in &barriers {
             let guard = b.lock();
@@ -541,7 +540,7 @@ mod tests {
                 }
             });
         }
-        
+
         const WAIT_TRY_MAX: usize = 10;
         let mut count = 0_usize;
         while count < WAIT_TRY_MAX {

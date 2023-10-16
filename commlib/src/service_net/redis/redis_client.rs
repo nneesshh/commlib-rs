@@ -14,10 +14,8 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
-use message_io::node::NodeHandler;
-
+use crate::service_net::low_level_network::MessageIoNetwork;
 use crate::service_net::tcp_conn_manager::disconnect_connection;
-use crate::service_net::MessageIoNetwork;
 use crate::PinkySwear;
 use crate::{ClientStatus, ConnId, Connector, NetPacketGuard, RedisReply, TcpConn};
 use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
@@ -43,8 +41,10 @@ pub struct RedisClient {
 
     //
     srv: Arc<dyn ServiceRs>,
-    mi_network: Arc<MessageIoNetwork>,
+    netctrl: Arc<MessageIoNetwork>,
     srv_net: Arc<ServiceNetRs>,
+
+    //
     auto_reconnect: bool,
 
     //
@@ -67,7 +67,7 @@ impl RedisClient {
         raddr: &str,
         pass: &str,
         dbindex: isize,
-        mi_network: &Arc<MessageIoNetwork>,
+        netctrl: &Arc<MessageIoNetwork>,
         conn_fn: C,
         close_fn: S,
         srv_net: &Arc<ServiceNetRs>,
@@ -88,8 +88,9 @@ impl RedisClient {
             dbindex,
 
             srv: srv.clone(),
-            mi_network: mi_network.clone(),
+            netctrl: netctrl.clone(),
             srv_net: srv_net.clone(),
+
             auto_reconnect: true,
 
             conn_fn: Arc::new(conn_fn),
@@ -106,7 +107,7 @@ impl RedisClient {
     #[inline(always)]
     pub fn on_receive_reply(self: &Arc<Self>, reply: RedisReply) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         /*
         //
@@ -128,7 +129,7 @@ impl RedisClient {
     /// Event: on_connect
     pub fn on_ll_connect(self: &Arc<Self>, conn: Arc<TcpConn>) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         //
         log::info!(
@@ -146,7 +147,7 @@ impl RedisClient {
 
         // post 到指定 srv 工作线程中执行
         let cli_conn_fn = self.conn_fn.clone();
-        self.srv().run_in_service(Box::new(move || {
+        self.srv.run_in_service(Box::new(move || {
             (*cli_conn_fn)(conn);
         }));
     }
@@ -154,7 +155,7 @@ impl RedisClient {
     ///
     pub fn on_ll_input(self: &Arc<Self>, conn: Arc<TcpConn>, input_buffer: NetPacketGuard) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         self.get_reply_builder().build(&conn, input_buffer);
     }
@@ -162,7 +163,7 @@ impl RedisClient {
     /// Event: on_disconnect
     pub fn on_ll_disconnect(self: &Arc<Self>, hd: ConnId) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         //
         log::info!(
@@ -179,9 +180,9 @@ impl RedisClient {
 
         // post 到指定 srv 工作线程中执行
         let cli_close_fn = self.close_fn.clone();
-        let srv_net = self.srv_net().clone();
+        let srv_net = self.srv_net.clone();
         let cli_id = self.id();
-        self.srv().run_in_service(Box::new(move || {
+        self.srv.run_in_service(Box::new(move || {
             (*cli_close_fn)(hd);
 
             // check auto reconnect
@@ -246,7 +247,7 @@ impl RedisClient {
 
         // start connector
         let connector = Arc::new(Connector::new(
-            &self.mi_network,
+            &self.netctrl,
             self.name.as_str(),
             ready_cb,
             &self.srv_net,
@@ -441,20 +442,20 @@ impl RedisClient {
 
     ///
     #[inline(always)]
-    pub fn netctrl(&self) -> &NodeHandler<()> {
-        &self.mi_network.node_handler
+    pub fn srv(&self) -> &Arc<dyn ServiceRs> {
+        &self.srv
+    }
+
+    ///
+    #[inline(always)]
+    pub fn netctrl(&self) -> &Arc<MessageIoNetwork> {
+        &self.netctrl
     }
 
     ///
     #[inline(always)]
     pub fn srv_net(&self) -> &Arc<ServiceNetRs> {
         &self.srv_net
-    }
-
-    ///
-    #[inline(always)]
-    pub fn srv(&self) -> &Arc<dyn ServiceRs> {
-        &self.srv
     }
 
     /// Send redis command
@@ -525,7 +526,7 @@ impl RedisClient {
     #[inline(always)]
     fn get_commander<'a>(self: &'a Arc<Self>) -> &'a mut RedisCommander {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         let commander = self.tls_redis_commander.get_or(|| {
             //
@@ -541,7 +542,7 @@ impl RedisClient {
     #[inline(always)]
     fn get_reply_builder<'a>(self: &'a Arc<Self>) -> &'a mut ReplyBuilder {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         let builder = self.tls_reply_builder.get_or(|| {
             let cli = self.clone();

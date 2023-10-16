@@ -3,11 +3,9 @@ use parking_lot::RwLock;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use message_io::network::{Endpoint, ResourceId};
-use message_io::node::NodeHandler;
-
 use crate::ServiceRs;
 
+use super::low_level_network::MessageIoNetwork;
 use super::tcp_conn_manager::on_connection_closed;
 use super::{ConnId, ServiceNetRs};
 use super::{NetPacketGuard, PacketType};
@@ -19,7 +17,6 @@ pub struct TcpConn {
 
     //
     pub sock_addr: SocketAddr,
-    pub netctrl: NodeHandler<()>,
 
     //
     pub packet_type: Atomic<PacketType>,
@@ -27,6 +24,7 @@ pub struct TcpConn {
 
     //
     pub srv: Arc<dyn ServiceRs>,
+    pub netctrl: Arc<MessageIoNetwork>,
     pub srv_net: Arc<ServiceNetRs>,
 
     // 运行于 srv_net 线程：处理连接事件
@@ -43,12 +41,12 @@ impl TcpConn {
     /// low level close
     #[inline(always)]
     pub fn close(&self) {
-        log::info!("[hd={}] low level close", self.hd);
-        let rid = ResourceId::from(self.hd.id);
-        self.netctrl.network().remove(rid);
+        let hd = self.hd;
+
+        log::info!("[hd={}] low level close", hd);
+        self.netctrl.close(hd);
 
         let srv_net2 = self.srv_net.clone();
-        let hd = self.hd;
 
         // trigger connetion closed event
         // 运行于 srv_net 线程 (不管当前是否已经位于 srv_net 线程中，始终投递)
@@ -60,11 +58,10 @@ impl TcpConn {
     ///
     #[inline(always)]
     pub fn send(&self, data: &[u8]) {
-        log::debug!("[hd={}] send data ...", self.hd);
+        let hd = self.hd;
 
-        let rid = ResourceId::from(self.hd.id);
-        let endpoint = Endpoint::new(rid, self.sock_addr);
-        self.netctrl.network().send(endpoint, data);
+        log::debug!("[hd={}] send data ...", hd);
+        self.netctrl.send(hd, self.sock_addr, data);
     }
 
     ///

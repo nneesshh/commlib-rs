@@ -14,17 +14,14 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
-use message_io::node::NodeHandler;
-
 use crate::{Clock, ServiceNetRs, ServiceRs};
 
+use super::low_level_network::MessageIoNetwork;
 use super::tcp_client_manager::{
     tcp_client_check_auto_reconnect, tcp_client_make_new_conn, tcp_client_reconnect,
 };
 use super::tcp_conn_manager::disconnect_connection;
-use super::{
-    ClientStatus, ConnId, Connector, MessageIoNetwork, NetPacketGuard, PacketBuilder, TcpConn,
-};
+use super::{ClientStatus, ConnId, Connector, NetPacketGuard, PacketBuilder, TcpConn};
 
 ///
 #[repr(C)]
@@ -38,11 +35,11 @@ pub struct TcpClient {
     raddr: String,
 
     //
-    pub mi_network: Arc<MessageIoNetwork>,
+    srv: Arc<dyn ServiceRs>,
+    netctrl: Arc<MessageIoNetwork>,
+    srv_net: Arc<ServiceNetRs>,
 
     //
-    srv: Arc<dyn ServiceRs>,
-    srv_net: Arc<ServiceNetRs>,
     auto_reconnect: bool,
 
     //
@@ -63,7 +60,7 @@ impl TcpClient {
         srv: &Arc<T>,
         name: &str,
         raddr: &str,
-        mi_network: &Arc<MessageIoNetwork>,
+        netctrl: &Arc<MessageIoNetwork>,
         conn_fn: C,
         pkt_fn: P,
         close_fn: S,
@@ -84,10 +81,10 @@ impl TcpClient {
             name: name.to_owned(),
             raddr: raddr.to_owned(),
 
-            mi_network: mi_network.clone(),
-
             srv: srv.clone(),
+            netctrl: netctrl.clone(),
             srv_net: srv_net.clone(),
+
             auto_reconnect: true,
 
             conn_fn: Arc::new(conn_fn),
@@ -103,7 +100,7 @@ impl TcpClient {
     ///
     pub fn on_ll_connect(self: &Arc<Self>, conn: Arc<TcpConn>) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         //
         log::info!(
@@ -118,7 +115,7 @@ impl TcpClient {
 
         // post 到指定 srv 工作线程中执行
         let cli_conn_fn = self.conn_fn.clone();
-        self.srv().run_in_service(Box::new(move || {
+        self.srv.run_in_service(Box::new(move || {
             (*cli_conn_fn)(conn);
         }));
     }
@@ -126,7 +123,7 @@ impl TcpClient {
     ///
     pub fn on_ll_input(self: &Arc<Self>, conn: Arc<TcpConn>, input_buffer: NetPacketGuard) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         self.get_packet_builder().build(&conn, input_buffer);
     }
@@ -134,7 +131,7 @@ impl TcpClient {
     ///
     pub fn on_ll_disconnect(self: &Arc<Self>, hd: ConnId) {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         //
         log::info!(
@@ -148,9 +145,9 @@ impl TcpClient {
 
         // post 到指定 srv 工作线程中执行
         let cli_close_fn = self.close_fn.clone();
-        let srv_net = self.srv_net().clone();
+        let srv_net = self.srv_net.clone();
         let cli_id = self.id();
-        self.srv().run_in_service(Box::new(move || {
+        self.srv.run_in_service(Box::new(move || {
             (*cli_close_fn)(hd);
 
             // check auto reconnect
@@ -213,8 +210,8 @@ impl TcpClient {
         };
 
         // start connector
-        let connector = Arc::new(Connector::new(
-            &self.mi_network,
+        let connector: Arc<Connector> = Arc::new(Connector::new(
+            &self.netctrl,
             self.name.as_str(),
             ready_cb,
             &self.srv_net,
@@ -376,20 +373,20 @@ impl TcpClient {
 
     ///
     #[inline(always)]
-    pub fn netctrl(&self) -> &NodeHandler<()> {
-        &self.mi_network.node_handler
+    pub fn srv(&self) -> &Arc<dyn ServiceRs> {
+        &self.srv
+    }
+
+    ///
+    #[inline(always)]
+    pub fn netctrl(&self) -> &Arc<MessageIoNetwork> {
+        &self.netctrl
     }
 
     ///
     #[inline(always)]
     pub fn srv_net(&self) -> &Arc<ServiceNetRs> {
         &self.srv_net
-    }
-
-    ///
-    #[inline(always)]
-    pub fn srv(&self) -> &Arc<dyn ServiceRs> {
-        &self.srv
     }
 
     ///
@@ -424,10 +421,10 @@ impl TcpClient {
     #[inline(always)]
     fn get_packet_builder<'a>(self: &'a Arc<Self>) -> &'a mut PacketBuilder {
         // 运行于 srv_net 线程
-        assert!(self.srv_net().is_in_service_thread());
+        assert!(self.srv_net.is_in_service_thread());
 
         let builder = self.tls_pkt_builder.get_or(|| {
-            let srv = self.srv().clone();
+            let srv = self.srv.clone();
             let pkt_fn = self.pkt_fn.clone();
 
             let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
