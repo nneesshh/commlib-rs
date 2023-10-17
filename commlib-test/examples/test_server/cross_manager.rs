@@ -1,5 +1,4 @@
 use std::cell::UnsafeCell;
-use std::sync::mpsc::channel;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 

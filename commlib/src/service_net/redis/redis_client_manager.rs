@@ -6,8 +6,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::RedisClient;
+use crate::{pinky_swear::PinkySwear, ServiceNetRs, ServiceRs};
 use crate::{ClientStatus, ConnId, NetPacketGuard, PacketType, TcpConn};
-use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
 use crate::service_net::create_redis_client;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
@@ -41,8 +41,8 @@ pub fn insert_redis_client(srv_net: &ServiceNetRs, cli_id: Uuid, cli: &Arc<Redis
     });
 }
 
-/*
 ///
+#[allow(dead_code)]
 pub fn remove_redis_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<RedisClient>> {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
@@ -52,7 +52,6 @@ pub fn remove_redis_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<R
         g.client_table.remove(&cli_id)
     })
 }
-*/
 
 ///
 pub fn connect_to_redis(

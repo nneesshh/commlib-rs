@@ -4,9 +4,6 @@ use crate::{NodeState, ServiceHandle, ServiceRs};
 
 use super::http_client::{http_client_get, http_client_post, http_client_update};
 
-///
-pub type HttpCallback = dyn Fn(u32, &str) + Send + Sync;
-
 /// ServiceHttpClientRs
 pub struct ServiceHttpClientRs {
     pub handle: ServiceHandle,

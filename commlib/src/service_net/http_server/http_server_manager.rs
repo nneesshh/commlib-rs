@@ -5,26 +5,22 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
-
-use super::create_tcp_server;
-use super::tcp_conn_manager::{insert_connection, on_connection_established};
-use super::{ConnId, TcpConn, TcpListenerId, TcpServer};
-use super::{NetPacketGuard, PacketType};
+use crate::{TcpConn, TcpListenerId};
 
 thread_local! {
-    static G_TCP_SERVER_STORAGE: UnsafeCell<TcpServerStorage> = UnsafeCell::new(TcpServerStorage::new());
+    static G_HTTP_SERVER_STORAGE: UnsafeCell<HttpServerStorage> = UnsafeCell::new(HttpServerStorage::new());
 }
 
-struct TcpServerStorage {
-    /// tcp server vector
-    tcp_server_vec: Vec<Arc<TcpServer>>,
+struct HttpServerStorage {
+    /// http server vector
+    http_server_vec: Vec<Arc<HttpServer>>,
 }
 
-impl TcpServerStorage {
+impl HttpServerStorage {
     ///
     pub fn new() -> Self {
         Self {
-            tcp_server_vec: Vec::new(),
+            http_server_vec: Vec::new(),
         }
     }
 }
@@ -55,18 +51,18 @@ where
     let func = move || {
         //
         let addr = std::format!("{}:{}", ip, port);
-        let mut tcp_server =
-            create_tcp_server(&srv2, addr.as_str(), conn_fn, pkt_fn, close_fn, &srv_net2);
+        let mut http_server =
+            create_http_server(&srv2, addr.as_str(), conn_fn, pkt_fn, close_fn, &srv_net2);
 
         // listen
-        tcp_server.listen();
+        http_server.listen();
 
         //
-        let listener_id = tcp_server.listener_id;
+        let listener_id = http_server.listener_id;
 
-        // add tcp server to serivce net
+        // add http server to serivce net
         with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
-            g.tcp_server_vec.push(Arc::new(tcp_server));
+            g.http_server_vec.push(Arc::new(http_server));
         });
 
         // pinky for listener_id
@@ -78,16 +74,16 @@ where
     promise.wait()
 }
 
-/// Notify tcp server to stop
-pub fn notify_tcp_server_stop(srv_net: &ServiceNetRs) {
-    log::info!("notify_tcp_server_stop ...");
+/// Notify http server to stop
+pub fn notify_http_server_stop(srv_net: &ServiceNetRs) {
+    log::info!("notify_http_server_stop ...");
 
     // 投递到 srv_net 线程
     let (promise, pinky) = PinkySwear::<bool>::new();
     let func = move || {
         with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
-            for tcp_server in &mut g.tcp_server_vec {
-                tcp_server.stop();
+            for http_server in &mut g.http_server_vec {
+                http_server.stop();
             }
         });
 
@@ -99,8 +95,8 @@ pub fn notify_tcp_server_stop(srv_net: &ServiceNetRs) {
     promise.wait();
 }
 
-/// Make new tcp conn with callbacks from tcp server
-pub fn tcp_server_make_new_conn(
+/// Make new tcp conn with callbacks from http server
+pub fn http_server_make_new_conn(
     srv_net0: &Arc<ServiceNetRs>,
     listener_id: TcpListenerId,
     packet_type: PacketType,
@@ -111,47 +107,47 @@ pub fn tcp_server_make_new_conn(
     assert!(srv_net0.is_in_service_thread());
 
     //
-    with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
+    with_tls_mut!(G_HTTP_SERVER_STORAGE, g, {
         // check listener id
-        let mut tcp_server_opt: Option<&Arc<TcpServer>> = None;
-        for tcp_server in &g.tcp_server_vec {
-            if tcp_server.listener_id == listener_id {
-                tcp_server_opt = Some(tcp_server);
+        let mut http_server_opt: Option<&Arc<HttpServer>> = None;
+        for http_server in &g.http_server_vec {
+            if http_server.listener_id == listener_id {
+                http_server_opt = Some(http_server);
                 break;
             }
         }
 
-        // 根据 tcp server 创建 tcp conn
-        if let Some(tcp_server) = tcp_server_opt {
+        // 根据 http server 创建 tcp conn
+        if let Some(http_server) = http_server_opt {
             //
-            let tcp_server2 = tcp_server.clone();
+            let http_server2 = http_server.clone();
             let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
                 // 运行于 srv_net 线程
                 assert!(conn.srv_net.is_in_service_thread());
-                tcp_server2.on_ll_connect(conn);
+                http_server2.on_ll_connect(conn);
             });
 
             // use packet builder to handle input buffer
-            let tcp_server2 = tcp_server.clone();
+            let http_server2 = http_server.clone();
             let connection_read_fn =
                 Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
                     // 运行于 srv_net 线程
                     assert!(conn.srv_net.is_in_service_thread());
-                    tcp_server2.on_ll_input(conn, input_buffer);
+                    http_server2.on_ll_input(conn, input_buffer);
                 });
 
             //
-            let tcp_server2 = tcp_server.clone();
+            let http_server2 = http_server.clone();
             let connection_lost_fn = Arc::new(move |hd: ConnId| {
                 // 运行于 srv_net 线程
-                assert!(tcp_server2.srv_net().is_in_service_thread());
-                tcp_server2.on_ll_disconnect(hd);
+                assert!(http_server2.srv_net().is_in_service_thread());
+                http_server2.on_ll_disconnect(hd);
             });
 
             //
-            let netctrl = tcp_server.netctrl().clone();
-            let srv_net = tcp_server.srv_net().clone();
-            let srv = tcp_server.srv().clone();
+            let netctrl = http_server.netctrl().clone();
+            let srv_net = http_server.srv_net().clone();
+            let srv = http_server.srv().clone();
 
             let conn = Arc::new(TcpConn {
                 //
@@ -159,6 +155,7 @@ pub fn tcp_server_make_new_conn(
 
                 //
                 sock_addr,
+                netctrl: netctrl.clone(),
 
                 //
                 packet_type: Atomic::new(packet_type),
@@ -166,7 +163,6 @@ pub fn tcp_server_make_new_conn(
 
                 //
                 srv: srv.clone(),
-                netctrl: netctrl.clone(),
                 srv_net: srv_net.clone(),
 
                 //

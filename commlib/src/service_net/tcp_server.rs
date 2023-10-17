@@ -21,13 +21,12 @@ use super::low_level_network::MessageIoNetwork;
 use super::{ConnId, NetPacketGuard, PacketBuilder, ServerStatus, TcpConn, TcpListenerId};
 
 ///
-#[repr(C)]
 pub struct TcpServer {
-    start: std::time::Instant,
+    //
     status: Atomic<ServerStatus>,
 
-    connection_limit: Atomic<usize>,
-    connection_num: Atomic<usize>,
+    connection_limit: Atomic<usize>, // TODO
+    connection_num: Atomic<usize>,   // TODO
 
     //
     pub addr: String,
@@ -66,7 +65,6 @@ impl TcpServer {
         S: Fn(ConnId) + Send + Sync + 'static,
     {
         Self {
-            start: std::time::Instant::now(),
             status: Atomic::new(ServerStatus::Null),
 
             connection_limit: Atomic::new(0_usize),

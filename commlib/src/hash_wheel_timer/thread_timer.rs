@@ -7,12 +7,15 @@
 //! Sine this timer runs on its own thread, instance creation will fail if the generic id or state types used are not `Send`.
 //!
 
-use super::*;
-
-use super::wheels::{cancellable::*, *};
 use channel::select;
 use crossbeam_channel as channel;
-use std::{cmp::Ordering, fmt, io, thread, time::Instant};
+use std::{cmp::Ordering, fmt, hash::Hash, io, thread, time::Duration, time::Instant};
+
+use super::wheels::{cancellable::QuadWheelWithOverflow, Skip};
+use super::{
+    CancellableTimerEntry, OneShotClosureState, OneshotState, PeriodicClosureState, PeriodicState,
+    Timer, TimerEntry, TimerError, TimerReturn,
+};
 
 #[derive(Debug)]
 enum TimerMsg<I, O, P>

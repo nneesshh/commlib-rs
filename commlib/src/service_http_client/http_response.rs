@@ -25,10 +25,4 @@ impl HttpResponse {
             response_rawdata: "".to_owned(),
         }
     }
-
-    ///
-    #[inline(always)]
-    pub fn is_succeed(&self) -> bool {
-        self.succeed
-    }
 }

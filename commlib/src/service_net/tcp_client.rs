@@ -24,9 +24,8 @@ use super::tcp_conn_manager::disconnect_connection;
 use super::{ClientStatus, ConnId, Connector, NetPacketGuard, PacketBuilder, TcpConn};
 
 ///
-#[repr(C)]
 pub struct TcpClient {
-    start: std::time::Instant,
+    //
     status: Atomic<ClientStatus>,
 
     //
@@ -73,7 +72,6 @@ impl TcpClient {
         S: Fn(ConnId) + Send + Sync + 'static,
     {
         Self {
-            start: std::time::Instant::now(),
             status: Atomic::new(ClientStatus::Null),
 
             id: uuid::Uuid::new_v4(),

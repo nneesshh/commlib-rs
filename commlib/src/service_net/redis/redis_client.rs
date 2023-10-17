@@ -27,9 +27,8 @@ use super::reply_builder::ReplyBuilder;
 use super::RedisCommander;
 
 /// Client for redis
-#[repr(C)]
 pub struct RedisClient {
-    start: std::time::Instant,
+    //
     status: Atomic<ClientStatus>,
 
     //
@@ -77,7 +76,6 @@ impl RedisClient {
         S: Fn(ConnId) + Send + Sync + 'static,
     {
         Self {
-            start: std::time::Instant::now(),
             status: Atomic::new(ClientStatus::Null),
 
             id: uuid::Uuid::new_v4(),

@@ -399,9 +399,14 @@ mod http_test {
             //
         });
 
-        srv_http_cli.http_post("http://127.0.0.1:7878", body, |code, resp| {
-            //
-            log::info!("hello http code: {}, resp: {}", code, resp);
-        })
+        srv_http_cli.http_post(
+            "http://127.0.0.1:7878",
+            vec!["Content-Type: application/json".to_owned()],
+            body,
+            |code, resp| {
+                //
+                log::info!("hello http code: {}, resp: {}", code, resp);
+            },
+        )
     }
 }

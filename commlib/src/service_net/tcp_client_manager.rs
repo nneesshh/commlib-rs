@@ -42,8 +42,8 @@ pub fn insert_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid, cli: &Arc<TcpClie
     });
 }
 
-/*
 ///
+#[allow(dead_code)]
 pub fn remove_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<TcpClient>> {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
@@ -53,7 +53,6 @@ pub fn remove_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<Tcp
         g.client_table.remove(&cli_id)
     })
 }
-*/
 
 ///
 pub fn connect_to_tcp_server<T, C, P, S>(

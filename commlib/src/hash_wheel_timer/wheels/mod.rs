@@ -3,8 +3,13 @@
 use super::*;
 use std::{cmp::Eq, convert::Infallible, fmt::Debug, hash::Hash, mem, time::Duration, u32};
 
+///
 pub mod byte_wheel;
+
+///
 pub mod cancellable;
+
+///
 pub mod quad_wheel;
 
 /// Result of a [can_skip](quad_wheel::QuadWheelWithOverflow::can_skip) invocation

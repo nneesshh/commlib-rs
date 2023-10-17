@@ -86,28 +86,6 @@ impl Connector {
 }
 
 ///
-pub fn insert_connector(srv_net: &ServiceNetRs, hd: ConnId, connector: &Arc<Connector>) {
-    // 运行于 srv_net 线程
-    assert!(srv_net.is_in_service_thread());
-
-    with_tls_mut!(G_CONNECTOR_STORAGE, g, {
-        log::info!("[hd={}]({}) add connector", hd, connector.name);
-        g.connector_table.insert(hd, connector.clone());
-    });
-}
-
-///
-pub fn remove_connector(srv_net: &ServiceNetRs, hd: ConnId) -> Option<Arc<Connector>> {
-    // 运行于 srv_net 线程
-    assert!(srv_net.is_in_service_thread());
-
-    with_tls_mut!(G_CONNECTOR_STORAGE, g, {
-        log::info!("[hd={}] remove connector", hd);
-        g.connector_table.remove(&hd)
-    })
-}
-
-///
 pub fn on_connect_success(srv_net: &ServiceNetRs, hd: ConnId, sock_addr: SocketAddr) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
@@ -116,7 +94,11 @@ pub fn on_connect_success(srv_net: &ServiceNetRs, hd: ConnId, sock_addr: SocketA
         //
         let connector_opt = g.connector_table.get(&hd);
         if let Some(connector) = connector_opt {
+            // success
             (connector.ready_cb)(Ok((hd, sock_addr)));
+
+            //
+            remove_connector(g, hd);
         } else {
             log::error!("[hd={}] connector not found!!!", hd);
         }
@@ -132,9 +114,31 @@ pub fn on_connect_failed(srv_net: &ServiceNetRs, hd: ConnId) {
         //
         let connector_opt = g.connector_table.get(&hd);
         if let Some(connector) = connector_opt {
+            // failed
             (connector.ready_cb)(Err("HandshakeError".to_owned()));
+
+            //
+            remove_connector(g, hd);
         } else {
             log::error!("[hd={}] connector not found!!!", hd);
         }
     });
+}
+
+///
+#[inline(always)]
+pub fn insert_connector(srv_net: &ServiceNetRs, hd: ConnId, connector: &Arc<Connector>) {
+    // 运行于 srv_net 线程
+    assert!(srv_net.is_in_service_thread());
+
+    with_tls_mut!(G_CONNECTOR_STORAGE, g, {
+        log::info!("[hd={}]({}) add connector", hd, connector.name);
+        g.connector_table.insert(hd, connector.clone());
+    });
+}
+
+#[inline(always)]
+fn remove_connector(storage: &mut ConnectorStorage, hd: ConnId) -> Option<Arc<Connector>> {
+    log::info!("[hd={}] remove connector", hd);
+    storage.connector_table.remove(&hd)
 }
