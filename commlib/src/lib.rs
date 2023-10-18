@@ -51,14 +51,15 @@ pub use service_dns_resolver::ServiceDnsResolverRs;
 mod service_net;
 pub use service_net::redis_cmds as redis;
 pub use service_net::{
-    connect_to_redis, connect_to_tcp_server, listen_tcp_addr, start_network, stop_network,
+    connect_to_redis, connect_to_tcp_server, http_server_listen, start_network, stop_network,
+    tcp_server_listen,
 };
 pub use service_net::{
-    Buffer, ClientStatus, CmdId, ConnId, Connector, NetProxy, ServiceNetRs, TcpClient, TcpConn,
-    TcpHandler, TcpListenerId, TcpServer,
+    Buffer, ClientStatus, CmdId, ConnId, NetProxy, ServerStatus, ServiceNetRs, TcpClient, TcpConn,
+    TcpServer,
 };
 pub use service_net::{NetPacket, NetPacketGuard, PacketType};
-pub use service_net::{RedisClient, RedisCommander, RedisReply, RedisReplyType};
+pub use service_net::{RedisClient, RedisReply, RedisReplyType};
 pub use service_net::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
 ///

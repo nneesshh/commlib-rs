@@ -16,6 +16,7 @@
         <!-- 缓存 -->
         <db addr="127.0.0.1" port="6379" auth="" db="4"></db>
         <!-- 消息队列 -->
+        <!--queue addr="18.162.148.67" port="6379" auth="" db="5"></queue-->
         <queue addr="127.0.0.1" port="6379" auth="" db="5"></queue>
     </redis>
 

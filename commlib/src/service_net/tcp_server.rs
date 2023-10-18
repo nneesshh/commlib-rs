@@ -1,12 +1,5 @@
+//!
 //! Commlib: TcpServer
-//! We can use this class to create a TCP server.
-//! The typical usage is :
-//!      1. Create a TcpServer object
-//!      2. Set the message callback and connection callback
-//!      3. Call TcpServer::Init()
-//!      4. Call TcpServer::Start()
-//!      5. Process TCP client connections and messages in callbacks
-//!      6. At last call Server::Stop() to stop the whole server
 //!
 
 use atomic::{Atomic, Ordering};
@@ -18,20 +11,21 @@ use thread_local::ThreadLocal;
 use crate::{ServiceNetRs, ServiceRs};
 
 use super::low_level_network::MessageIoNetwork;
-use super::{ConnId, NetPacketGuard, PacketBuilder, ServerStatus, TcpConn, TcpListenerId};
+use super::tcp_server_manager::tcp_server_make_new_conn;
+use super::{listener::Listener, ListenerId};
+use super::{ConnId, NetPacketGuard, PacketBuilder, ServerStatus, TcpConn};
 
 ///
 pub struct TcpServer {
     //
     status: Atomic<ServerStatus>,
 
-    connection_limit: Atomic<usize>, // TODO
-    connection_num: Atomic<usize>,   // TODO
-
     //
     pub addr: String,
-    pub listener_id: TcpListenerId,
-    pub listen_fn: Arc<dyn Fn(SocketAddr, ServerStatus) + Send + Sync>,
+
+    //
+    connection_limit: usize,
+    connection_num: Atomic<usize>,
 
     //
     srv: Arc<dyn ServiceRs>,
@@ -55,6 +49,7 @@ impl TcpServer {
         conn_fn: C,
         pkt_fn: P,
         close_fn: S,
+        connection_limit: usize,
         netctrl: &Arc<MessageIoNetwork>,
         srv_net: &Arc<ServiceNetRs>,
     ) -> Self
@@ -67,12 +62,10 @@ impl TcpServer {
         Self {
             status: Atomic::new(ServerStatus::Null),
 
-            connection_limit: Atomic::new(0_usize),
-            connection_num: Atomic::new(0_usize),
-
             addr: addr.to_owned(),
-            listener_id: TcpListenerId::from(0),
-            listen_fn: Arc::new(|_sock_addr, _status| {}),
+
+            connection_limit,
+            connection_num: Atomic::new(0_usize),
 
             srv: srv.clone(),
             netctrl: netctrl.clone(),
@@ -90,6 +83,19 @@ impl TcpServer {
     pub fn on_ll_connect(self: &Arc<Self>, conn: Arc<TcpConn>) {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
+
+        // 连接计数 + 1
+        let old_connection_num = self.connection_num.fetch_add(1, Ordering::Relaxed);
+        assert!(old_connection_num < 100000000);
+
+        //
+        log::info!(
+            "[on_ll_connect][hd={}] connection_limit({}) connection_num: {} -> {}",
+            conn.hd,
+            self.connection_limit,
+            old_connection_num,
+            self.connection_num()
+        );
 
         // post 到指定 srv 工作线程中执行
         let conn_fn = self.conn_fn.clone();
@@ -117,43 +123,93 @@ impl TcpServer {
         srv.run_in_service(Box::new(move || {
             (*close_fn)(hd);
         }));
+
+        // 连接计数 - 1
+        let old_connection_num = self.connection_num.fetch_sub(1, Ordering::Relaxed);
+        assert!(old_connection_num < 100000000);
+
+        //
+        log::info!(
+            "[on_ll_disconnect][hd={}] connection_limit({}) connection_num: {} -> {}",
+            hd,
+            self.connection_limit,
+            old_connection_num,
+            self.connection_num()
+        );
     }
 
     /// Create a tcp server and listen on [ip:port]
-    pub fn listen(&mut self) {
+    pub fn listen<T, F>(self: &Arc<Self>, srv: &Arc<T>, cb: F)
+    where
+        T: ServiceRs + 'static,
+        F: Fn(ListenerId, SocketAddr) + Send + Sync + 'static,
+    {
+        //
         self.set_status(ServerStatus::Starting);
+
         log::info!(
-            "tcp server start listen at addr: {}, status: {}",
+            "tcp server start listen at addr: {} ... status: {}",
             self.addr,
             self.status().to_string()
         );
 
-        self.listen_fn = Arc::new(|sock_addr, status| {
-            //
-            log::info!(
-                "tcp server listen at {:?} success, status:{}",
-                sock_addr,
-                status.to_string()
-            );
-        });
+        //
+        let srv = srv.clone();
+        let cb = Arc::new(cb);
 
-        // inner server listen
-        let netctrl = self.netctrl().clone();
-        if !netctrl.listen(self) {
-            self.set_status(ServerStatus::Down);
+        let tcp_server = self.clone();
+        let listen_fn = move |r| {
+            match r {
+                Ok((listener_id, sock_addr)) => {
+                    // 状态：Running
+                    tcp_server.set_status(ServerStatus::Running);
 
-            //
-            log::info!(
-                "tcp server listen at {:?} failed!!! status:{}!!!",
-                self.addr,
-                self.status().to_string()
-            );
-        }
+                    // post 到指定 srv 工作线程中执行
+                    let cb = cb.clone();
+                    srv.run_in_service(Box::new(move || {
+                        //
+                        (cb)(listener_id, sock_addr);
+                    }));
+                }
+                Err(error) => {
+                    //
+                    log::error!(
+                        "tcp server listen at {:?} failed!!! status:{}!!! error: {}!!!",
+                        tcp_server.addr,
+                        tcp_server.status().to_string(),
+                        error
+                    );
+                }
+            }
+        };
+
+        //
+        let tcp_server2 = self.clone();
+        let accept_fn = move |_listener_id, hd, sock_addr| {
+            // make new connection
+            tcp_server_make_new_conn(&tcp_server2, hd, sock_addr);
+        };
+
+        // start listener
+        let listener = Arc::new(Listener::new(
+            std::format!("listener({})", self.addr).as_str(),
+            listen_fn,
+            accept_fn,
+            &self.netctrl,
+            &self.srv_net,
+        ));
+        listener.start(self.addr.as_str());
     }
 
     ///
     pub fn stop(&self) {
         // TODO:
+    }
+
+    ///
+    #[inline(always)]
+    pub fn connection_num(&self) -> usize {
+        self.connection_num.load(Ordering::Relaxed)
     }
 
     ///
@@ -196,6 +252,31 @@ impl TcpServer {
         self.conn_fn = Arc::new(conn_fn);
         self.pkt_fn = Arc::new(pkt_fn);
         self.close_fn = Arc::new(close_fn);
+    }
+
+    ///
+    pub fn check_connection_limit(&self) -> bool {
+        // check 连接数上限 (0 == self.connection_limit 代表无限制)
+        if self.connection_limit > 0 {
+            let connection_num = self.connection_num();
+            if connection_num >= self.connection_limit {
+                //
+                log::error!(
+                    "**** **** [check_connection_limit()] connection_limit({}/{}) reached!!! **** ****",
+                    self.connection_limit,
+                    connection_num
+                );
+
+                // 已经达到上限
+                true
+            } else {
+                // 未达到上限
+                false
+            }
+        } else {
+            // 无需检测上限 == 未达到上限
+            false
+        }
     }
 
     ////////////////////////////////////////////////////////////////

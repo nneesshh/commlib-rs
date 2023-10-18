@@ -5,8 +5,10 @@ use std::sync::Arc;
 use message_io::network::{Endpoint, NetEvent, ResourceId, Transport};
 use message_io::node::{split, NodeHandler, NodeListener, NodeTask};
 
-use crate::service_net::connector::insert_connector;
-use crate::{ConnId, Connector, ServiceNetRs, TcpHandler, TcpListenerId, TcpServer};
+use crate::service_net::connector::{insert_connector, Connector};
+use crate::service_net::listener::{insert_listener, Listener};
+use crate::service_net::{ListenerId, TcpHandler};
+use crate::{ConnId, ServiceNetRs};
 
 /// message io
 pub struct MessageIoNetwork {
@@ -35,26 +37,32 @@ impl MessageIoNetwork {
     }
 
     ///
-    pub fn listen(&self, tcp_server: &mut TcpServer) -> bool {
+    pub fn listen_with_listener(
+        &self,
+        listener: &Arc<Listener>,
+        addr: &str,
+        srv_net: &Arc<ServiceNetRs>,
+    ) -> bool {
         //
-        let addr = tcp_server.addr.to_owned();
-        let ret = self
-            .node_handler
-            .network()
-            .listen(Transport::Tcp, addr.as_str());
+        let srv_net_ptr = srv_net as *const Arc<ServiceNetRs>;
 
-        let tcp_server_ptr = tcp_server as *mut TcpServer;
+        // listen at tcp addr
+        let ret = self.node_handler.network().listen(Transport::Tcp, addr);
 
         //
         match ret {
             Ok((id, sock_addr)) => {
-                let listener_id = TcpListenerId::from(id.raw());
-                (self.tcp_handler.on_listen)(tcp_server_ptr, listener_id, sock_addr.into());
+                let listener_id = ListenerId::from(id.raw());
+                insert_listener(srv_net, listener_id, listener);
+
+                //
+                let on_listen = self.tcp_handler.on_listen;
+                (on_listen)(srv_net_ptr, listener_id, sock_addr.into());
                 true
             }
 
             Err(err) => {
-                log::error!("network listening at {} failed!!! error {:?}", addr, err);
+                log::error!("network listening at {} failed!!! error {:?}!!!", addr, err);
                 false
             }
         }
@@ -82,19 +90,19 @@ impl MessageIoNetwork {
             }
             Err(err) if err.kind() == std::io::ErrorKind::ConnectionRefused => {
                 log::error!(
-                    "Could not connect to sock_addr: {}!!! error: {}",
+                    "Could not connect to sock_addr: {}!!! error: {}!!!",
                     sock_addr,
                     err
                 );
-                (connector.ready_cb)(Err("ConnectionRefused".to_owned()));
+                (connector.connect_fn)(Err("ConnectionRefused".to_owned()));
             }
             Err(err) => {
                 log::error!(
-                    "Could not connect to sock_addr: {}!!! error: {}",
+                    "Could not connect to sock_addr: {}!!! error: {}!!!",
                     sock_addr,
                     err
                 );
-                (connector.ready_cb)(Err(err.to_string()));
+                (connector.connect_fn)(Err(err.to_string()));
             }
         };
     }
@@ -188,7 +196,7 @@ impl MessageIoNetwork {
                     //
                     let raw_id = endpoint.resource_id().raw();
                     let hd = ConnId::from(raw_id);
-                    let listener_id = TcpListenerId::from(id.raw());
+                    let listener_id = ListenerId::from(id.raw());
                     log::info!(
                         "[hd={}] {} endpoint {} accepted, listener_id={}",
                         hd,

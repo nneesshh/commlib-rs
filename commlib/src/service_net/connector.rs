@@ -26,39 +26,38 @@ impl ConnectorStorage {
 }
 
 /// Connector
-#[repr(C)]
 pub struct Connector {
+    //
+    pub name: String,
+    pub connect_fn: Box<dyn Fn(Result<(ConnId, SocketAddr), String>) + Send + Sync>,
+
     //
     netctrl: Arc<MessageIoNetwork>,
     srv_net: Arc<ServiceNetRs>,
-
-    //
-    pub name: String,
-    pub ready_cb: Box<dyn Fn(Result<(ConnId, SocketAddr), String>) + Send + Sync>,
 }
 
 impl Connector {
     ///
     pub fn new<F>(
-        netctrl: &Arc<MessageIoNetwork>,
         name: &str,
-        ready_cb: F,
+        connect_fn: F,
+        netctrl: &Arc<MessageIoNetwork>,
         srv_net: &Arc<ServiceNetRs>,
     ) -> Self
     where
         F: Fn(Result<(ConnId, SocketAddr), String>) + Send + Sync + 'static,
     {
         Self {
+            name: name.to_owned(),
+            connect_fn: Box::new(connect_fn),
+
             netctrl: netctrl.clone(),
             srv_net: srv_net.clone(),
-
-            name: name.to_owned(),
-            ready_cb: Box::new(ready_cb),
         }
     }
 
     ///
-    pub fn on_sock_addr_ready(self: &Arc<Self>, addr: SocketAddr) {
+    pub fn on_addr_ready(self: &Arc<Self>, addr: SocketAddr) {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
 
@@ -76,7 +75,7 @@ impl Connector {
 
         // try to parse as a regular SocketAddr first
         if let Ok(addr) = raddr.parse() {
-            self.on_sock_addr_ready(addr);
+            self.on_addr_ready(addr);
             return;
         };
 
@@ -86,7 +85,7 @@ impl Connector {
 }
 
 ///
-pub fn on_connect_success(srv_net: &ServiceNetRs, hd: ConnId, sock_addr: SocketAddr) {
+pub fn on_connector_connect_ok(srv_net: &ServiceNetRs, hd: ConnId, sock_addr: SocketAddr) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
 
@@ -95,7 +94,7 @@ pub fn on_connect_success(srv_net: &ServiceNetRs, hd: ConnId, sock_addr: SocketA
         let connector_opt = g.connector_table.get(&hd);
         if let Some(connector) = connector_opt {
             // success
-            (connector.ready_cb)(Ok((hd, sock_addr)));
+            (connector.connect_fn)(Ok((hd, sock_addr)));
 
             //
             remove_connector(g, hd);
@@ -106,7 +105,7 @@ pub fn on_connect_success(srv_net: &ServiceNetRs, hd: ConnId, sock_addr: SocketA
 }
 
 ///
-pub fn on_connect_failed(srv_net: &ServiceNetRs, hd: ConnId) {
+pub fn on_connector_connect_err(srv_net: &ServiceNetRs, hd: ConnId) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
 
@@ -115,7 +114,7 @@ pub fn on_connect_failed(srv_net: &ServiceNetRs, hd: ConnId) {
         let connector_opt = g.connector_table.get(&hd);
         if let Some(connector) = connector_opt {
             // failed
-            (connector.ready_cb)(Err("HandshakeError".to_owned()));
+            (connector.connect_fn)(Err("HandshakeError".to_owned()));
 
             //
             remove_connector(g, hd);
@@ -132,13 +131,18 @@ pub fn insert_connector(srv_net: &ServiceNetRs, hd: ConnId, connector: &Arc<Conn
     assert!(srv_net.is_in_service_thread());
 
     with_tls_mut!(G_CONNECTOR_STORAGE, g, {
-        log::info!("[hd={}]({}) add connector", hd, connector.name);
+        //log::info!("[hd={}]({}) add connector", hd, connector.name);
         g.connector_table.insert(hd, connector.clone());
     });
 }
 
 #[inline(always)]
 fn remove_connector(storage: &mut ConnectorStorage, hd: ConnId) -> Option<Arc<Connector>> {
-    log::info!("[hd={}] remove connector", hd);
-    storage.connector_table.remove(&hd)
+    if let Some(connetor) = storage.connector_table.remove(&hd) {
+        //log::info!("[hd={}]({}) remove connector", hd, connetor.name);
+        Some(connetor)
+    } else {
+        log::error!("[hd={}] connector not found!!!", hd);
+        None
+    }
 }

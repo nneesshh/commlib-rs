@@ -51,7 +51,7 @@ impl ServiceRs for ServiceHttpClientRs {
     /// 获取 service nmae
     #[inline(always)]
     fn name(&self) -> &str {
-        "service_http"
+        "service_http_client"
     }
 
     /// 获取 service 句柄

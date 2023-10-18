@@ -55,9 +55,13 @@ pub fn launch(srv: &Arc<CliService>, conf: &Arc<Conf>) {
 
         // step:
         let step_srv = srv.clone();
-        startup.add_step("connect", move || {
+        startup.add_step("robots connect", move || {
             //
-            do_connect_to_test_server(&step_srv)
+            const ROBOT_NUM: usize = 2;
+            for i in 0..ROBOT_NUM {
+                do_connect_to_test_server(&step_srv, i + 1);
+            }
+            true
         });
 
         // run startup
@@ -72,7 +76,7 @@ pub fn launch(srv: &Arc<CliService>, conf: &Arc<Conf>) {
 }
 
 ///
-pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
+pub fn do_connect_to_test_server(srv: &Arc<CliService>, index: usize) -> bool {
     //
     let raddr = with_tls!(G_CLI_CONF, cfg, {
         std::format!("{}:{}", cfg.remote.addr, cfg.remote.port)
@@ -115,7 +119,7 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
     //
     let cli_opt = connect_to_tcp_server(
         &srv,
-        "cli",
+        std::format!("cli{}", index).as_str(),
         raddr.as_str(),
         conn_fn,
         pkt_fn,
@@ -129,6 +133,7 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>) -> bool {
 
 use serde_json::json;
 
+use crate::robot::G_ROBOT_MANAGER;
 use commlib::G_SERVICE_HTTP_CLIENT;
 
 fn test_http_client(srv: &Arc<CliService>) {

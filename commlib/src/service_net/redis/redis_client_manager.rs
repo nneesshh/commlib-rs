@@ -9,7 +9,7 @@ use crate::RedisClient;
 use crate::{pinky_swear::PinkySwear, ServiceNetRs, ServiceRs};
 use crate::{ClientStatus, ConnId, NetPacketGuard, PacketType, TcpConn};
 
-use crate::service_net::create_redis_client;
+use crate::service_net::service_net_impl::create_redis_client;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
 
 thread_local! {
@@ -48,8 +48,13 @@ pub fn remove_redis_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<R
     assert!(srv_net.is_in_service_thread());
 
     with_tls_mut!(G_REDIS_CLIENT_STORAGE, g, {
-        log::info!("remove redis client: id<{}>", cli_id);
-        g.client_table.remove(&cli_id)
+        if let Some(cli) = g.client_table.remove(&cli_id) {
+            log::info!("remove redis client: id<{}>", cli_id);
+            Some(cli)
+        } else {
+            log::error!("redis client: id<{}> not found!!!", cli_id);
+            None
+        }
     })
 }
 
@@ -204,10 +209,10 @@ pub fn redis_client_check_auto_reconnect(hd: ConnId, cli_id: Uuid, srv_net: &Arc
             if let Some(cli) = g.client_table.get(&cli_id) {
                 cli.set_status(ClientStatus::Disconnected);
                 log::info!(
-                    "[hd={}] check_auto_reconnect ... id<{}>({}) [inner_hd={}]",
+                    "[hd={}]({}) check_auto_reconnect ... id<{}> [inner_hd={}]",
                     hd,
-                    cli_id,
                     cli.name(),
+                    cli_id,
                     cli.inner_hd()
                 );
 
@@ -235,38 +240,38 @@ pub fn redis_client_reconnect(hd: ConnId, name: &str, cli_id: Uuid, srv_net: &Se
         if let Some(cli) = client_opt {
             if cli.status().is_connected() {
                 log::error!(
-                    "[hd={}] redis client reconnect failed!!! id<{}>({})!!! already connected!!!",
+                    "[hd={}]({}) redis client reconnect failed!!! id<{}>!!! already connected!!!",
                     hd,
-                    cli_id,
-                    name
+                    name,
+                    cli_id
                 );
             } else {
                 let name = name.to_owned();
                 cli.connect(move |_cli, err_opt| {
                     if let Some(err) = err_opt {
                         log::error!(
-                            "[hd={}] redis client reconnect failed!!! id<{}>({})!!! error: {}!!!",
+                            "[hd={}]({}) redis client reconnect failed!!! id<{}>!!! error: {}!!!",
                             hd,
-                            cli_id,
                             name,
+                            cli_id,
                             err
                         );
                     } else {
                         log::info!(
-                            "[hd={}] redis client reconnect success ... id<{}>({}).",
+                            "[hd={}]({}) redis client reconnect success ... id<{}>.",
                             hd,
+                            name,
                             cli_id,
-                            name
                         );
                     }
                 });
             }
         } else {
             log::error!(
-                "[hd={}] redis client reconnect failed!!! id<{}>({})!!! client not exist!!!",
+                "[hd={}]({}) redis client reconnect failed!!! id<{}>!!! client not exist!!!",
                 hd,
-                cli_id,
-                name
+                name,
+                cli_id
             );
         }
     });

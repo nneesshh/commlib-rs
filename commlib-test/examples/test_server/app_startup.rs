@@ -13,9 +13,10 @@ use std::sync::Arc;
 
 use commlib::with_tls;
 use commlib::G_SERVICE_NET;
-use commlib::{connect_to_redis, listen_tcp_addr, redis};
+use commlib::{connect_to_redis, redis, tcp_server_listen};
 use commlib::{ConnId, NetPacketGuard, ServiceRs, TcpConn};
 
+use app_helper::G_CONF;
 use app_helper::{conf::Conf, Startup};
 
 use crate::test_conf::G_TEST_CONF;
@@ -75,8 +76,13 @@ pub fn launch(srv: &Arc<TestService>, conf: &Arc<Conf>) {
 
 ///
 pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
-    // TODO: let thread_num: u32 = 1;
-    // TODO: let connection_limit: u32 = 0; // 0=no limit
+    //
+    let g_conf = G_CONF.load();
+    let connection_limit: usize = (g_conf.limit_players as f32 * 1.1_f32) as usize; // 0=no limit
+    log::info!(
+        "startup_network_listen: connection_limit={}",
+        connection_limit
+    );
 
     let conn_fn = |conn: Arc<TcpConn>| {
         let hd = conn.hd;
@@ -114,13 +120,14 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
 
     //
     with_tls!(G_TEST_CONF, cfg, {
-        let listener_id = listen_tcp_addr(
+        let listener_id = tcp_server_listen(
             srv,
             cfg.my.addr.clone(),
             cfg.my.port,
             conn_fn,
             pkt_fn,
             close_fn,
+            connection_limit,
             &G_SERVICE_NET,
         );
         log::info!("listener {} ready.", listener_id);

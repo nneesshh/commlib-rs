@@ -14,10 +14,11 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
+use crate::service_net::connector::Connector;
 use crate::service_net::low_level_network::MessageIoNetwork;
 use crate::service_net::tcp_conn_manager::disconnect_connection;
 use crate::PinkySwear;
-use crate::{ClientStatus, ConnId, Connector, NetPacketGuard, RedisReply, TcpConn};
+use crate::{ClientStatus, ConnId, NetPacketGuard, RedisReply, TcpConn};
 use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
 
 use super::redis_client_manager::{
@@ -110,12 +111,12 @@ impl RedisClient {
         /*
         //
         log::info!(
-            "[hd={}] redis client on_receive_reply raddr: {} status: {} ... id<{}>({}) reply={:?}",
+            "[hd={}]({}) redis client on_receive_reply raddr: {} status: {} ... id<{}> reply={:?}",
             self.inner_hd(),
+            self.name,
             self.raddr,
             self.status().to_string(),
             self.id,
-            self.name,
             reply
         );
         */
@@ -131,12 +132,12 @@ impl RedisClient {
 
         //
         log::info!(
-            "[hd={}] redis client on_ll_connect raddr: {} status: {} ... id<{}>({}) conn={}",
+            "[hd={}]({}) redis client on_ll_connect raddr: {} status: {} ... id<{}> conn={}",
             self.inner_hd(),
+            self.name,
             self.raddr,
             self.status().to_string(),
             self.id,
-            self.name,
             conn.hd
         );
 
@@ -165,12 +166,12 @@ impl RedisClient {
 
         //
         log::info!(
-            "[hd={}] redis client on_ll_disconnect raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) redis client on_ll_disconnect raddr: {} status: {} ... id<{}>",
             self.inner_hd(),
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name,
+            self.id
         );
 
         // commander link broken
@@ -210,7 +211,7 @@ impl RedisClient {
         let cli = self.clone();
 
         //
-        let ready_cb = move |r| {
+        let connect_fn = move |r| {
             match r {
                 Ok((hd, sock_addr)) => {
                     // make new connection
@@ -225,12 +226,12 @@ impl RedisClient {
                     cli.set_status(ClientStatus::Disconnected);
 
                     log::error!(
-                        "[hd={}] redis client connect to raddr: {} failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                        "[hd={}]({}) redis client connect to raddr: {} failed!!! status: {} -- id<{}>!!! error: {}!!!",
                         cli.inner_hd(),
+                        cli.name(),
                         cli.remote_addr(),
                         cli.status().to_string(),
                         cli.id(),
-                        cli.name(),
                         err
                     );
 
@@ -245,9 +246,9 @@ impl RedisClient {
 
         // start connector
         let connector = Arc::new(Connector::new(
-            &self.netctrl,
             self.name.as_str(),
-            ready_cb,
+            connect_fn,
+            &self.netctrl,
             &self.srv_net,
         ));
         connector.start(self.raddr.as_str());
@@ -256,24 +257,24 @@ impl RedisClient {
     /// Reonnect to [ip:port]
     pub fn reconnect(&self) -> Result<(), String> {
         log::info!(
-            "[hd={}] redis client start reconnect to raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) redis client start reconnect to raddr: {} status: {} ... id<{}>",
             self.inner_hd(),
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name
+            self.id
         );
 
         // client 必须处于空闲状态
         if !self.status().is_idle() {
             let errmsg = "wrong status".to_owned();
             log::error!(
-                "[hd={}] redis client reconnect to raddr: {} failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                "[hd={}]({}) redis client reconnect to raddr: {} failed!!! status: {} -- id<{}>!!! error: {}!!!",
                 self.inner_hd(),
+                self.name,
                 self.raddr,
                 self.status().to_string(),
                 self.id,
-                self.name,
                 errmsg
             );
             return Err(errmsg);
@@ -282,11 +283,11 @@ impl RedisClient {
         //
         const DELAY_MS: u64 = 5000_u64; // ms
         log::info!(
-            "[hd={}] redis client try to reconnect after {}ms ... id<{}>({})",
+            "[hd={}]({}) redis client try to reconnect after {}ms ... id<{}>",
             self.inner_hd(),
+            self.name,
             DELAY_MS,
-            self.id,
-            self.name
+            self.id
         );
 
         let cli_id = self.id;
@@ -298,10 +299,10 @@ impl RedisClient {
         //
         Clock::set_timeout(self.srv_net.as_ref(), DELAY_MS, move || {
             log::info!(
-                "[hd={}] redis client reconnect ... id<{}>({})",
+                "[hd={}]({}) redis client reconnect ... id<{}>",
                 hd,
-                cli_id,
-                name
+                name,
+                cli_id
             );
 
             //
@@ -320,24 +321,24 @@ impl RedisClient {
         let inner_hd = self.inner_hd();
 
         log::info!(
-            "[hd={}] redis client start disconnect from raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) redis client start disconnect from raddr: {} status: {} ... id<{}>",
             inner_hd,
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name
+            self.id
         );
 
         // client 必须处于连接状态
         if !self.status().is_connected() {
             let errmsg = "wrong status".to_owned();
             log::error!(
-                "[hd={}] redis client disconnect from raddr: {} failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                "[hd={}]({}) redis client disconnect from raddr: {} failed!!! status: {} -- id<{}>!!! error: {}!!!",
                 inner_hd,
+                self.name,
                 self.raddr,
                 self.status().to_string(),
                 self.id,
-                self.name,
                 errmsg,
             );
             return Err(errmsg);
@@ -346,12 +347,12 @@ impl RedisClient {
         // remove inner TcpConn by hd
         self.set_status(ClientStatus::Disconnecting);
         log::info!(
-            "[hd={}] redis client disconnecting from raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) redis client disconnecting from raddr: {} status: {} ... id<{}>",
             inner_hd,
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name
+            self.id
         );
 
         //
@@ -372,19 +373,19 @@ impl RedisClient {
             match self.reconnect() {
                 Ok(_) => {
                     log::info!(
-                        "[hd={}] redis client auto reconnect start ... id<{}>({})",
+                        "[hd={}]({}) redis client auto reconnect start ... id<{}>",
                         self.inner_hd(),
-                        self.id,
                         self.name,
+                        self.id
                     );
                 }
                 Err(err) => {
                     log::error!(
-                        "[hd={}] redis client auto reconnect failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                        "[hd={}]({}) redis client auto reconnect failed!!! status: {} -- id<{}>!!! error: {}!!!",
                         self.inner_hd(),
+                        self.name,
                         self.status().to_string(),
                         self.id,
-                        self.name,
                         err
                     );
                 }

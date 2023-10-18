@@ -16,12 +16,13 @@ use thread_local::ThreadLocal;
 
 use crate::{Clock, ServiceNetRs, ServiceRs};
 
+use super::connector::Connector;
 use super::low_level_network::MessageIoNetwork;
 use super::tcp_client_manager::{
     tcp_client_check_auto_reconnect, tcp_client_make_new_conn, tcp_client_reconnect,
 };
 use super::tcp_conn_manager::disconnect_connection;
-use super::{ClientStatus, ConnId, Connector, NetPacketGuard, PacketBuilder, TcpConn};
+use super::{ClientStatus, ConnId, NetPacketGuard, PacketBuilder, TcpConn};
 
 ///
 pub struct TcpClient {
@@ -102,12 +103,12 @@ impl TcpClient {
 
         //
         log::info!(
-            "[hd={}] tcp client on_ll_connect raddr: {} status: {} ... id<{}>({}) conn={}",
+            "[hd={}]({}) tcp client on_ll_connect raddr: {} status: {} ... id<{}> conn={}",
             self.inner_hd(),
+            self.name,
             self.raddr,
             self.status().to_string(),
             self.id,
-            self.name,
             conn.hd
         );
 
@@ -133,12 +134,12 @@ impl TcpClient {
 
         //
         log::info!(
-            "[hd={}] tcp client on_ll_disconnect raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) tcp client on_ll_disconnect raddr: {} status: {} ... id<{}>",
             self.inner_hd(),
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name,
+            self.id
         );
 
         // post 到指定 srv 工作线程中执行
@@ -174,7 +175,7 @@ impl TcpClient {
         //
         let cli = self.clone();
 
-        let ready_cb = move |r| {
+        let connect_fn = move |r| {
             match r {
                 Ok((hd, sock_addr)) => {
                     // make new connection
@@ -189,12 +190,12 @@ impl TcpClient {
                     cli.set_status(ClientStatus::Disconnected);
 
                     log::error!(
-                        "[hd={}] tcp client connect to raddr: {} failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                        "[hd={}]({}) tcp client connect to raddr: {} failed!!! status: {} -- id<{}>!!! error: {}!!!",
                         cli.inner_hd(),
+                        cli.name(),
                         cli.remote_addr(),
                         cli.status().to_string(),
                         cli.id(),
-                        cli.name(),
                         err
                     );
 
@@ -208,10 +209,10 @@ impl TcpClient {
         };
 
         // start connector
-        let connector: Arc<Connector> = Arc::new(Connector::new(
-            &self.netctrl,
+        let connector = Arc::new(Connector::new(
             self.name.as_str(),
-            ready_cb,
+            connect_fn,
+            &self.netctrl,
             &self.srv_net,
         ));
         connector.start(self.raddr.as_str());
@@ -220,24 +221,24 @@ impl TcpClient {
     /// Reonnect to [ip:port]
     pub fn reconnect(&self) -> Result<(), String> {
         log::info!(
-            "[hd={}] tcp client start reconnect to raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) tcp client start reconnect to raddr: {} status: {} ... id<{}>",
             self.inner_hd(),
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name
+            self.id
         );
 
         // client 必须处于空闲状态
         if !self.status().is_idle() {
             let errmsg = "wrong status".to_owned();
             log::error!(
-                "[hd={}] tcp client reconnect to raddr: {} failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                "[hd={}]({}) tcp client reconnect to raddr: {} failed!!! status: {} -- id<{}>!!! error: {}!!!",
                 self.inner_hd(),
+                self.name,
                 self.raddr,
                 self.status().to_string(),
                 self.id,
-                self.name,
                 errmsg
             );
             return Err(errmsg);
@@ -246,11 +247,11 @@ impl TcpClient {
         //
         const DELAY_MS: u64 = 5000_u64; // ms
         log::info!(
-            "[hd={}] tcp client try to reconnect after {}ms ... id<{}>({})",
+            "[hd={}]({}) tcp client try to reconnect after {}ms ... id<{}>",
             self.inner_hd(),
+            self.name,
             DELAY_MS,
-            self.id,
-            self.name
+            self.id
         );
 
         let cli_id = self.id;
@@ -262,10 +263,10 @@ impl TcpClient {
         //
         Clock::set_timeout(self.srv_net.as_ref(), DELAY_MS, move || {
             log::info!(
-                "[hd={}] tcp client reconnect ... id<{}>({})",
+                "[hd={}]({}) tcp client reconnect ... id<{}>",
                 hd,
-                cli_id,
-                name
+                name,
+                cli_id
             );
 
             //
@@ -284,24 +285,24 @@ impl TcpClient {
         let inner_hd = self.inner_hd();
 
         log::info!(
-            "[hd={}] tcp client start disconnect from raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) tcp client start disconnect from raddr: {} status: {} ... id<{}>",
             inner_hd,
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name
+            self.id
         );
 
         // client 必须处于连接状态
         if !self.status().is_connected() {
             let errmsg = "wrong status".to_owned();
             log::error!(
-                "[hd={}] tcp client disconnect from raddr: {} failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                "[hd={}]({}) tcp client disconnect from raddr: {} failed!!! status: {} -- id<{}>!!! error: {}!!!",
                 inner_hd,
+                self.name,
                 self.raddr,
                 self.status().to_string(),
                 self.id,
-                self.name,
                 errmsg,
             );
             return Err(errmsg);
@@ -310,12 +311,12 @@ impl TcpClient {
         // remove inner TcpConn by hd
         self.set_status(ClientStatus::Disconnecting);
         log::info!(
-            "[hd={}] tcp client disconnecting from raddr: {} status: {} ... id<{}>({})",
+            "[hd={}]({}) tcp client disconnecting from raddr: {} status: {} ... id<{}>",
             inner_hd,
+            self.name,
             self.raddr,
             self.status().to_string(),
-            self.id,
-            self.name
+            self.id
         );
 
         //
@@ -394,19 +395,19 @@ impl TcpClient {
             match self.reconnect() {
                 Ok(_) => {
                     log::info!(
-                        "[hd={}] tcp client auto reconnect start ... id<{}>({})",
+                        "[hd={}]({}) tcp client auto reconnect start ... id<{}>",
                         self.inner_hd(),
-                        self.id,
                         self.name,
+                        self.id
                     );
                 }
                 Err(err) => {
                     log::error!(
-                        "[hd={}] tcp client auto reconnect failed!!! status: {} -- id<{}>({})!!! error: {}!!!",
+                        "[hd={}]({}) tcp client auto reconnect failed!!! status: {} -- id<{}>!!! error: {}!!!",
                         self.inner_hd(),
+                        self.name,
                         self.status().to_string(),
                         self.id,
-                        self.name,
                         err
                     );
                 }

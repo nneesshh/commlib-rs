@@ -5,7 +5,8 @@
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 
-use crate::{Connector, NodeState, ServiceHandle, ServiceNetRs, ServiceRs};
+use crate::service_net::connector::Connector;
+use crate::{NodeState, ServiceHandle, ServiceNetRs, ServiceRs};
 
 ///
 pub struct ServiceDnsResolverRs {
@@ -59,7 +60,7 @@ impl ServiceDnsResolverRs {
                         let raddr2 = raddr.to_owned();
                         srv_net.run_in_service(Box::new(move || {
                             log::info!("try_resolve raddr: {} success", raddr2);
-                            connector2.on_sock_addr_ready(addr);
+                            connector2.on_addr_ready(addr);
                         }));
                         return;
                     }
@@ -69,14 +70,14 @@ impl ServiceDnsResolverRs {
                 let connector2 = connector.clone();
                 srv_net.run_in_service(Box::new(move || {
                     // 如果没有找到 ipv4 地址，则失败
-                    (connector2.ready_cb)(Err("NoIpV4Addr".to_owned()));
+                    (connector2.connect_fn)(Err("NoIpV4Addr".to_owned()));
                 }))
             }
             Err(error) => {
                 // 投递到 srv_net 线程
                 let connector2 = connector.clone();
                 srv_net.run_in_service(Box::new(move || {
-                    (connector2.ready_cb)(Err(error.to_string()));
+                    (connector2.connect_fn)(Err(error.to_string()));
                 }))
             }
         }

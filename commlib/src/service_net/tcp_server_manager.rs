@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
-use super::create_tcp_server;
+use super::service_net_impl::create_tcp_server;
 use super::tcp_conn_manager::{insert_connection, on_connection_established};
-use super::{ConnId, TcpConn, TcpListenerId, TcpServer};
+use super::{ConnId, TcpConn, TcpServer};
 use super::{NetPacketGuard, PacketType};
 
 thread_local! {
@@ -30,47 +30,60 @@ impl TcpServerStorage {
 }
 
 /// Listen on [ip:port] over service net
-pub fn listen_tcp_addr<T, C, P, S>(
+pub fn tcp_server_listen<T, C, P, S>(
     srv: &Arc<T>,
     ip: String,
     port: u16,
     conn_fn: C,
     pkt_fn: P,
     close_fn: S,
+    connection_limit: usize,
     srv_net: &Arc<ServiceNetRs>,
-) -> TcpListenerId
+) -> bool
 where
     T: ServiceRs + 'static,
     C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
     P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
     S: Fn(ConnId) + Send + Sync + 'static,
 {
-    log::info!("listen_tcp_addr: {}:{}...", ip, port);
+    log::info!("tcp_server_listen: {}:{}...", ip, port);
 
-    let (promise, pinky) = PinkySwear::<TcpListenerId>::new();
+    let (promise, pinky) = PinkySwear::<bool>::new();
 
     // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let srv2 = srv.clone();
+
     let func = move || {
         //
         let addr = std::format!("{}:{}", ip, port);
-        let mut tcp_server =
-            create_tcp_server(&srv2, addr.as_str(), conn_fn, pkt_fn, close_fn, &srv_net2);
+        let tcp_server = Arc::new(create_tcp_server(
+            &srv2,
+            addr.as_str(),
+            conn_fn,
+            pkt_fn,
+            close_fn,
+            connection_limit,
+            &srv_net2,
+        ));
 
         // listen
-        tcp_server.listen();
-
-        //
-        let listener_id = tcp_server.listener_id;
+        tcp_server.listen(&srv2, |listener_id, sock_addr| {
+            //
+            log::info!(
+                "tcp_server_listen: listener_id={} sock_addr={} ready.",
+                listener_id,
+                sock_addr
+            );
+        });
 
         // add tcp server to serivce net
         with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
-            g.tcp_server_vec.push(Arc::new(tcp_server));
+            g.tcp_server_vec.push(tcp_server);
         });
 
-        // pinky for listener_id
-        pinky.swear(listener_id);
+        //
+        pinky.swear(true);
     };
     srv_net.run_in_service(Box::new(func));
 
@@ -100,86 +113,72 @@ pub fn notify_tcp_server_stop(srv_net: &ServiceNetRs) {
 }
 
 /// Make new tcp conn with callbacks from tcp server
-pub fn tcp_server_make_new_conn(
-    srv_net0: &Arc<ServiceNetRs>,
-    listener_id: TcpListenerId,
-    packet_type: PacketType,
-    hd: ConnId,
-    sock_addr: SocketAddr,
-) {
+pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_addr: SocketAddr) {
     // 运行于 srv_net 线程
-    assert!(srv_net0.is_in_service_thread());
+    assert!(tcp_server.srv_net().is_in_service_thread());
+
+    let packet_type = PacketType::Server;
+
+    // 连接数量
+    if tcp_server.check_connection_limit() {
+        log::error!("connection overflow!!! tcp_server_make_new_conn failed!!!");
+        return;
+    }
+
+    // event handler: connect
+    let tcp_server2 = tcp_server.clone();
+    let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
+        // 运行于 srv_net 线程
+        assert!(conn.srv_net.is_in_service_thread());
+        tcp_server2.on_ll_connect(conn);
+    });
+
+    // event handler: input( use packet builder to handle input buffer )
+    let tcp_server2 = tcp_server.clone();
+    let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
+        // 运行于 srv_net 线程
+        assert!(conn.srv_net.is_in_service_thread());
+        tcp_server2.on_ll_input(conn, input_buffer);
+    });
+
+    // event handler: disconnect
+    let tcp_server2 = tcp_server.clone();
+    let connection_lost_fn = Arc::new(move |hd: ConnId| {
+        // 运行于 srv_net 线程
+        assert!(tcp_server2.srv_net().is_in_service_thread());
+        tcp_server2.on_ll_disconnect(hd);
+    });
 
     //
-    with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
-        // check listener id
-        let mut tcp_server_opt: Option<&Arc<TcpServer>> = None;
-        for tcp_server in &g.tcp_server_vec {
-            if tcp_server.listener_id == listener_id {
-                tcp_server_opt = Some(tcp_server);
-                break;
-            }
-        }
+    let netctrl = tcp_server.netctrl().clone();
+    let srv_net = tcp_server.srv_net().clone();
+    let srv = tcp_server.srv().clone();
 
-        // 根据 tcp server 创建 tcp conn
-        if let Some(tcp_server) = tcp_server_opt {
-            //
-            let tcp_server2 = tcp_server.clone();
-            let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
-                // 运行于 srv_net 线程
-                assert!(conn.srv_net.is_in_service_thread());
-                tcp_server2.on_ll_connect(conn);
-            });
+    let conn = Arc::new(TcpConn {
+        //
+        hd,
 
-            // use packet builder to handle input buffer
-            let tcp_server2 = tcp_server.clone();
-            let connection_read_fn =
-                Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
-                    // 运行于 srv_net 线程
-                    assert!(conn.srv_net.is_in_service_thread());
-                    tcp_server2.on_ll_input(conn, input_buffer);
-                });
+        //
+        sock_addr,
 
-            //
-            let tcp_server2 = tcp_server.clone();
-            let connection_lost_fn = Arc::new(move |hd: ConnId| {
-                // 运行于 srv_net 线程
-                assert!(tcp_server2.srv_net().is_in_service_thread());
-                tcp_server2.on_ll_disconnect(hd);
-            });
+        //
+        packet_type: Atomic::new(packet_type),
+        closed: Atomic::new(false),
 
-            //
-            let netctrl = tcp_server.netctrl().clone();
-            let srv_net = tcp_server.srv_net().clone();
-            let srv = tcp_server.srv().clone();
+        //
+        srv: srv.clone(),
+        netctrl: netctrl.clone(),
+        srv_net: srv_net.clone(),
 
-            let conn = Arc::new(TcpConn {
-                //
-                hd,
-
-                //
-                sock_addr,
-
-                //
-                packet_type: Atomic::new(packet_type),
-                closed: Atomic::new(false),
-
-                //
-                srv: srv.clone(),
-                netctrl: netctrl.clone(),
-                srv_net: srv_net.clone(),
-
-                //
-                connection_establish_fn,
-                connection_read_fn,
-                connection_lost_fn: RwLock::new(connection_lost_fn),
-            });
-
-            // add conn
-            insert_connection(&srv_net, hd, &conn);
-
-            // connection ok
-            on_connection_established(conn);
-        }
+        //
+        connection_establish_fn,
+        connection_read_fn,
+        connection_lost_fn: RwLock::new(connection_lost_fn),
     });
+
+    // add conn
+    insert_connection(&srv_net, hd, &conn);
+
+    // connection ok
+    on_connection_established(conn);
 }

@@ -87,6 +87,7 @@ impl RedisCommander {
     }
 
     ///
+    #[allow(dead_code)]
     pub fn is_auth_ready(&self) -> bool {
         self.auth_ready
     }
@@ -97,6 +98,7 @@ impl RedisCommander {
     }
 
     ///
+    #[allow(dead_code)]
     pub fn is_select_ready(&self) -> bool {
         self.select_ready
     }
@@ -107,6 +109,7 @@ impl RedisCommander {
     }
 
     ///
+    #[allow(dead_code)]
     pub fn is_ready(&self) -> bool {
         self.is_auth_ready() && self.is_select_ready()
     }
@@ -138,7 +141,7 @@ impl RedisCommander {
             if !conn.is_closed() {
                 //
                 let data = self.buffer.next_all();
-                {
+                /*{
                     let s = unsafe { std::str::from_utf8_unchecked(data) };
                     log::info!(
                         "[do_commit]({}) send: ({}){:?} -- cmds_num={}, running_cb_num={}",
@@ -148,7 +151,7 @@ impl RedisCommander {
                         self.commands.len(),
                         self.running_cb_num
                     );
-                }
+                }*/
                 conn.send(data);
 
                 true
@@ -211,7 +214,7 @@ impl RedisCommander {
                             rpl
                         );
 
-                        // disconnect
+                        // low level close
                         conn.close();
                     }
                 },

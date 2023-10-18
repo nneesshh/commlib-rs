@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use crate::{NodeState, ServiceHandle, ServiceRs};
 
+use super::http_server::http_server_manager::notify_http_server_stop;
+use super::http_server::HttpServer;
 use super::low_level_network::MessageIoNetwork;
 use super::tcp_server_manager::notify_tcp_server_stop;
 use super::{ConnId, NetPacketGuard, RedisClient, TcpClient, TcpConn, TcpServer};
@@ -64,6 +66,9 @@ impl ServiceRs for ServiceNetRs {
         // notify tcp server to stop
         notify_tcp_server_stop(self);
 
+        // notify http server to stop
+        notify_http_server_stop(self);
+
         //
         self.get_handle().join_service();
     }
@@ -86,12 +91,14 @@ pub fn stop_network(srv_net: &Arc<ServiceNetRs>) {
 }
 
 /// Create tcp server: netctrl is private
+#[allow(dead_code)]
 pub fn create_tcp_server<T, C, P, S>(
     srv: &Arc<T>,
     addr: &str,
     conn_fn: C,
     pkt_fn: P,
     close_fn: S,
+    connection_limit: usize,
     srv_net: &Arc<ServiceNetRs>,
 ) -> TcpServer
 where
@@ -106,13 +113,45 @@ where
         conn_fn,
         pkt_fn,
         close_fn,
+        connection_limit,
         &srv_net.netctrl,
         &srv_net,
     );
     tcp_server
 }
 
+/// Create http server: netctrl is private
+#[allow(dead_code)]
+pub fn create_http_server<T, C, P, S>(
+    srv: &Arc<T>,
+    addr: &str,
+    conn_fn: C,
+    pkt_fn: P,
+    close_fn: S,
+    connection_limit: usize,
+    srv_net: &Arc<ServiceNetRs>,
+) -> HttpServer
+where
+    T: ServiceRs + 'static,
+    C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
+    P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+    S: Fn(ConnId) + Send + Sync + 'static,
+{
+    let http_server = HttpServer::new(
+        &srv,
+        addr,
+        conn_fn,
+        pkt_fn,
+        close_fn,
+        connection_limit,
+        &srv_net.netctrl,
+        &srv_net,
+    );
+    http_server
+}
+
 /// Create tcp client: netctrl is private
+#[allow(dead_code)]
 pub fn create_tcp_client<T, C, P, S>(
     srv: &Arc<T>,
     name: &str,
@@ -141,6 +180,7 @@ where
 }
 
 /// Create redis client: netctrl is private
+#[allow(dead_code)]
 pub fn create_redis_client(
     srv: &Arc<dyn ServiceRs>,
     raddr: &str,

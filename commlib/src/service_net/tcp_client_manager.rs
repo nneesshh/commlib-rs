@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::service_net::tcp_conn_manager::on_connection_established;
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
-use super::create_tcp_client;
+use super::service_net_impl::create_tcp_client;
 use super::tcp_conn_manager::insert_connection;
 use super::{ClientStatus, ConnId, TcpClient, TcpConn};
 use super::{NetPacketGuard, PacketType};
@@ -49,8 +49,13 @@ pub fn remove_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<Tcp
     assert!(srv_net.is_in_service_thread());
 
     with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
-        log::info!("remove client: id<{}>", cli_id);
-        g.client_table.remove(&cli_id)
+        if let Some(cli) = g.client_table.remove(&cli_id) {
+            log::info!("remove client: id<{}>", cli_id);
+            Some(cli)
+        } else {
+            log::error!("client: id<{}> not found!!!", cli_id);
+            None
+        }
     })
 }
 
@@ -207,10 +212,10 @@ pub fn tcp_client_check_auto_reconnect(hd: ConnId, cli_id: Uuid, srv_net: &Arc<S
             if let Some(cli) = g.client_table.get(&cli_id) {
                 cli.set_status(ClientStatus::Disconnected);
                 log::info!(
-                    "[hd={}] check_auto_reconnect ... id<{}>({}) [inner_hd={}]",
+                    "[hd={}]({}) check_auto_reconnect ... id<{}> [inner_hd={}]",
                     hd,
-                    cli_id,
                     cli.name(),
+                    cli_id,
                     cli.inner_hd(),
                 );
 
@@ -238,38 +243,38 @@ pub fn tcp_client_reconnect(hd: ConnId, name: &str, cli_id: Uuid, srv_net: &Arc<
         if let Some(cli) = client_opt {
             if cli.status().is_connected() {
                 log::error!(
-                    "[hd={}] tcp client reconnect failed!!! id<{}>({})!!! already connected!!!",
+                    "[hd={}]({}) tcp client reconnect failed!!! id<{}>!!! already connected!!!",
                     hd,
+                    name,
                     cli_id,
-                    name
                 );
             } else {
                 let name = name.to_owned();
                 cli.connect(move |_cli, err_opt| {
                     if let Some(err) = err_opt {
                         log::error!(
-                            "[hd={}] tcp client reconnect failed!!! id<{}>({})!!! error: {}!!!",
+                            "[hd={}]({}) tcp client reconnect failed!!! id<{}>!!! error: {}!!!",
                             hd,
-                            cli_id,
                             name,
+                            cli_id,
                             err
                         );
                     } else {
                         log::info!(
-                            "[hd={}] tcp client reconnect success ... id<{}>({}).",
+                            "[hd={}]({}) tcp client reconnect success ... id<{}>.",
                             hd,
-                            cli_id,
-                            name
+                            name,
+                            cli_id
                         );
                     }
                 });
             }
         } else {
             log::error!(
-                "[hd={}] redis client reconnect failed!!! id<{}>({})!!! client not exist!!!",
+                "[hd={}]({}) redis client reconnect failed!!! id<{}>!!! client not exist!!!",
                 hd,
-                cli_id,
-                name
+                name,
+                cli_id
             );
         }
     });

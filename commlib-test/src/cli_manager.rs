@@ -84,10 +84,6 @@ impl CliManager {
             rbt.borrow_mut()
                 .encrypt_key
                 .extend_from_slice(encrypt_buf.as_slice());
-
-            // echo
-            proxy.send_raw(conn, cmd, slice);
-            proxy.send_raw(conn, cmd, slice);
         });
     }
 }

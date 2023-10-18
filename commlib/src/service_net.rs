@@ -32,8 +32,8 @@ mod conn_id;
 pub use conn_id::ConnId;
 
 ///
-mod tcp_listener_id;
-pub use tcp_listener_id::TcpListenerId;
+mod listener_id;
+pub use listener_id::ListenerId;
 
 ///
 mod net_proxy;
@@ -57,11 +57,13 @@ pub use tcp_server::TcpServer;
 
 ///
 mod tcp_server_manager;
-pub use tcp_server_manager::listen_tcp_addr;
+pub use tcp_server_manager::tcp_server_listen;
 
 ///
-mod connector;
-pub use connector::Connector;
+pub mod connector;
+
+///
+mod listener;
 
 ///
 mod tcp_client;
@@ -90,9 +92,7 @@ pub use low_level_network::MessageIoNetwork;
 ///
 mod service_net_impl;
 pub use service_net_impl::ServiceNetRs;
-pub use service_net_impl::{
-    create_redis_client, create_tcp_client, create_tcp_server, start_network, stop_network,
-};
+pub use service_net_impl::{start_network, stop_network};
 
 ///
 mod redis;
@@ -102,4 +102,5 @@ pub use redis::{RedisClient, RedisCommander, RedisReply, RedisReplyType};
 
 ///
 mod http_server;
+pub use http_server::http_server_listen;
 pub use http_server::HttpServer;
