@@ -1,6 +1,6 @@
 //! Commlib: Conf
 
-use commlib::split_string_to_set;
+use commlib::{split_string_to_set, string_to_value};
 use commlib::{Base64, GroupId, NodeId, XmlReader, ZoneId};
 
 pub const TEST_NODE: NodeId = 999;
@@ -88,6 +88,8 @@ pub struct Conf {
     pub env_: String,                // 当前的执行环境
     pub encrypt_token: Vec<u8>,      // 协议包加密密钥
 
+    pub http_port: u16, // http 服务端口号
+
     pub log: Log,
     pub url: WebUrl,
 
@@ -121,6 +123,8 @@ impl Conf {
             etcfile: std::ffi::OsString::default(),
             env_: "dev".to_owned(),
             encrypt_token: Vec::new(),
+
+            http_port: 8081,
 
             log: Log {
                 level: spdlog::Level::Debug as u32,
@@ -353,6 +357,12 @@ impl Conf {
         let token_str = config_xml.get::<String>(vec!["encrypt_token"], "".to_owned());
         if !token_str.is_empty() {
             self.encrypt_token = Base64::decode(token_str).unwrap();
+        }
+
+        //
+        let http_port_str = config_xml.get::<String>(vec!["http_port"], "".to_owned());
+        if !http_port_str.is_empty() {
+            self.http_port = string_to_value(http_port_str.as_str());
         }
 
         //

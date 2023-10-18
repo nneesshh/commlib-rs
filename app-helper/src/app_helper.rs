@@ -25,49 +25,37 @@ impl App {
         app.config(arg_vec, app_name);
 
         // attach default services -- signal
-        app.attach(
-            || G_SERVICE_SIGNAL.clone(),
-            |_conf| {
-                // do nothing
-            },
-        );
+        app.attach(&G_SERVICE_SIGNAL, |_conf| {
+            // do nothing
+        });
 
         // attach default services -- net
-        app.attach(
-            || G_SERVICE_NET.clone(),
-            |_conf| {
-                start_network(&G_SERVICE_NET);
-            },
-        );
+        app.attach(&G_SERVICE_NET, |_conf| {
+            // 启动 network
+            start_network(&G_SERVICE_NET);
+        });
 
         // attach default services -- http_client
-        app.attach(
-            || G_SERVICE_HTTP_CLIENT.clone(),
-            |_conf| {
-                // do nothing
-            },
-        );
+        app.attach(&G_SERVICE_HTTP_CLIENT, |_conf| {
+            // do nothing
+        });
 
         // attach default services -- dns resolver
-        app.attach(
-            || G_SERVICE_DNS_RESOLVER.clone(),
-            |_conf| {
-                // do nothing
-            },
-        );
+        app.attach(&G_SERVICE_DNS_RESOLVER, |_conf| {
+            // do nothing
+        });
 
         app
     }
 
     /// App init
-    pub fn init<T, C, I>(&mut self, creator: C, initializer: I)
+    pub fn init<T, F>(&mut self, srv: &Arc<T>, initializer: F)
     where
         T: ServiceRs + 'static,
-        C: FnOnce() -> Arc<T>,
-        I: FnOnce(&Arc<Conf>) + Send + Sync + 'static,
+        F: FnOnce(&Arc<Conf>) + Send + Sync + 'static,
     {
         log::info!("App({}) startup ...", self.app_name);
-        self.attach(creator, initializer);
+        self.attach(srv, initializer);
     }
 
     /// App  等待直至服务关闭
@@ -136,14 +124,11 @@ impl App {
         log::info!("App::add_service({}) ok, ID={}", name, id);
     }
 
-    fn attach<T, C, I>(&mut self, creator: C, initializer: I) -> Arc<T>
+    fn attach<T, F>(&mut self, srv: &Arc<T>, initializer: F)
     where
         T: ServiceRs + 'static,
-        C: FnOnce() -> Arc<T>,
-        I: FnOnce(&Arc<Conf>) + Send + Sync + 'static,
+        F: FnOnce(&Arc<Conf>) + Send + Sync + 'static,
     {
-        let srv = creator();
-
         // attach xml node to custom service
         let g_conf = G_CONF.load();
         let node_id = g_conf.node_id;
@@ -170,8 +155,5 @@ impl App {
 
         // add service (nudge the compiler to infer the correct type)
         Self::add_service(&mut self.services, &srv);
-
-        //
-        srv
     }
 }

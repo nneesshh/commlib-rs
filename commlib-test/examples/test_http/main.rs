@@ -1,17 +1,10 @@
 use app_helper::App;
-use commlib::ServiceRs;
 
 pub mod proto {
     include!("../../protos/out/proto.rs");
 }
 
-mod cross_manager;
-
-mod test_conf;
-mod test_service;
-
-mod app_startup;
-mod test_manager;
+mod simple_service;
 
 fn main() {
     // panic hook
@@ -33,8 +26,8 @@ fn main() {
     //
     let arg_vec: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let mut app = App::new(&arg_vec, "test");
-    app.init(&test_service::G_TEST_SERVICE, |conf| {
-        app_startup::launch(conf);
+    app.init(&simple_service::G_SIMPLE_SERVICE, |conf| {
+        simple_service::test_http_server(conf);
     });
     app.run();
 }

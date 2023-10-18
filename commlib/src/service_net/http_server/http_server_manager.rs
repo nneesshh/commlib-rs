@@ -32,7 +32,7 @@ impl HttpServerStorage {
 /// Listen on [ip:port] over service net
 pub fn http_server_listen<T, C, P, S>(
     srv: &Arc<T>,
-    ip: String,
+    ip: &str,
     port: u16,
     conn_fn: C,
     pkt_fn: P,
@@ -54,10 +54,10 @@ where
     // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let srv2 = srv.clone();
+    let addr = std::format!("{}:{}", ip, port);
 
     let func = move || {
         //
-        let addr = std::format!("{}:{}", ip, port);
         let http_server = Arc::new(create_http_server(
             &srv2,
             addr.as_str(),

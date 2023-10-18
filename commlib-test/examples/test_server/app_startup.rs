@@ -21,6 +21,7 @@ use app_helper::{conf::Conf, Startup};
 
 use crate::test_conf::G_TEST_CONF;
 use crate::test_manager::G_MAIN;
+use crate::test_service::G_TEST_SERVICE;
 
 use super::test_service::TestService;
 
@@ -43,7 +44,10 @@ pub fn resume(srv: &Arc<TestService>) {
 }
 
 ///
-pub fn launch(srv: &Arc<TestService>, conf: &Arc<Conf>) {
+pub fn launch(_conf: &Arc<Conf>) {
+    //
+    let srv: &Arc<TestService> = &G_TEST_SERVICE;
+
     // pre-startup, main manager init
     commlib::ossl_init();
 
@@ -122,7 +126,7 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
     with_tls!(G_TEST_CONF, cfg, {
         let listener_id = tcp_server_listen(
             srv,
-            cfg.my.addr.clone(),
+            cfg.my.addr.as_str(),
             cfg.my.port,
             conn_fn,
             pkt_fn,

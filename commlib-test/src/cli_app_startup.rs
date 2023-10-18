@@ -17,7 +17,7 @@ use commlib::{ConnId, NetPacketGuard, ServiceRs, TcpConn};
 
 use app_helper::{conf::Conf, Startup};
 
-use super::cli_service::CliService;
+use super::cli_service::{CliService, G_CLI_SERVICE};
 use crate::cli_conf::G_CLI_CONF;
 use crate::cli_manager::G_MAIN;
 
@@ -40,8 +40,9 @@ pub fn resume(srv: &Arc<CliService>) {
 }
 
 ///
-pub fn launch(srv: &Arc<CliService>, conf: &Arc<Conf>) {
-    //test_http_client(srv);
+pub fn launch(_conf: &Arc<Conf>) {
+    //
+    let srv: &Arc<CliService> = &G_CLI_SERVICE;
 
     // pre-startup, main manager init
     G_MAIN.with(|g| {
@@ -129,28 +130,4 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>, index: usize) -> bool {
 
     //
     cli_opt.is_some()
-}
-
-use serde_json::json;
-
-use crate::robot::G_ROBOT_MANAGER;
-use commlib::G_SERVICE_HTTP_CLIENT;
-
-fn test_http_client(srv: &Arc<CliService>) {
-    let body =
-        json!({"foo": false, "bar": null, "answer": 42, "list": [null, "world", true]}).to_string();
-
-    //
-    let srv2 = srv.clone();
-    G_SERVICE_HTTP_CLIENT.http_post(
-        "http://127.0.0.1:7878",
-        vec!["Content-Type: application/json".to_owned()],
-        body,
-        move |code, resp| {
-            //
-            srv2.run_in_service(Box::new(move || {
-                log::info!("hello http code: {}, resp: {}", code, resp);
-            }));
-        },
-    )
 }

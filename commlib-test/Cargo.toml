@@ -41,3 +41,7 @@ tonic-build = "0.9"
 
 [[example]]
 name = "test_server"
+
+[[example]]
+name = "test_http"
+path = "examples/test_http/main.rs"

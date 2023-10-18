@@ -32,11 +32,8 @@ fn main() {
     //
     let arg_vec: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let mut app = App::new(&arg_vec, "clisrv");
-    app.init(
-        || cli_service::G_CLI_SERVICE.clone(),
-        |conf| {
-            cli_app_startup::launch(&cli_service::G_CLI_SERVICE, conf);
-        },
-    );
+    app.init(&cli_service::G_CLI_SERVICE, |conf| {
+        cli_app_startup::launch(conf);
+    });
     app.run();
 }
