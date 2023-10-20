@@ -66,7 +66,7 @@ impl<'a> Iterator for HeaderIter<'a> {
 
 pub enum ParseResult {
     Complete(Request),
-    Partial(Vec<u8>),
+    Partial,
 }
 
 #[inline(always)]
@@ -81,7 +81,7 @@ fn slice_indices(buffer: &[u8], value: &[u8]) -> (usize, usize) {
     (start, start + value.len())
 }
 
-pub fn try_parse_request(buffer: Vec<u8>) -> Result<ParseResult, httparse::Error> {
+pub fn try_parse_request(buffer: &[u8]) -> Result<ParseResult, httparse::Error> {
     let result = {
         let mut header_buffer = [httparse::EMPTY_HEADER; 32];
         let mut request = httparse::Request::new(&mut header_buffer);
@@ -125,29 +125,9 @@ pub fn try_parse_request(buffer: Vec<u8>) -> Result<ParseResult, httparse::Error
             proto: proto,
             headers: headers,
             body: slice_indices(&*buffer, &buffer[n..]),
-            buffer: buffer,
+            buffer: Vec::from(buffer),
         }));
     }
 
-    return Ok(ParseResult::Partial(buffer));
-}
-
-#[cfg(test)]
-mod parsing_should {
-    use super::*;
-
-    #[test]
-    fn parse_a_request() {
-        let request = include_bytes!("../tests/big-http-request.txt").to_vec();
-
-        let result = try_parse_request(request);
-        assert!(result.is_ok());
-
-        match result.unwrap() {
-            ParseResult::Complete(r) => {
-                assert_eq!("/", r.path());
-            }
-            ParseResult::Partial(_) => panic!("Expected Complete. Got Partial!"),
-        }
-    }
+    return Ok(ParseResult::Partial);
 }

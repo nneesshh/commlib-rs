@@ -4,12 +4,13 @@
 
 use std::sync::Arc;
 
-use commlib::{http_server_listen, with_tls, G_SERVICE_NET};
-use commlib::{ConnId, NetPacketGuard, NodeState, ServiceHandle, ServiceRs, TcpConn};
+use commlib::{http_server_listen, G_SERVICE_NET};
+use commlib::{ConnId, NodeState, ServiceHandle, ServiceRs, TcpConn};
 
 use app_helper::conf::Conf;
 use app_helper::G_CONF;
 
+///
 pub const SERVICE_ID_SIMPLE_SERVICE: u64 = 20001_u64;
 lazy_static::lazy_static! {
     pub static ref G_SIMPLE_SERVICE: Arc<SimpleService> = Arc::new(SimpleService::new(SERVICE_ID_SIMPLE_SERVICE));
@@ -89,7 +90,7 @@ pub fn test_http_client(srv: &Arc<SimpleService>) {
 }
 
 ///
-pub fn test_http_server(conf: &Arc<Conf>) {
+pub fn test_http_server(_conf: &Arc<Conf>) {
     // pre-startup, main manager init
     commlib::ossl_init();
 
@@ -99,27 +100,30 @@ pub fn test_http_server(conf: &Arc<Conf>) {
     //
     let g_conf = G_CONF.load();
 
-    let conn_fn = |conn: Arc<TcpConn>| {
+    let request_fn = |conn: Arc<TcpConn>,
+                      req: http::Request<Vec<u8>>,
+                      response_builder: http::response::Builder| {
         let hd = conn.hd;
-        log::info!("[hd={}] conn_fn", hd);
+        log::info!("[hd={}] request_fn", hd);
+
+        let req_body_vec = req.body();
+        let req_body = unsafe { std::str::from_utf8_unchecked(req_body_vec.as_slice()) };
+        println!("req_body: {}", req_body);
+
+        let rand_pass = commlib::gen_password(10);
+        let msg = std::format!("hello simple service, rand_pass={}", rand_pass);
+        let resp_body_vec = msg.as_bytes().to_vec();
+
+        //
+        let response = response_builder.body(resp_body_vec).unwrap();
+        Ok(response)
     };
 
-    let pkt_fn = |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
-        let hd = conn.hd;
-        log::info!("[hd={}] msg_fn", hd);
-    };
-
-    let close_fn = |hd: ConnId| {
-        log::info!("[hd={}] close_fn", hd);
-    };
-
-    let addr = http_server_listen(
+    http_server_listen(
         srv,
         "127.0.0.1",
         g_conf.http_port,
-        conn_fn,
-        pkt_fn,
-        close_fn,
+        request_fn,
         &G_SERVICE_NET,
     );
 }

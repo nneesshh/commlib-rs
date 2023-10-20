@@ -4,7 +4,7 @@ use crate::{ServiceNetRs, ServiceRs};
 
 use super::connector::{on_connector_connect_err, on_connector_connect_ok};
 use super::listener::{on_listener_accept, on_listener_listen};
-use super::take_packet;
+use super::net_packet_pool::take_packet;
 use super::tcp_conn_manager::{on_connection_closed, on_connection_read_data};
 use super::{ConnId, ListenerId, OsSocketAddr};
 
@@ -66,13 +66,11 @@ extern "C" fn on_listen_cb(
     let srv_net = unsafe { &*srv_net_ptr };
     let sock_addr = os_addr.into_addr().unwrap();
 
-    // 投递到 srv_net 线程
-    let srv_net2 = srv_net.clone();
-    let func = move || {
-        //
-        on_listener_listen(srv_net2.as_ref(), listener_id, sock_addr);
-    };
-    srv_net.run_in_service(Box::new(func));
+    // 运行于 srv_net 线程
+    assert!(srv_net.is_in_service_thread());
+
+    //
+    on_listener_listen(srv_net.as_ref(), listener_id, sock_addr);
 }
 
 extern "C" fn on_accept_cb(

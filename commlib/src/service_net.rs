@@ -8,24 +8,19 @@ pub use buffer::Buffer;
 
 ///
 mod net_packet;
-pub use net_packet::get_leading_field_size;
 pub use net_packet::PKT_CMD_LEN;
 pub use net_packet::{CmdId, EncryptData, NetPacket, PacketType};
 
 ///
 mod net_packet_encdec;
-pub use net_packet_encdec::{decode_packet, encode_packet};
-pub use net_packet_encdec::{decrypt_packet, encrypt_packet};
 pub use net_packet_encdec::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
 ///
 mod net_packet_pool;
-pub use net_packet_pool::{take_large_packet, take_packet, take_small_packet};
 pub use net_packet_pool::{NetPacketGuard, NetPacketPool};
 
 ///
 mod packet_builder;
-pub use packet_builder::PacketBuilder;
 
 ///
 mod conn_id;
@@ -102,5 +97,5 @@ pub use redis::{RedisClient, RedisCommander, RedisReply, RedisReplyType};
 
 ///
 mod http_server;
-pub use http_server::http_server_listen;
 pub use http_server::HttpServer;
+pub use http_server::{http_server_listen, parsing as http_parsing};

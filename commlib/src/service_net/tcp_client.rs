@@ -18,11 +18,12 @@ use crate::{Clock, ServiceNetRs, ServiceRs};
 
 use super::connector::Connector;
 use super::low_level_network::MessageIoNetwork;
+use super::packet_builder::PacketBuilder;
 use super::tcp_client_manager::{
     tcp_client_check_auto_reconnect, tcp_client_make_new_conn, tcp_client_reconnect,
 };
 use super::tcp_conn_manager::disconnect_connection;
-use super::{ClientStatus, ConnId, NetPacketGuard, PacketBuilder, TcpConn};
+use super::{ClientStatus, ConnId, NetPacketGuard, TcpConn};
 
 ///
 pub struct TcpClient {

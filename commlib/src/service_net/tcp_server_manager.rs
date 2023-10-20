@@ -3,9 +3,11 @@ use parking_lot::RwLock;
 use std::cell::UnsafeCell;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use thread_local::ThreadLocal;
 
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
+use super::packet_builder::PacketBuilder;
 use super::service_net_impl::create_tcp_server;
 use super::tcp_conn_manager::{insert_connection, on_connection_established};
 use super::{ConnId, TcpConn, TcpServer};
@@ -118,6 +120,7 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     assert!(tcp_server.srv_net().is_in_service_thread());
 
     let packet_type = PacketType::Server;
+    let packet_builder: Arc<ThreadLocal<UnsafeCell<PacketBuilder>>> = Arc::new(ThreadLocal::new());
 
     // 连接数量
     if tcp_server.check_connection_limit() {
@@ -130,6 +133,7 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
         // 运行于 srv_net 线程
         assert!(conn.srv_net.is_in_service_thread());
+
         tcp_server2.on_ll_connect(conn);
     });
 
@@ -138,7 +142,9 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
         // 运行于 srv_net 线程
         assert!(conn.srv_net.is_in_service_thread());
-        tcp_server2.on_ll_input(conn, input_buffer);
+
+        let builder = get_packet_builder(&packet_builder, &tcp_server2);
+        tcp_server2.on_ll_input(conn, input_buffer, builder);
     });
 
     // event handler: disconnect
@@ -146,6 +152,7 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     let connection_lost_fn = Arc::new(move |hd: ConnId| {
         // 运行于 srv_net 线程
         assert!(tcp_server2.srv_net().is_in_service_thread());
+
         tcp_server2.on_ll_disconnect(hd);
     });
 
@@ -181,4 +188,31 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
 
     // connection ok
     on_connection_established(conn);
+}
+
+#[inline(always)]
+fn get_packet_builder<'a>(
+    tls_pkt_builder: &'a Arc<ThreadLocal<UnsafeCell<PacketBuilder>>>,
+    tcp_server: &Arc<TcpServer>,
+) -> &'a mut PacketBuilder {
+    // 运行于 srv_net 线程
+    assert!(tcp_server.srv_net().is_in_service_thread());
+
+    let builder = tls_pkt_builder.get_or(|| {
+        let srv = tcp_server.srv().clone();
+        let pkt_fn = tcp_server.pkt_fn_clone();
+
+        let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
+            // 运行于 srv_net 线程
+            assert!(conn.srv_net.is_in_service_thread());
+
+            // post 到指定 srv 工作线程中执行
+            let pkt_fn2 = pkt_fn.clone();
+            srv.run_in_service(Box::new(move || {
+                (*pkt_fn2)(conn, pkt);
+            }));
+        };
+        UnsafeCell::new(PacketBuilder::new(Box::new(build_cb)))
+    });
+    unsafe { &mut *(builder.get()) }
 }

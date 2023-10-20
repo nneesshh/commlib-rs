@@ -49,6 +49,7 @@ pub use service_dns_resolver::ServiceDnsResolverRs;
 
 ///
 mod service_net;
+pub use service_net::http_parsing;
 pub use service_net::redis_cmds as redis;
 pub use service_net::{
     connect_to_redis, connect_to_tcp_server, http_server_listen, start_network, stop_network,

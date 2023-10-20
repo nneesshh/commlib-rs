@@ -34,7 +34,7 @@ pub struct Cluster {
 
 impl Cluster {
     ///
-    pub fn WaitConnected<F>(nodes: LinkedList<NodeId>, cb: F)
+    pub fn wait_connected<F>(nodes: LinkedList<NodeId>, cb: F)
     where
         F: Fn() + Send + Sync + 'static,
     {

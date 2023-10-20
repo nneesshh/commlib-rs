@@ -124,7 +124,7 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
 
     //
     with_tls!(G_TEST_CONF, cfg, {
-        let listener_id = tcp_server_listen(
+        tcp_server_listen(
             srv,
             cfg.my.addr.as_str(),
             cfg.my.port,
@@ -134,7 +134,6 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
             connection_limit,
             &G_SERVICE_NET,
         );
-        log::info!("listener {} ready.", listener_id);
     });
 
     //

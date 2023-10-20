@@ -5,6 +5,7 @@ use crate::{NodeState, ServiceHandle, ServiceRs};
 
 use super::http_server::http_server_manager::notify_http_server_stop;
 use super::http_server::HttpServer;
+use super::http_server::ResponseResult;
 use super::low_level_network::MessageIoNetwork;
 use super::tcp_server_manager::notify_tcp_server_stop;
 use super::{ConnId, NetPacketGuard, RedisClient, TcpClient, TcpConn, TcpServer};
@@ -122,11 +123,11 @@ where
 
 /// Create http server: netctrl is private
 #[allow(dead_code)]
-pub fn create_http_server<T, C, P, S>(
+pub fn create_http_server<T, C, R, S>(
     srv: &Arc<T>,
     addr: &str,
     conn_fn: C,
-    pkt_fn: P,
+    request_fn: R,
     close_fn: S,
     connection_limit: usize,
     srv_net: &Arc<ServiceNetRs>,
@@ -134,14 +135,17 @@ pub fn create_http_server<T, C, P, S>(
 where
     T: ServiceRs + 'static,
     C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-    P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+    R: Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
+        + Send
+        + Sync
+        + 'static,
     S: Fn(ConnId) + Send + Sync + 'static,
 {
     let http_server = HttpServer::new(
         &srv,
         addr,
         conn_fn,
-        pkt_fn,
+        request_fn,
         close_fn,
         connection_limit,
         &srv_net.netctrl,

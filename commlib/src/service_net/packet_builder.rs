@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::ServiceRs;
 
-use super::NetPacketGuard;
-use super::TcpConn;
-use super::{get_leading_field_size, take_large_packet, take_packet};
+use super::net_packet::get_leading_field_size;
+use super::net_packet_pool::{take_large_packet, take_packet};
+use super::{ConnId, NetPacketGuard, TcpConn};
 
 const MAX_PACKET_SIZE: usize = 1024 * 1024 * 20; // 20M
 
@@ -54,7 +54,7 @@ impl PacketBuilder {
         input_buffer.set_leading_field_size(leading_field_size);
 
         //
-        match self.build_once(input_buffer) {
+        match self.build_once(conn.hd, input_buffer) {
             PacketResult::Ready(pkt_list) => {
                 for pkt in pkt_list {
                     // trigger build_cb
@@ -74,36 +74,37 @@ impl PacketBuilder {
 
     /* input_buffer 中存放 input 数据，一次性处理完毕，Ok 返回 pkt_list, Err 返回错误信息 */
     #[inline(always)]
-    fn build_once(&mut self, input_buffer: NetPacketGuard) -> PacketResult {
+    fn build_once(&mut self, _hd: ConnId, input_buffer: NetPacketGuard) -> PacketResult {
         //
         let mut pkt_list = Vec::new();
 
+        let input_len = input_buffer.buffer_raw_len();
         let mut consumed = 0_usize;
-        let mut remain = input_buffer.buffer_raw_len();
+        let mut remain = input_len;
 
         let leading_field_size = input_buffer.leading_field_size();
 
         // debug only
         /*{
             let input = input_buffer.peek();
-            log::info!("input: ({}){:?}", input.len(), input);
+            log::info!("[hd={}] input: ({}){:?}", hd, input.len(), input);
             let input_hex = hex::encode(input);
-            log::info!("input_hex: {}", input_hex);
+            log::info!("[hd={}] input_hex: ({}) --> {}", hd, input.len(), input_hex);
         }*/
 
         // input buffer 在循环中可能被 move，编译器会因为后续还有使用而报错，因此采用 option trick 封装一下
-        let mut input_pkt_opt = Some(input_buffer);
+        let mut in_buf_opt = Some(input_buffer);
 
         //
         loop {
             //
             match self.state {
                 PacketBuilderState::Null => {
-                    let input_pkt = input_pkt_opt.take().unwrap();
-                    let append_bytes = input_pkt.buffer_raw_len();
+                    let in_buf = in_buf_opt.take().unwrap();
+                    let append_bytes = in_buf.buffer_raw_len();
 
-                    // 初始化 pkt，直接使用 input_pkt 避免 copy
-                    self.pkt_opt = Some(input_pkt);
+                    // 初始化 pkt，直接使用 in_buf 避免 copy
+                    self.pkt_opt = Some(in_buf);
 
                     // state: 进入包体前导长度读取
                     self.state = PacketBuilderState::Leading;
@@ -136,7 +137,7 @@ impl PacketBuilder {
                             }
                         }
                     } else if remain > 0 {
-                        // input_buffer 中还有 input 数据未处理，将此 input 数据附加到内部 pkt
+                        // in_buf 中还有 input 数据未处理，将此 input 数据附加到内部 pkt
                         let need_bytes = leading_field_size as usize - buffer_raw_len;
                         let append_bytes = if remain >= need_bytes {
                             need_bytes
@@ -144,9 +145,9 @@ impl PacketBuilder {
                             remain
                         };
 
-                        // 消耗 input_buffer 中的 input 数据
-                        let mut input_pkt = input_pkt_opt.take().unwrap();
-                        let to_append = input_pkt.consume_n(append_bytes);
+                        // 消耗 in_buf 中的 input 数据
+                        let mut in_buf = in_buf_opt.take().unwrap();
+                        let to_append = in_buf.consume_n(append_bytes);
                         pkt.append_slice(to_append);
 
                         //
@@ -191,18 +192,17 @@ impl PacketBuilder {
                         // state: 完成当前 pkt 读取，转入完成处理
                         self.state = PacketBuilderState::Complete;
                     } else if remain > 0 {
-                        // input_buffer 中还有 input 数据未处理，将此 input 数据附加到内部 pkt
-                        assert!(buffer_raw_len + consumed <= pkt_full_len);
-                        let need_types = pkt_full_len - (buffer_raw_len + consumed);
+                        // in_buf 中还有 input 数据未处理，将此 input 数据附加到内部 pkt
+                        let need_types = pkt_full_len - buffer_raw_len;
                         let append_bytes = if remain >= need_types {
                             need_types
                         } else {
                             remain
                         };
 
-                        // 消耗 input_pkt 中的 input 数据
-                        let input_pkt = input_pkt_opt.as_mut().unwrap();
-                        let to_append = input_pkt.consume_n(append_bytes);
+                        // 消耗 in_buf 中的 input 数据
+                        let in_buf = in_buf_opt.as_mut().unwrap();
+                        let to_append = in_buf.consume_n(append_bytes);
                         pkt.append_slice(to_append);
 
                         //
@@ -234,7 +234,7 @@ impl PacketBuilder {
                     if 0 == remain {
                         break;
                     }
-                    assert!(input_pkt_opt.is_some()); // 还有残余数据在 input buffer 中
+                    assert!(in_buf_opt.is_some()); // 还有残余数据在 in_buf 中
                 }
 
                 PacketBuilderState::CompleteTailing(pkt_full_len) => {
@@ -287,6 +287,7 @@ impl PacketBuilder {
         }
 
         // 完成包列表
+        assert_eq!(consumed, input_len);
         PacketResult::Ready(pkt_list)
     }
 }

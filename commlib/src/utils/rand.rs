@@ -37,8 +37,8 @@ pub fn gen_password(password_len: usize) -> String {
     with_tls_mut!(G_SMALL_RNG, rng_mut, {
         let password: String = (0..password_len)
             .map(|_| {
-                let idx = rand_range(rng_mut, 0, CHARSET.len() as i32);
-                CHARSET[idx as usize] as char
+                let idx = rand_range(rng_mut, 1, CHARSET.len() as i32);
+                CHARSET[(idx - 1) as usize] as char
             })
             .collect();
         password

@@ -1,15 +1,27 @@
 use atomic::Atomic;
 use parking_lot::RwLock;
+use std::borrow::Borrow;
 use std::cell::UnsafeCell;
+use std::fmt::Write;
+use std::fs::File;
+use std::io::prelude::*;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use thread_local::ThreadLocal;
 
 use crate::service_net::service_net_impl::create_http_server;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
 use crate::service_net::{ConnId, NetPacketGuard, PacketType, TcpConn};
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
+use super::error;
+use super::http_server_impl::ResponseResult;
+use super::request_parser::RequestParser;
 use super::HttpServer;
+
+const CONNECTION_LIMIT: usize = 10000;
+const STATIC_DIR: Option<&str> = Some("static");
 
 thread_local! {
     static G_HTTP_SERVER_STORAGE: UnsafeCell<HttpServerStorage> = UnsafeCell::new(HttpServerStorage::new());
@@ -30,24 +42,30 @@ impl HttpServerStorage {
 }
 
 /// Listen on [ip:port] over service net
-pub fn http_server_listen<T, C, P, S>(
+pub fn http_server_listen<T, F>(
     srv: &Arc<T>,
     ip: &str,
     port: u16,
-    conn_fn: C,
-    pkt_fn: P,
-    close_fn: S,
+    request_fn: F,
     srv_net: &Arc<ServiceNetRs>,
 ) -> bool
 where
     T: ServiceRs + 'static,
-    C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-    P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
-    S: Fn(ConnId) + Send + Sync + 'static,
+    F: Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
+        + Send
+        + Sync
+        + 'static,
 {
     log::info!("http_server_listen: {}:{}...", ip, port);
 
-    const CONNECTION_LIMIT: usize = 10000;
+    let conn_fn = |conn: Arc<TcpConn>| {
+        let hd = conn.hd;
+        log::info!("[hd={}] conn_fn", hd);
+    };
+
+    let close_fn = |hd: ConnId| {
+        log::info!("[hd={}] close_fn", hd);
+    };
 
     let (promise, pinky) = PinkySwear::<bool>::new();
 
@@ -62,7 +80,7 @@ where
             &srv2,
             addr.as_str(),
             conn_fn,
-            pkt_fn,
+            request_fn,
             close_fn,
             CONNECTION_LIMIT,
             &srv_net2,
@@ -119,6 +137,7 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
     assert!(http_server.srv_net().is_in_service_thread());
 
     let packet_type = PacketType::Server;
+    let request_parser: Arc<ThreadLocal<UnsafeCell<RequestParser>>> = Arc::new(ThreadLocal::new());
 
     // 连接数量
     if http_server.check_connection_limit() {
@@ -131,6 +150,7 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
     let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
         // 运行于 srv_net 线程
         assert!(conn.srv_net.is_in_service_thread());
+
         http_server2.on_ll_connect(conn);
     });
 
@@ -139,7 +159,9 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
     let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
         // 运行于 srv_net 线程
         assert!(conn.srv_net.is_in_service_thread());
-        http_server2.on_ll_input(conn, input_buffer);
+
+        let parser = get_request_parser(&request_parser, &http_server2);
+        http_server2.on_ll_input(conn, input_buffer, parser);
     });
 
     // event handler: disconnect
@@ -182,4 +204,158 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
 
     // connection ok
     on_connection_established(conn);
+}
+
+#[inline(always)]
+fn get_request_parser<'a>(
+    tls_request_parser: &'a Arc<ThreadLocal<UnsafeCell<RequestParser>>>,
+    http_server: &Arc<HttpServer>,
+) -> &'a mut RequestParser {
+    // 运行于 srv_net 线程
+    assert!(http_server.srv_net().is_in_service_thread());
+
+    let parser = tls_request_parser.get_or(|| {
+        let srv = http_server.srv().clone();
+        let request_fn = http_server.request_fn_clone();
+
+        // debug only
+        log::info!(
+            "tls_request_parser ptr={:p}",
+            (tls_request_parser as *const Arc<ThreadLocal<UnsafeCell<RequestParser>>>)
+        );
+
+        let parse_cb = move |conn: Arc<TcpConn>, req: http::Request<Vec<u8>>| {
+            // 运行于 srv_net 线程
+            assert!(conn.srv_net.is_in_service_thread());
+
+            // post 到指定 srv 工作线程中执行
+            let request_fn2 = request_fn.clone();
+            srv.run_in_service(Box::new(move || {
+                //
+                match process_http_request(req, request_fn2, conn) {
+                    Ok(_) => {
+                        // do nothing
+                    }
+                    Err(e) => {
+                        //
+                        log::error!("process_http_request error: {:?}", e);
+                    }
+                }
+            }));
+        };
+        UnsafeCell::new(RequestParser::new(Box::new(parse_cb)))
+    });
+    unsafe { &mut *(parser.get()) }
+}
+
+#[inline(always)]
+fn write_response<T: Borrow<[u8]>>(response: http::Response<T>, conn: &Arc<TcpConn>) {
+    let (parts, body) = response.into_parts();
+    let body: &[u8] = body.borrow();
+
+    let mut text = format!(
+        "HTTP/1.1 {} {}\r\n",
+        parts.status.as_str(),
+        parts
+            .status
+            .canonical_reason()
+            .expect("Unsupported HTTP Status"),
+    );
+
+    if !parts.headers.contains_key(http::header::DATE) {
+        let now = chrono::Utc::now();
+        let date = std::format!("{}", now.format("%a, %d %b %Y %H:%M:%S GMT"));
+        write!(text, "date: {}\r\n", date).unwrap();
+    }
+    if !parts.headers.contains_key(http::header::CONNECTION) {
+        write!(text, "connection: close\r\n").unwrap();
+    }
+    if !parts.headers.contains_key(http::header::CONTENT_LENGTH) {
+        write!(text, "content-length: {}\r\n", body.len()).unwrap();
+    }
+    for (k, v) in parts.headers.iter() {
+        write!(text, "{}: {}\r\n", k.as_str(), v.to_str().unwrap()).unwrap();
+    }
+
+    write!(text, "\r\n").unwrap();
+
+    conn.send(text.as_bytes());
+    conn.send(body);
+}
+
+fn process_http_request(
+    req: http::Request<Vec<u8>>,
+    request_fn: Arc<
+        dyn Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
+            + Send
+            + Sync,
+    >,
+    conn: Arc<TcpConn>,
+) -> Result<(), error::Error> {
+    //
+    let uri = req.uri();
+    let response_builder = http::Response::builder();
+
+    // first, we serve static files
+    if let Some(static_dir) = STATIC_DIR {
+        let static_path = PathBuf::from(static_dir);
+        let fs_path = uri.to_string();
+
+        // the uri always includes a leading /, which means that join will over-write the static directory...
+        let fs_path = PathBuf::from(&fs_path[1..]);
+
+        // ... you trying to do something bad?
+        let traversal_attempt = fs_path.components().any(|component| match component {
+            std::path::Component::Normal(_) => false,
+            _ => true,
+        });
+
+        if traversal_attempt {
+            // GET OUT
+            let response = response_builder
+                .status(http::StatusCode::NOT_FOUND)
+                .body("<h1>404</h1><p>Not found!<p>".as_bytes())
+                .unwrap();
+
+            write_response(response, &conn);
+            return Ok(());
+        }
+
+        let fs_path_real = static_path.join(fs_path);
+
+        if Path::new(&fs_path_real).is_file() {
+            let mut f = File::open(&fs_path_real)?;
+
+            let mut source = Vec::new();
+
+            f.read_to_end(&mut source)?;
+
+            let response = response_builder.body(source)?;
+
+            write_response(response, &conn);
+            return Ok(());
+        }
+    }
+
+    // 非静态目录，执行回调函数
+    let conn2 = conn.clone();
+    match request_fn(conn2, req, response_builder) {
+        Ok(response) => {
+            write_response(response, &conn);
+            Ok(())
+        }
+        Err(e) => {
+            //
+            let response_builder = http::Response::builder();
+            let err_page = std::format!("<h1>500</h1><p>Internal Server Error: {:?}!<p>", e);
+
+            let response = response_builder
+                .status(http::StatusCode::INTERNAL_SERVER_ERROR)
+                .body(err_page.as_bytes())
+                .unwrap();
+
+            write_response(response, &conn);
+            Ok(())
+        }
+    }
 }

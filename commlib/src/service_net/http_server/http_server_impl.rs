@@ -3,17 +3,20 @@
 //!
 
 use atomic::{Atomic, Ordering};
-use std::cell::UnsafeCell;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use thread_local::ThreadLocal;
 
 use crate::{ServiceNetRs, ServiceRs};
 
 use crate::service_net::http_server::http_server_manager::http_server_make_new_conn;
 use crate::service_net::low_level_network::MessageIoNetwork;
 use crate::service_net::{listener::Listener, ListenerId};
-use crate::service_net::{ConnId, NetPacketGuard, PacketBuilder, ServerStatus, TcpConn};
+use crate::service_net::{ConnId, NetPacketGuard, ServerStatus, TcpConn};
+
+use super::error;
+use super::request_parser::RequestParser;
+
+pub type ResponseResult = Result<http::Response<Vec<u8>>, error::Error>;
 
 ///
 pub struct HttpServer {
@@ -34,20 +37,21 @@ pub struct HttpServer {
 
     //
     conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
-    pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
+    request_fn: Arc<
+        dyn Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
+            + Send
+            + Sync,
+    >,
     close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
-
-    //
-    tls_pkt_builder: ThreadLocal<UnsafeCell<PacketBuilder>>,
 }
 
 impl HttpServer {
     ///
-    pub fn new<T, C, P, S>(
+    pub fn new<T, C, R, S>(
         srv: &Arc<T>,
         addr: &str,
         conn_fn: C,
-        pkt_fn: P,
+        request_fn: R,
         close_fn: S,
         connection_limit: usize,
         netctrl: &Arc<MessageIoNetwork>,
@@ -56,7 +60,10 @@ impl HttpServer {
     where
         T: ServiceRs + 'static,
         C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-        P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+        R: Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
+            + Send
+            + Sync
+            + 'static,
         S: Fn(ConnId) + Send + Sync + 'static,
     {
         Self {
@@ -72,10 +79,8 @@ impl HttpServer {
             srv_net: srv_net.clone(),
 
             conn_fn: Arc::new(conn_fn),
-            pkt_fn: Arc::new(pkt_fn),
+            request_fn: Arc::new(request_fn),
             close_fn: Arc::new(close_fn),
-
-            tls_pkt_builder: ThreadLocal::new(),
         }
     }
 
@@ -105,11 +110,16 @@ impl HttpServer {
     }
 
     ///
-    pub fn on_ll_input(self: &Arc<Self>, conn: Arc<TcpConn>, input_buffer: NetPacketGuard) {
+    pub fn on_ll_input(
+        self: &Arc<Self>,
+        conn: Arc<TcpConn>,
+        input_buffer: NetPacketGuard,
+        request_parser: &mut RequestParser,
+    ) {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
 
-        self.get_packet_builder().build(&conn, input_buffer);
+        request_parser.parse(&conn, input_buffer);
     }
 
     ///
@@ -243,15 +253,15 @@ impl HttpServer {
     }
 
     ///
-    pub fn setup_callbacks<C, P, S>(&mut self, conn_fn: C, pkt_fn: P, close_fn: S)
-    where
-        C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
-        P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
-        S: Fn(ConnId) + Send + Sync + 'static,
-    {
-        self.conn_fn = Arc::new(conn_fn);
-        self.pkt_fn = Arc::new(pkt_fn);
-        self.close_fn = Arc::new(close_fn);
+    pub fn request_fn_clone(
+        &self,
+    ) -> Arc<
+        dyn Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
+            + Send
+            + Sync,
+    > {
+        //
+        self.request_fn.clone()
     }
 
     ///
@@ -277,32 +287,5 @@ impl HttpServer {
             // 无需检测上限 == 未达到上限
             false
         }
-    }
-
-    ////////////////////////////////////////////////////////////////
-
-    #[inline(always)]
-    fn get_packet_builder<'a>(self: &'a Arc<Self>) -> &'a mut PacketBuilder {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
-        //
-        let builder = self.tls_pkt_builder.get_or(|| {
-            let srv = self.srv.clone();
-            let pkt_fn = self.pkt_fn.clone();
-
-            let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
-                // 运行于 srv_net 线程
-                assert!(conn.srv_net.is_in_service_thread());
-
-                // post 到指定 srv 工作线程中执行
-                let pkt_fn2 = pkt_fn.clone();
-                srv.run_in_service(Box::new(move || {
-                    (*pkt_fn2)(conn, pkt);
-                }));
-            };
-            UnsafeCell::new(PacketBuilder::new(Box::new(build_cb)))
-        });
-        unsafe { &mut *(builder.get()) }
     }
 }

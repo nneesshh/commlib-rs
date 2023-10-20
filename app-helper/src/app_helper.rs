@@ -114,14 +114,14 @@ impl App {
         for srv in &*services {
             let srv_handle = srv.get_handle();
             if srv_handle.id() == id {
-                log::error!("App::add_service({}) failed!!! ID={}", name, id);
+                log::error!("App::add_service [{}] failed!!! ID={}!!!", name, id);
                 return;
             }
         }
 
         //
         services.push(service.clone());
-        log::info!("App::add_service({}) ok, ID={}", name, id);
+        log::info!("App::add_service [{}] ok, ID={}", name, id);
     }
 
     fn attach<T, F>(&mut self, srv: &Arc<T>, initializer: F)
@@ -135,7 +135,12 @@ impl App {
         if let Some(xml_node) = g_conf.get_xml_node(node_id) {
             //
             let srv_type = xml_node.get_u64(vec!["srv"], 0);
-            log::info!("node {} srv_type {}", node_id, srv_type);
+            log::info!(
+                "srv({}): node {} srv_type {}",
+                srv.get_handle().id(),
+                node_id,
+                srv_type
+            );
 
             // set xml config
             srv.get_handle().set_xml_config(xml_node.clone());

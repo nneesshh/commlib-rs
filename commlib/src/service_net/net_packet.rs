@@ -3,8 +3,8 @@ use std::collections::LinkedList;
 
 use crate::PlayerId;
 
+use super::net_packet_encdec::{decrypt_packet, encrypt_packet};
 use super::Buffer;
-use super::{decrypt_packet, encrypt_packet};
 
 /// Buffer size
 pub const BUFFER_INITIAL_SIZE: usize = 4096;

@@ -3,17 +3,16 @@
 //!
 
 use atomic::{Atomic, Ordering};
-use std::cell::UnsafeCell;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use thread_local::ThreadLocal;
 
 use crate::{ServiceNetRs, ServiceRs};
 
 use super::low_level_network::MessageIoNetwork;
+use super::packet_builder::PacketBuilder;
 use super::tcp_server_manager::tcp_server_make_new_conn;
 use super::{listener::Listener, ListenerId};
-use super::{ConnId, NetPacketGuard, PacketBuilder, ServerStatus, TcpConn};
+use super::{ConnId, NetPacketGuard, ServerStatus, TcpConn};
 
 ///
 pub struct TcpServer {
@@ -36,9 +35,6 @@ pub struct TcpServer {
     conn_fn: Arc<dyn Fn(Arc<TcpConn>) + Send + Sync>,
     pkt_fn: Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync>,
     close_fn: Arc<dyn Fn(ConnId) + Send + Sync>,
-
-    //
-    tls_pkt_builder: ThreadLocal<UnsafeCell<PacketBuilder>>,
 }
 
 impl TcpServer {
@@ -74,8 +70,6 @@ impl TcpServer {
             conn_fn: Arc::new(conn_fn),
             pkt_fn: Arc::new(pkt_fn),
             close_fn: Arc::new(close_fn),
-
-            tls_pkt_builder: ThreadLocal::new(),
         }
     }
 
@@ -105,11 +99,16 @@ impl TcpServer {
     }
 
     ///
-    pub fn on_ll_input(self: &Arc<Self>, conn: Arc<TcpConn>, input_buffer: NetPacketGuard) {
+    pub fn on_ll_input(
+        self: &Arc<Self>,
+        conn: Arc<TcpConn>,
+        input_buffer: NetPacketGuard,
+        packet_builder: &mut PacketBuilder,
+    ) {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
 
-        self.get_packet_builder().build(&conn, input_buffer);
+        packet_builder.build(&conn, input_buffer);
     }
 
     ///
@@ -255,6 +254,12 @@ impl TcpServer {
     }
 
     ///
+    pub fn pkt_fn_clone(&self) -> Arc<dyn Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync> {
+        //
+        self.pkt_fn.clone()
+    }
+
+    ///
     pub fn check_connection_limit(&self) -> bool {
         // check 连接数上限 (0 == self.connection_limit 代表无限制)
         if self.connection_limit > 0 {
@@ -277,32 +282,5 @@ impl TcpServer {
             // 无需检测上限 == 未达到上限
             false
         }
-    }
-
-    ////////////////////////////////////////////////////////////////
-
-    #[inline(always)]
-    fn get_packet_builder<'a>(self: &'a Arc<Self>) -> &'a mut PacketBuilder {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
-
-        //
-        let builder = self.tls_pkt_builder.get_or(|| {
-            let srv = self.srv.clone();
-            let pkt_fn = self.pkt_fn.clone();
-
-            let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
-                // 运行于 srv_net 线程
-                assert!(conn.srv_net.is_in_service_thread());
-
-                // post 到指定 srv 工作线程中执行
-                let pkt_fn2 = pkt_fn.clone();
-                srv.run_in_service(Box::new(move || {
-                    (*pkt_fn2)(conn, pkt);
-                }));
-            };
-            UnsafeCell::new(PacketBuilder::new(Box::new(build_cb)))
-        });
-        unsafe { &mut *(builder.get()) }
     }
 }

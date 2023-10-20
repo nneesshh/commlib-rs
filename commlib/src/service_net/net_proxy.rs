@@ -4,7 +4,9 @@ use std::rc::Rc;
 
 use crate::Base64;
 
-use super::{decode_packet, encode_packet, get_leading_field_size, take_packet};
+use super::net_packet::get_leading_field_size;
+use super::net_packet_encdec::{decode_packet, encode_packet};
+use super::net_packet_pool::take_packet;
 use super::{CmdId, ConnId, EncryptData, NetPacketGuard, PacketType};
 
 ///

@@ -32,17 +32,17 @@ pub type ServiceFuncType = dyn FnOnce() + Send; // Note: tait object is always '
 
 /// Service handle
 pub struct ServiceHandle {
-    pub id: u64,
-    pub state: Atomic<NodeState>,
+    id: u64,
+    state: Atomic<NodeState>,
 
-    pub tx: channel::Sender<Box<ServiceFuncType>>,
-    pub rx: channel::Receiver<Box<ServiceFuncType>>,
+    tx: channel::Sender<Box<ServiceFuncType>>,
+    rx: channel::Receiver<Box<ServiceFuncType>>,
 
-    pub xml_config: RwLock<XmlReader>,
+    xml_config: RwLock<XmlReader>,
 
     //
-    pub tid: Atomic<u64>,
-    pub join_handle_opt: RwLock<Option<JoinHandle<()>>>,
+    tid: Atomic<u64>,
+    join_handle_opt: RwLock<Option<JoinHandle<()>>>,
 }
 
 impl ServiceHandle {
@@ -196,7 +196,7 @@ where
             let tid = get_current_tid();
             handle.set_tid(tid);
 
-            log::info!("service({}) spawn on thread: {}", tname, tid);
+            log::info!("srv({})[{}] spawn on thread: {}", handle.id(), tname, tid);
 
             // 服务线程初始化
             (initializer)();

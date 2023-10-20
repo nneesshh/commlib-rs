@@ -88,9 +88,9 @@ impl ReplyBuilder {
         // debug only
         /*{
             let input = input_buffer.peek();
-            log::info!("input: {:?}", input);
+            log::info!("[hd={}] input: ({}){:?}", hd, input.len(), input);
             let input_hex = hex::encode(input);
-            log::info!("input_hex: {}", input_hex);
+            log::info!("input_hex: ({}) --> {}", input.len(), input_hex);
         }*/
 
         self.buffer.write_slice(input_buffer.peek());
