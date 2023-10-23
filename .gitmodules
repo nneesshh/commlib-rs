@@ -64,3 +64,6 @@
 [submodule "hecs"]
 	path = hecs
 	url = https://github.com/nneesshh/hecs
+[submodule "bytes"]
+	path = bytes
+	url = https://github.com/nneesshh/bytes
