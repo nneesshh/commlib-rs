@@ -1,0 +1,8 @@
+syntax = "proto2";
+package Proto;
+
+enum ENUM_MSG_TYPE {
+  None = 0;
+
+  EncryptToken = 1102; //加密 token
+}

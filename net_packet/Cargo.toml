@@ -1,0 +1,26 @@
+[package]
+name = "net_packet"
+version = "1.0.0"
+authors = ["nneesshh <neckshotk@gmail.com>"]
+description = "Thread safe net packet pool"
+edition = "2021"
+readme = "README.md"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[dependencies]
+lazy_static = "1"
+bytes = { path = "../bytes" }
+opool = { path = "../opool" }
+parking_lot = { path = "../parking_lot" }
+
+#[dev-dependencies]
+
+
+[build-dependencies]
+dunce = "1"
+miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!

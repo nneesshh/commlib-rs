@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config zone="1350034" group="1" limit_players="50000">
+    <!--版本检查（废弃）-->
+    <version check="0">v0.1</version>
+    <!--是否检查登录session-->
+    <session_check>123</session_check>
+    <!--跨服玩法服务器节点，须遵循拼写规则“ 1002 + zoned ”-->
+    <cross>10021350034</cross>
+    <!--包含的区-->
+    <zones>33</zones>
+    <!--16字节加密密钥（BASE64编码）-->
+    <encrypt_token>YWJjZGVmZ2hpamtsbW5vcA==</encrypt_token>
+    <!--http服务端口号（用来接收 gm 命令/充值消息/查询监控数据等）-->
+    <http_port>8888</http_port>
+
+    <!-- redis -->
+    <redis>
+        <!-- 缓存 -->
+        <db addr="127.0.0.1" port="6379" auth="" db="4"></db>
+        <!-- 消息队列 -->
+        <!--queue addr="18.162.148.67" port="6379" auth="" db="5"></queue-->
+        <queue addr="127.0.0.1" port="6379" auth="" db="5"></queue>
+    </redis>
+
+    <!-- test -->
+    <node srv="999" id="999" name="test">
+        <addr>0.0.0.0</addr>
+        <port>20001</port>
+        <world id="1006" addr="127.0.0.1" port="20006"></world>
+        <game id="1003" addr="127.0.0.1" port="20003"></game>
+        <battle id="1005" addr="127.0.0.1" port="20005"></battle>
+        <common id="1008" addr="127.0.0.1" port="20008"></common>
+        <db id="1004" addr="127.0.0.1" port="20004"></db>
+    </node>
+
+    <!-- cli -->
+    <node srv="1000" id="1000" name="clisrv">
+        <addr>127.0.0.1</addr>
+        <port>20001</port>
+        <acct>test</acct>
+        <num>1</num>
+        <thread_num>4</thread_num>
+        <!--<lua>LuaRobot/init.lua</lua>-->
+    </node>
+
+    <!-- game -->
+    <node srv="1003" id="1003" name="gamesrv">
+        <addr>127.0.0.1</addr>
+        <port>20002</port>
+        <world id="1006" addr="127.0.0.1" port="20006"></world>
+        <redis>
+            <!-- 缓存 -->
+            <db addr="192.168.199.107" port="6370" auth="" db="4"></db>
+            <!-- 消息队列 -->
+            <queue addr="192.168.199.107" port="6370" auth="" db="5"></queue>
+        </redis>
+    </node>
+
+</config>

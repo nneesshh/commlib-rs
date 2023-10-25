@@ -1,0 +1,84 @@
+syntax = "proto3";
+package Proto;
+
+enum InnerReservedCmd
+{
+	IRC_None = 0;
+	IRC_NodeHandshake = 1;           //InnerNodeInfo
+	IRC_NodeInfoNtf = 2;             //InnerNodeInfo
+	IRC_TransMessageNtf = 3;         //TransMessageNtf
+	IRC_BroadcastSidMessageNtf = 4;  //BroadcastSidMessageNtf
+	IRC_MultiTransMessageNtf = 5;    //MultiTransMessageNtf
+	IRC_RpcCall				 = 6;          //rpc调用
+	IRC_RpcReturn			 = 7;          //rpc回包
+	IRC_CrossCall		 	 = 8;          //跨区方法调用
+	IRC_Max=100;
+}
+
+message PairStringString
+{
+  string k = 1;
+  string v = 2;
+}
+
+message InnerNodeInfo
+{
+  uint64 nid = 1;
+  int32 type = 2;
+  repeated int32 sids = 3;
+  repeated PairStringString kv = 4;
+  int32 maxnum = 5;
+}
+
+message TransMessageNtf
+{
+  fixed64 id = 1; // player id
+  int32 cmd = 2;
+  bytes data = 3;
+}
+
+message BroadcastSidMessageNtf
+{
+  int32 sid = 1;
+  int32 cmd = 2;
+  bytes data = 3;
+  repeated int32 channels = 4; // 指定接收渠道
+}
+
+message MultiTransMessageNtf
+{
+  repeated fixed64 ids  = 1;    // player id
+  int32 cmd = 2;
+  bytes data = 3;
+}
+
+// rpc 调用包
+message InnerRpcCall
+{
+  uint64 rpc_id         = 1;    // rpc 唯一ID
+  uint64 rpc_type       = 2;    // rpc 调用类型
+  bytes  msg            = 3;    // 返回消息
+}
+
+// rpc 返回包
+message InnerRpcReturn
+{
+  uint64 rpc_id         = 1;    // rpc 唯一ID, 调用的时候确定
+  uint64 rpc_type       = 2;    // rpc 调用类型
+  bytes  msg            = 3;    // 返回消息
+}
+
+// 跨服消息包
+message InnerCrossCall
+{
+  uint64 node         = 1;   // (目标)节点类型
+  int32 zone          = 2;   // (目标)区
+  uint64 id           = 3;   // 唯一消息 ID 
+  int32 type          = 4;   // 消息类型
+  bytes msg           = 5;   // 消息体
+  uint64 source_node  = 6;   // (源)节点类型
+  int32 source_zone   = 7;   // (源)区
+  bool resp           = 8;   // 回包标记(某个消息的回包还是发起包)
+  int32 trans_zone    = 9;   // 转发的目标所在区
+  uint64 trans_node   = 10;  // 转发的目标所在节点
+}
