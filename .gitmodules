@@ -67,3 +67,6 @@
 [submodule "bytes"]
 	path = bytes
 	url = https://github.com/nneesshh/bytes
+[submodule "tungstenite-rs"]
+	path = tungstenite-rs
+	url = https://github.com/nneesshh/tungstenite-rs
