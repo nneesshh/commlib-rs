@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use message_io::net_packet::{take_large_packet, NetPacketGuard};
+
 use crate::ServiceRs;
 
-use crate::service_net::net_packet_pool::take_large_packet;
-use crate::{ConnId, NetPacketGuard, TcpConn};
+use crate::{ConnId, TcpConn};
 
 use super::error;
 use super::parsing;
@@ -182,7 +183,7 @@ impl RequestParser {
                     let old_pkt_slice = old_pkt.consume();
 
                     // old pkt 数据转移到 new pkt，使用 new pkt 继续解析
-                    let new_pkt = take_large_packet(0, ensure_bytes, old_pkt_slice);
+                    let new_pkt = take_large_packet(ensure_bytes, old_pkt_slice);
                     self.pkt_opt = Some(new_pkt);
 
                     // 进入包体数据处理

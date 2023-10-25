@@ -10,9 +10,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
+use message_io::net_packet::NetPacketGuard;
+
+use crate::service_net::net_packet_encdec::PacketType;
 use crate::service_net::service_net_impl::create_http_server;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
-use crate::service_net::{ConnId, NetPacketGuard, PacketType, TcpConn};
+use crate::service_net::{ConnId, TcpConn};
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};
 
 use super::error;

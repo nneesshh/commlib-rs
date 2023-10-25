@@ -6,13 +6,15 @@ use atomic::{Atomic, Ordering};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use message_io::net_packet::NetPacketGuard;
+
 use crate::{ServiceNetRs, ServiceRs};
 
 use super::low_level_network::MessageIoNetwork;
 use super::packet_builder::PacketBuilder;
 use super::tcp_server_manager::tcp_server_make_new_conn;
 use super::{listener::Listener, ListenerId};
-use super::{ConnId, NetPacketGuard, ServerStatus, TcpConn};
+use super::{ConnId, ServerStatus, TcpConn};
 
 ///
 pub struct TcpServer {

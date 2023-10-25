@@ -6,12 +6,14 @@ use atomic::{Atomic, Ordering};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use message_io::net_packet::NetPacketGuard;
+
 use crate::{ServiceNetRs, ServiceRs};
 
 use crate::service_net::http_server::http_server_manager::http_server_make_new_conn;
 use crate::service_net::low_level_network::MessageIoNetwork;
 use crate::service_net::{listener::Listener, ListenerId};
-use crate::service_net::{ConnId, NetPacketGuard, ServerStatus, TcpConn};
+use crate::service_net::{ConnId, ServerStatus, TcpConn};
 
 use super::error;
 use super::request_parser::RequestParser;

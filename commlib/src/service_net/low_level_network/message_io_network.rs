@@ -7,6 +7,7 @@ use message_io::node::{split, NodeHandler, NodeListener, NodeTask};
 
 use crate::service_net::connector::{insert_connector, Connector};
 use crate::service_net::listener::{insert_listener, Listener};
+use crate::service_net::tcp_handler::InputBuffer;
 use crate::service_net::{ListenerId, TcpHandler};
 use crate::{ConnId, ServiceNetRs};
 
@@ -43,9 +44,6 @@ impl MessageIoNetwork {
         addr: &str,
         srv_net: &Arc<ServiceNetRs>,
     ) -> bool {
-        //
-        let srv_net_ptr = srv_net as *const Arc<ServiceNetRs>;
-
         // listen at tcp addr
         let ret = self.node_handler.network().listen(Transport::Tcp, addr);
 
@@ -57,7 +55,7 @@ impl MessageIoNetwork {
 
                 //
                 let on_listen = self.tcp_handler.on_listen;
-                (on_listen)(srv_net_ptr, listener_id, sock_addr.into());
+                (on_listen)(srv_net, listener_id, sock_addr.into());
                 true
             }
 
@@ -165,9 +163,6 @@ impl MessageIoNetwork {
         // read incoming network events.
         let node_task = node_listener.for_each_async(move |event| {
             //
-            let srv_net_ptr = &srv_net as *const Arc<ServiceNetRs>;
-
-            //
             match event.network() {
                 NetEvent::Connected(endpoint, handshake) => {
                     //
@@ -185,10 +180,10 @@ impl MessageIoNetwork {
 
                     if handshake {
                         // connect ok
-                        (on_connect_ok)(srv_net_ptr, hd, os_addr);
+                        (on_connect_ok)(&srv_net, hd, os_addr);
                     } else {
                         // connect err
-                        (on_connect_err)(srv_net_ptr, hd);
+                        (on_connect_err)(&srv_net, hd);
                     }
                 }
 
@@ -206,16 +201,16 @@ impl MessageIoNetwork {
                     );
 
                     //
-                    (on_accept)(srv_net_ptr, listener_id, hd, endpoint.addr().into());
+                    (on_accept)(&srv_net, listener_id, hd, endpoint.addr().into());
                 } // NetEvent::Accepted
 
-                NetEvent::Message(endpoint, input_data) => {
-                    //
+                NetEvent::Message(endpoint, data) => {
                     let raw_id = endpoint.resource_id().raw();
                     let hd = ConnId::from(raw_id);
 
                     //
-                    (on_input)(srv_net_ptr, hd, input_data.as_ptr(), input_data.len());
+                    let input_buffer = InputBuffer { data };
+                    (on_input)(&srv_net, hd, input_buffer);
                 }
 
                 NetEvent::Disconnected(endpoint) => {
@@ -225,7 +220,7 @@ impl MessageIoNetwork {
                     log::info!("[hd={}] endpoint {} disconnected", hd, endpoint);
 
                     //
-                    (on_close)(srv_net_ptr, hd);
+                    (on_close)(&srv_net, hd);
                 }
             }
         });

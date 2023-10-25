@@ -1,13 +1,17 @@
-use crate::service_net::TcpConn;
 use std::collections::LinkedList;
 use std::rc::Rc;
 
+use message_io::net_packet::take_packet;
+use message_io::net_packet::{CmdId, NetPacketGuard};
+
 use crate::Base64;
 
-use super::net_packet::get_leading_field_size;
-use super::net_packet_encdec::{decode_packet, encode_packet};
-use super::net_packet_pool::take_packet;
-use super::{CmdId, ConnId, EncryptData, NetPacketGuard, PacketType};
+use super::net_packet_encdec::EncryptData;
+use super::net_packet_encdec::PacketType;
+use super::net_packet_encdec::{
+    decode_packet, encode_packet, get_leading_field_size, write_prost_message,
+};
+use super::{ConnId, TcpConn};
 
 ///
 pub type EncryptTokenHander = Box<dyn Fn(&mut NetProxy, &TcpConn) + Send + Sync>;
@@ -155,7 +159,8 @@ impl NetProxy {
     /// 发送接口线程安全
     #[inline(always)]
     pub fn send_raw(&mut self, conn: &TcpConn, cmd: CmdId, slice: &[u8]) {
-        let mut pkt = take_packet(slice.len(), self.leading_field_size);
+        let mut pkt = take_packet(slice.len());
+        pkt.set_leading_field_size(self.leading_field_size);
         pkt.set_cmd(cmd);
         pkt.set_body(slice);
 
@@ -171,9 +176,14 @@ impl NetProxy {
     {
         //
         let len = msg.encoded_len();
-        let mut pkt = take_packet(len, self.leading_field_size);
+        let mut pkt = take_packet(len);
+        pkt.set_leading_field_size(self.leading_field_size);
         pkt.set_cmd(cmd);
-        pkt.set_msg(msg);
+
+        // set msg
+        let pb_slice = pkt.buffer.extend(len);
+        write_prost_message(msg, pb_slice);
+        pkt.body_size = len;
 
         //
         self.send_packet(conn, pkt);

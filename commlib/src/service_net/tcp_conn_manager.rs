@@ -1,9 +1,10 @@
 use std::cell::UnsafeCell;
 use std::sync::Arc;
 
+use message_io::net_packet::NetPacketGuard;
+
 use crate::{ServiceNetRs, ServiceRs};
 
-use super::NetPacketGuard;
 use super::{ConnId, TcpConn};
 
 thread_local! {

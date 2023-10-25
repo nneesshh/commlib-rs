@@ -3,12 +3,14 @@ use parking_lot::RwLock;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use message_io::net_packet::NetPacketGuard;
+
 use crate::ServiceRs;
 
 use super::low_level_network::MessageIoNetwork;
+use super::net_packet_encdec::PacketType;
 use super::tcp_conn_manager::on_connection_closed;
 use super::{ConnId, ServiceNetRs};
-use super::{NetPacketGuard, PacketType};
 
 /// Tcp connection: all fields are public for easy construct
 pub struct TcpConn {

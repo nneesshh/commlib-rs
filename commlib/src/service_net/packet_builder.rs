@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use message_io::net_packet::NetPacketGuard;
+use message_io::net_packet::{take_large_packet, take_packet};
+
 use crate::ServiceRs;
 
-use super::net_packet::get_leading_field_size;
-use super::net_packet_pool::{take_large_packet, take_packet};
-use super::{ConnId, NetPacketGuard, TcpConn};
+use super::net_packet_encdec::get_leading_field_size;
+use super::{ConnId, TcpConn};
 
 const MAX_PACKET_SIZE: usize = 1024 * 1024 * 20; // 20M
 
@@ -172,8 +174,8 @@ impl PacketBuilder {
                     let old_pkt_slice = old_pkt.consume();
 
                     // old pkt 数据转移到 new pkt，使用 new pkt 继续解析
-                    let new_pkt =
-                        take_large_packet(leading_field_size, ensure_bytes, old_pkt_slice);
+                    let mut new_pkt = take_large_packet(ensure_bytes, old_pkt_slice);
+                    new_pkt.set_leading_field_size(leading_field_size);
                     self.pkt_opt = Some(new_pkt);
 
                     // 进入包体数据处理
@@ -248,7 +250,10 @@ impl PacketBuilder {
                     // 复制字节数较少的部分
                     if pkt_full_len < tail_len {
                         // 完成包较小，使用新包进行容纳
-                        let mut ready_pkt = take_packet(pkt_full_len, leading_field_size);
+                        let mut ready_pkt = take_packet(pkt_full_len);
+                        ready_pkt.set_leading_field_size(leading_field_size);
+
+                        //
                         {
                             let to_append = pkt.consume_n(pkt_full_len);
                             ready_pkt.append_slice(to_append);
@@ -263,7 +268,8 @@ impl PacketBuilder {
                             let to_append = ready_pkt.consume_tail_n(tail_len);
 
                             //
-                            let mut tail_pkt = take_packet(pkt_full_len, leading_field_size);
+                            let mut tail_pkt = take_packet(pkt_full_len);
+                            tail_pkt.set_leading_field_size(leading_field_size);
                             tail_pkt.append_slice(to_append);
 
                             self.pkt_opt = Some(tail_pkt);

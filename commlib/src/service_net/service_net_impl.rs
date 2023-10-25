@@ -1,6 +1,8 @@
 use atomic::{Atomic, Ordering};
 use std::sync::Arc;
 
+use message_io::net_packet::NetPacketGuard;
+
 use crate::{NodeState, ServiceHandle, ServiceRs};
 
 use super::http_server::http_server_manager::notify_http_server_stop;
@@ -8,7 +10,7 @@ use super::http_server::HttpServer;
 use super::http_server::ResponseResult;
 use super::low_level_network::MessageIoNetwork;
 use super::tcp_server_manager::notify_tcp_server_stop;
-use super::{ConnId, NetPacketGuard, RedisClient, TcpClient, TcpConn, TcpServer};
+use super::{ConnId, RedisClient, TcpClient, TcpConn, TcpServer};
 
 static NEXT_CLIENT_ID: Atomic<usize> = Atomic::<usize>::new(1);
 

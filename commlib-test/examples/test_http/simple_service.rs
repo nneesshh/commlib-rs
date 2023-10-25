@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use commlib::{http_server_listen, G_SERVICE_NET};
-use commlib::{ConnId, NodeState, ServiceHandle, ServiceRs, TcpConn};
+use commlib::{NodeState, ServiceHandle, ServiceRs, TcpConn};
 
 use app_helper::conf::Conf;
 use app_helper::G_CONF;

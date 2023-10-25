@@ -14,6 +14,8 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
+use message_io::net_packet::NetPacketGuard;
+
 use crate::{Clock, ServiceNetRs, ServiceRs};
 
 use super::connector::Connector;
@@ -23,7 +25,7 @@ use super::tcp_client_manager::{
     tcp_client_check_auto_reconnect, tcp_client_make_new_conn, tcp_client_reconnect,
 };
 use super::tcp_conn_manager::disconnect_connection;
-use super::{ClientStatus, ConnId, NetPacketGuard, TcpConn};
+use super::{ClientStatus, ConnId, TcpConn};
 
 ///
 pub struct TcpClient {
