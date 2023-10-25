@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use message_io::net_packet::NetPacketGuard;
-use message_io::net_packet::{take_large_packet, take_packet};
+use net_packet::NetPacketGuard;
+use net_packet::{take_large_packet, take_packet};
 
 use crate::ServiceRs;
 

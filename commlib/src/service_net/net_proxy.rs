@@ -1,8 +1,8 @@
 use std::collections::LinkedList;
 use std::rc::Rc;
 
-use message_io::net_packet::take_packet;
-use message_io::net_packet::{CmdId, NetPacketGuard};
+use net_packet::take_packet;
+use net_packet::{CmdId, NetPacketGuard};
 
 use crate::Base64;
 

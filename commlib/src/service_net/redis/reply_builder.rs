@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use net_packet::{Buffer, NetPacketGuard};
+
 use crate::RedisReply;
-use crate::{Buffer, NetPacketGuard, ServiceRs, TcpConn};
+use crate::{ServiceRs, TcpConn};
 
 use super::sub_builder_impl::RootBuilder;
 

@@ -61,6 +61,7 @@ spdlog-rs = { path = "../spdlog-rs/spdlog", features = ["log", "multi-thread", "
 thread_local = { path = "../thread_local-rs" }
 openssl = { path = "../rust-openssl/openssl" }
 commlib-sys = { path = "../commlib-sys" }
+net_packet = { path = "../net_packet" }
 
 [build-dependencies]
 dunce = "1"

@@ -1,7 +1,7 @@
 use bytemuck::NoUninit;
 use std::collections::LinkedList;
 
-use message_io::net_packet::NetPacketGuard;
+use net_packet::NetPacketGuard;
 
 use crate::rand_between_exclusive_i8;
 

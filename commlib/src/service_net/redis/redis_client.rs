@@ -14,11 +14,13 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
+use net_packet::NetPacketGuard;
+
 use crate::service_net::connector::Connector;
 use crate::service_net::low_level_network::MessageIoNetwork;
 use crate::service_net::tcp_conn_manager::disconnect_connection;
 use crate::PinkySwear;
-use crate::{ClientStatus, ConnId, NetPacketGuard, RedisReply, TcpConn};
+use crate::{ClientStatus, ConnId, RedisReply, TcpConn};
 use crate::{Clock, ServiceNetRs, ServiceRs, G_SERVICE_NET};
 
 use super::redis_client_manager::{

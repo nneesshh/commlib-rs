@@ -72,6 +72,3 @@ pub use globals::*;
 /// 通用定义
 mod commlib_def;
 pub use commlib_def::*;
-
-/// export from message_io
-pub use message_io::net_packet::{Buffer, CmdId, NetPacket, NetPacketGuard};

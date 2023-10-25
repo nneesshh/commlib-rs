@@ -1,6 +1,6 @@
 use atomic::{Atomic, Ordering};
 
-use commlib::CmdId;
+use net_packet::CmdId;
 
 ///
 pub type CrossRpcReturnCallback = Box<dyn FnOnce(CmdId, &[u8]) + Send + Sync>;

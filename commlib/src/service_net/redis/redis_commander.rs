@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::fmt::Write;
 use std::sync::Arc;
 
-use crate::{Buffer, RedisReply, TcpConn};
+use net_packet::Buffer;
+
+use crate::{RedisReply, TcpConn};
 
 const MAX_COMMAND_PART_NUM: usize = 64;
 

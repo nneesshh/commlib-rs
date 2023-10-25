@@ -6,7 +6,7 @@ use atomic::{Atomic, Ordering};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use message_io::net_packet::NetPacketGuard;
+use net_packet::NetPacketGuard;
 
 use crate::{ServiceNetRs, ServiceRs};
 

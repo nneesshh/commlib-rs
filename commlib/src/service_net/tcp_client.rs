@@ -14,7 +14,7 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
-use message_io::net_packet::NetPacketGuard;
+use net_packet::NetPacketGuard;
 
 use crate::{Clock, ServiceNetRs, ServiceRs};
 

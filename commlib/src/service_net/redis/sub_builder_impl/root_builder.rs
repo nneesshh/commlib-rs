@@ -1,5 +1,6 @@
+use net_packet::Buffer;
+
 use crate::service_net::redis::reply_builder::{BuildResult, ReplySubBuilder};
-use crate::Buffer;
 
 use super::{ArrayBuilder, BulkStringBuilder, ErrorBuilder, IntegerBuilder, SimpleStringBuilder};
 

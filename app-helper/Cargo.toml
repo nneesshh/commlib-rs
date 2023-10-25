@@ -26,3 +26,4 @@ roxmltree = { path="../roxmltree" }
 spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location"] }
 clap = { path="../clap" }
 commlib = { path="../commlib" }
+net_packet = { path="../net_packet" }

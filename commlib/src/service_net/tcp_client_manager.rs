@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use message_io::net_packet::NetPacketGuard;
+use net_packet::NetPacketGuard;
 
 use crate::service_net::tcp_conn_manager::on_connection_established;
 use crate::{PinkySwear, ServiceNetRs, ServiceRs};

@@ -3,7 +3,7 @@ use parking_lot::RwLock;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use message_io::net_packet::NetPacketGuard;
+use net_packet::NetPacketGuard;
 
 use crate::ServiceRs;
 

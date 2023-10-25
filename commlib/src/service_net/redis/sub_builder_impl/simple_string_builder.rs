@@ -1,5 +1,7 @@
+use net_packet::Buffer;
+
 use crate::service_net::redis::reply_builder::{BuildResult, ReplySubBuilder};
-use crate::{Buffer, RedisReply, RedisReplyType};
+use crate::{RedisReply, RedisReplyType};
 
 /// 构造简单字符串
 #[derive(Debug)]
