@@ -2,9 +2,8 @@
 name = "net_packet"
 version = "1.0.0"
 authors = ["nneesshh <neckshotk@gmail.com>"]
-description = "Thread safe net packet pool"
+description = "Thread safe memory pool for net io buffer"
 edition = "2021"
-readme = "README.md"
 
 [profile.dev]
 panic = "abort"
