@@ -1,7 +1,6 @@
 use bytes::{BufMut, BytesMut};
 
-#[allow(dead_code)]
-static CRLF: &[u8; 2] = b"\r\n";
+const CRLF: &[u8; 2] = b"\r\n";
 
 ///
 pub struct Buffer {
@@ -13,6 +12,9 @@ pub struct Buffer {
 impl Buffer {
     ///
     pub fn new(init_size: usize, reserved_prepend_size: usize) -> Self {
+        // at least hold more than 1 CRLF
+        assert!(init_size > reserved_prepend_size + CRLF.len());
+
         let mut b = Self {
             inner: BytesMut::with_capacity(init_size),
             read_index: reserved_prepend_size,
