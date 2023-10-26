@@ -1,6 +1,0 @@
-syntax = "proto2";
-package Proto;
-
-message S2C_EncryptToken {
-  optional bytes token = 1; // 64字节加密 token
-}
