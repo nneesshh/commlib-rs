@@ -56,7 +56,7 @@ pub fn take_packet(size: usize) -> NetPacketGuard {
     if size <= SMALL_PACKET_MAX_SIZE {
         take_small_packet()
     } else {
-        take_large_packet(size, b"")
+        take_large_packet(size)
     }
 }
 
@@ -72,10 +72,9 @@ pub fn take_small_packet() -> NetPacketGuard {
 /// 申请 large packet
 #[inline(always)]
 #[allow(dead_code)]
-pub fn take_large_packet(ensure_bytes: usize, init_slice: &[u8]) -> NetPacketGuard {
+pub fn take_large_packet(ensure_bytes: usize) -> NetPacketGuard {
     let mut pkt = G_PACKET_POOL_LARGE.get();
     pkt.set_size_type(PacketSizeType::Large);
     pkt.ensure_writable_bytes(std::cmp::max(LARGE_BUFFER_INITIAL_SIZE, ensure_bytes));
-    pkt.append_slice(init_slice);
     pkt
 }

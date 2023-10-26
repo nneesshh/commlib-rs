@@ -174,7 +174,8 @@ impl PacketBuilder {
                     let old_pkt_slice = old_pkt.consume();
 
                     // old pkt 数据转移到 new pkt，使用 new pkt 继续解析
-                    let mut new_pkt = take_large_packet(ensure_bytes, old_pkt_slice);
+                    let mut new_pkt = take_large_packet(ensure_bytes);
+                    new_pkt.append_slice(old_pkt_slice);
                     new_pkt.set_leading_field_size(leading_field_size);
                     self.pkt_opt = Some(new_pkt);
 

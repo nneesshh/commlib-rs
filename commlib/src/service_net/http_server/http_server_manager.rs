@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
-use net_packet::{take_small_packet, NetPacketGuard};
+use net_packet::{take_large_packet, NetPacketGuard};
 
 use crate::service_net::net_packet_encdec::PacketType;
 use crate::service_net::service_net_impl::create_http_server;
@@ -256,7 +256,8 @@ fn write_response<T: Borrow<[u8]>>(response: http::Response<T>, conn: &Arc<TcpCo
     let (parts, body) = response.into_parts();
     let body: &[u8] = body.borrow();
 
-    let mut resp_buffer = take_small_packet();
+    const HEADER_SIZE_MAX: usize = 4096; // should we use 4k header?
+    let mut resp_buffer = take_large_packet(HEADER_SIZE_MAX + body.len());
 
     resp_buffer.append_slice(
         std::format!(

@@ -184,7 +184,8 @@ impl RequestParser {
                     let old_pkt_slice = old_pkt.consume();
 
                     // old pkt 数据转移到 new pkt，使用 new pkt 继续解析
-                    let new_pkt = take_large_packet(ensure_bytes, old_pkt_slice);
+                    let mut new_pkt = take_large_packet(ensure_bytes);
+                    new_pkt.append_slice(old_pkt_slice);
                     self.pkt_opt = Some(new_pkt);
 
                     // 进入包体数据处理
