@@ -8,7 +8,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use commlib::{CmdId, ConnId, NetProxy, NodeState, PacketType, ServiceRs};
+use net_packet::CmdId;
+
+use commlib::{ConnId, NetProxy, NodeState, PacketType, ServiceRs};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
 use crate::proto;

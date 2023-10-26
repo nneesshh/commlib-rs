@@ -185,6 +185,7 @@ impl HttpClient {
 }
 
 ///
+#[inline(always)]
 pub fn http_client_update(srv_http_cli: &ServiceHttpClientRs) {
     // 运行于 srv_http_cli 线程
     assert!(srv_http_cli.is_in_service_thread());

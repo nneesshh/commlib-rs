@@ -14,6 +14,9 @@ use spdlog::get_current_tid;
 use super::G_EXIT_CV;
 use super::{Clock, PinkySwear, StopWatch, XmlReader};
 
+/* 0.3ms */
+const RECV_WAIT_TIME: std::time::Duration = std::time::Duration::from_micros(300);
+
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone, NoUninit)]
 #[repr(u8)]
 pub enum NodeState {
@@ -286,16 +289,15 @@ where
 
             // dispatch cb -- process async tasks
             let mut count = 4096_i32;
-            while count > 0 && !handle.rx.is_empty() {
-                match handle.rx.try_recv() {
+            while count > 0 {
+                match handle.rx.recv_timeout(RECV_WAIT_TIME) {
                     Ok(cb) => {
-                        /*log::info!("Dequeued item ID={}", handle.id);
-                        println!("Dequeued item ID={}", handle.id);*/
+                        //log::info!("Dequeued item ID={}", handle.id);
                         cb();
                         count -= 1;
                     }
-                    Err(err) => {
-                        log::error!("service receive cb error: {:?}", err);
+                    Err(_err) => {
+                        //log::error!("service receive cb error: {:?}", _err);
                     }
                 }
             }
@@ -309,10 +311,6 @@ where
                     handle.id,
                     cost
                 );*/
-            } else {
-                // sleep
-                const SLEEP_MS: std::time::Duration = std::time::Duration::from_millis(1);
-                std::thread::sleep(SLEEP_MS);
             }
         }
     }

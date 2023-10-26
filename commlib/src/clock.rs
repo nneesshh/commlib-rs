@@ -124,6 +124,7 @@ impl Clock {
     }
 
     /// 更新计时器 tick
+    #[inline(always)]
     pub fn update() {
         with_tls_mut!(G_CLOCK, clock, {
             //

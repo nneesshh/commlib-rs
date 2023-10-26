@@ -101,17 +101,16 @@ pub fn test_http_server(_conf: &Arc<Conf>) {
     let g_conf = G_CONF.load();
 
     let request_fn = |conn: Arc<TcpConn>,
-                      req: http::Request<Vec<u8>>,
+                      _req: http::Request<Vec<u8>>,
                       response_builder: http::response::Builder| {
-        let hd = conn.hd;
-        log::info!("[hd={}] request_fn", hd);
+        let _hd = conn.hd;
+        //log::info!("[hd={}] request_fn", hd);
 
-        let req_body_vec = req.body();
-        let req_body = unsafe { std::str::from_utf8_unchecked(req_body_vec.as_slice()) };
-        println!("req_body: {}", req_body);
-
+        /*
         let rand_pass = commlib::gen_password(10);
         let msg = std::format!("hello simple service, rand_pass={}", rand_pass);
+        */
+        let msg = "hello simple servic";
         let resp_body_vec = msg.as_bytes().to_vec();
 
         //

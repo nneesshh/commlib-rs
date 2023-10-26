@@ -4,8 +4,10 @@
 
 use std::sync::Arc;
 
+use net_packet::CmdId;
+
 use commlib::with_tls_mut;
-use commlib::{CmdId, ConnId, NetProxy, NodeState, PacketType, ServiceRs, TcpConn};
+use commlib::{ConnId, NetProxy, NodeState, PacketType, ServiceRs, TcpConn};
 use commlib::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 

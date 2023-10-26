@@ -32,6 +32,7 @@ spdlog-rs = { path="../spdlog-rs/spdlog", features = ["log", "multi-thread", "so
 thread_local = { path = "../thread_local-rs" }
 commlib = { path="../commlib" }
 app-helper = { path="../app-helper" }
+net_packet = { path="../net_packet-rs" }
 
 #[dev-dependencies]
 

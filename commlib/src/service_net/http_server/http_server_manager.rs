@@ -2,7 +2,6 @@ use atomic::Atomic;
 use parking_lot::RwLock;
 use std::borrow::Borrow;
 use std::cell::UnsafeCell;
-use std::fmt::Write;
 use std::fs::File;
 use std::io::prelude::*;
 use std::net::SocketAddr;
@@ -10,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
-use net_packet::NetPacketGuard;
+use net_packet::{take_small_packet, NetPacketGuard};
 
 use crate::service_net::net_packet_encdec::PacketType;
 use crate::service_net::service_net_impl::create_http_server;
@@ -61,13 +60,13 @@ where
 {
     log::info!("http_server_listen: {}:{}...", ip, port);
 
-    let conn_fn = |conn: Arc<TcpConn>| {
-        let hd = conn.hd;
-        log::info!("[hd={}] conn_fn", hd);
+    let conn_fn = |_conn: Arc<TcpConn>| {
+        //let hd = _conn.hd;
+        //log::info!("[hd={}] conn_fn", hd);
     };
 
-    let close_fn = |hd: ConnId| {
-        log::info!("[hd={}] close_fn", hd);
+    let close_fn = |_hd: ConnId| {
+        //log::info!("[hd={}] close_fn", _hd);
     };
 
     let (promise, pinky) = PinkySwear::<bool>::new();
@@ -135,6 +134,7 @@ pub fn notify_http_server_stop(srv_net: &ServiceNetRs) {
 }
 
 /// Make new http conn with callbacks from http server
+#[inline(always)]
 pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock_addr: SocketAddr) {
     // 运行于 srv_net 线程
     assert!(http_server.srv_net().is_in_service_thread());
@@ -222,10 +222,10 @@ fn get_request_parser<'a>(
         let request_fn = http_server.request_fn_clone();
 
         // debug only
-        log::info!(
+        /*log::info!(
             "tls_request_parser ptr={:p}",
             (tls_request_parser as *const Arc<ThreadLocal<UnsafeCell<RequestParser>>>)
-        );
+        );*/
 
         let parse_cb = move |conn: Arc<TcpConn>, req: http::Request<Vec<u8>>| {
             // 运行于 srv_net 线程
@@ -256,36 +256,52 @@ fn write_response<T: Borrow<[u8]>>(response: http::Response<T>, conn: &Arc<TcpCo
     let (parts, body) = response.into_parts();
     let body: &[u8] = body.borrow();
 
-    let mut text = format!(
-        "HTTP/1.1 {} {}\r\n",
-        parts.status.as_str(),
-        parts
-            .status
-            .canonical_reason()
-            .expect("Unsupported HTTP Status"),
+    let mut resp_buffer = take_small_packet();
+
+    resp_buffer.append_slice(
+        std::format!(
+            "HTTP/1.1 {} {}\r\n",
+            parts.status.as_str(),
+            parts
+                .status
+                .canonical_reason()
+                .expect("Unsupported HTTP Status"),
+        )
+        .as_bytes(),
     );
 
     if !parts.headers.contains_key(http::header::DATE) {
         let now = chrono::Utc::now();
-        let date = std::format!("{}", now.format("%a, %d %b %Y %H:%M:%S GMT"));
-        write!(text, "date: {}\r\n", date).unwrap();
+        resp_buffer.append_slice(
+            std::format!("{}\r\n", now.format("%a, %d %b %Y %H:%M:%S GMT")).as_bytes(),
+        );
     }
     if !parts.headers.contains_key(http::header::CONNECTION) {
-        write!(text, "connection: close\r\n").unwrap();
+        resp_buffer.append_slice(b"connection: close\r\n");
     }
     if !parts.headers.contains_key(http::header::CONTENT_LENGTH) {
-        write!(text, "content-length: {}\r\n", body.len()).unwrap();
+        resp_buffer.append_slice(std::format!("content-length: {}\r\n", body.len()).as_bytes());
     }
     for (k, v) in parts.headers.iter() {
-        write!(text, "{}: {}\r\n", k.as_str(), v.to_str().unwrap()).unwrap();
+        match v.to_str() {
+            Ok(s) => {
+                //
+                resp_buffer.append_slice(std::format!("{}: {}\r\n", k.as_str(), s).as_bytes());
+            }
+            Err(_) => {
+                //
+            }
+        }
     }
 
-    write!(text, "\r\n").unwrap();
+    resp_buffer.append_slice(b"\r\n"); // http EOF
+    resp_buffer.append_slice(body); // http content
 
-    conn.send(text.as_bytes());
-    conn.send(body);
+    conn.send(resp_buffer.consume());
+    conn.close();
 }
 
+#[inline(always)]
 fn process_http_request(
     req: http::Request<Vec<u8>>,
     request_fn: Arc<

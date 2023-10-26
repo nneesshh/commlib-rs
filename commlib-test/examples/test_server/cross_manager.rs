@@ -2,7 +2,9 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
-use commlib::{with_tls_mut, CmdId, NodeId, ServiceNetRs, ServiceRs, SpecialZone, ZoneId};
+use net_packet::CmdId;
+
+use commlib::{with_tls_mut, NodeId, ServiceNetRs, ServiceRs, SpecialZone, ZoneId};
 
 use app_helper::{Cluster, CrossStreamScheduler, RpcCall};
 

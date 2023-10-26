@@ -37,6 +37,7 @@ pub struct RequestParser {
 
 impl RequestParser {
     ///
+    #[inline(always)]
     pub fn new(parse_cb: Box<dyn Fn(Arc<TcpConn>, http::Request<Vec<u8>>) + Send + Sync>) -> Self {
         Self {
             state: RequestParserState::Null,
@@ -74,27 +75,27 @@ impl RequestParser {
     }
 
     /* input_buffer 中存放 input 数据，一次性处理完毕，Ok 返回 req, Err 返回错误信息 */
-    //#[inline(always)]
-    fn parse_once(&mut self, hd: ConnId, input_buffer: NetPacketGuard) -> RequestResult {
+    #[inline(always)]
+    fn parse_once(&mut self, _hd: ConnId, input_buffer: NetPacketGuard) -> RequestResult {
         //
         let input_len = input_buffer.buffer_raw_len();
         let mut consumed = 0_usize;
         let mut remain = input_len;
 
         // debug only
-        {
+        /* {
             let input = input_buffer.peek();
             let input_str = unsafe { std::str::from_utf8_unchecked(input) };
             log::info!(
                 "[hd={}] input: ({}){:?} -- {}",
-                hd,
+                _hd,
                 input.len(),
                 input,
                 input_str
             );
             let input_hex = hex::encode(input);
-            log::info!("[hd={}] input_hex: ({}) --> {}", hd, input.len(), input_hex);
-        }
+            log::info!("[hd={}] input_hex: ({}) --> {}", _hd, input.len(), input_hex);
+        }*/
 
         // input buffer 在循环中可能被 move，编译器会因为后续还有使用而报错，因此采用 option trick 封装一下
         let mut in_buf_opt = Some(input_buffer);
@@ -214,6 +215,7 @@ impl RequestParser {
     }
 }
 
+#[inline(always)]
 fn build_request(mut req: parsing::Request) -> Result<http::Request<Vec<u8>>, error::Error> {
     let mut http_req = http::Request::builder().method(req.method());
 

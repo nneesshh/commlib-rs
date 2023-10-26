@@ -87,6 +87,7 @@ impl HttpServer {
     }
 
     ///
+    #[inline(always)]
     pub fn on_ll_connect(self: &Arc<Self>, conn: Arc<TcpConn>) {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
@@ -96,13 +97,13 @@ impl HttpServer {
         assert!(old_connection_num < 100000000);
 
         //
-        log::info!(
+        /*log::info!(
             "[on_ll_connect][hd={}] connection_limit({}) connection_num: {} -> {}",
             conn.hd,
             self.connection_limit,
             old_connection_num,
             self.connection_num()
-        );
+        );*/
 
         // post 到指定 srv 工作线程中执行
         let conn_fn = self.conn_fn.clone();
@@ -112,6 +113,7 @@ impl HttpServer {
     }
 
     ///
+    #[inline(always)]
     pub fn on_ll_input(
         self: &Arc<Self>,
         conn: Arc<TcpConn>,
@@ -125,6 +127,7 @@ impl HttpServer {
     }
 
     ///
+    #[inline(always)]
     pub fn on_ll_disconnect(self: &Arc<Self>, hd: ConnId) {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
@@ -141,13 +144,13 @@ impl HttpServer {
         assert!(old_connection_num < 100000000);
 
         //
-        log::info!(
+        /*log::info!(
             "[on_ll_disconnect][hd={}] connection_limit({}) connection_num: {} -> {}",
             hd,
             self.connection_limit,
             old_connection_num,
             self.connection_num()
-        );
+        );*/
     }
 
     /// Create a http server and listen on [ip:port]
@@ -255,6 +258,7 @@ impl HttpServer {
     }
 
     ///
+    #[inline(always)]
     pub fn request_fn_clone(
         &self,
     ) -> Arc<
@@ -267,6 +271,7 @@ impl HttpServer {
     }
 
     ///
+    #[inline(always)]
     pub fn check_connection_limit(&self) -> bool {
         // check 连接数上限 (0 == self.connection_limit 代表无限制)
         if self.connection_limit > 0 {

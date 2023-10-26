@@ -4,10 +4,10 @@
 
 use std::sync::Arc;
 
+use net_packet::CmdId;
+
 use commlib::{connect_to_redis, redis, with_tls, with_tls_mut};
-use commlib::{
-    Blowfish, CmdId, ConnId, NetProxy, NodeState, PacketType, RedisClient, ServiceRs, TcpConn,
-};
+use commlib::{Blowfish, ConnId, NetProxy, NodeState, PacketType, RedisClient, ServiceRs, TcpConn};
 use commlib::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 

@@ -120,6 +120,7 @@ where
     }
 
     /// Update by ms
+    #[inline(always)]
     pub fn update(&mut self, d: std::time::Duration) {
         let expired_vec = self.collect_expired(d);
         let to_reschedule_vec = Self::trigger_expired(expired_vec);
@@ -127,6 +128,7 @@ where
     }
 
     // Update: collect expired
+    #[inline(always)]
     fn collect_expired(&mut self, d: std::time::Duration) -> Vec<Arc<TimerEntry<I, O, P>>> {
         let mut expired_vec: Vec<Arc<TimerEntry<I, O, P>>> = Vec::with_capacity(256);
 
@@ -165,6 +167,7 @@ where
     }
 
     // Update: trigger expired
+    #[inline(always)]
     fn trigger_expired(
         expired_vec: Vec<Arc<TimerEntry<I, O, P>>>,
     ) -> Vec<(Arc<TimerEntry<I, O, P>>, Duration)> {
@@ -178,6 +181,7 @@ where
     }
 
     // Update: reschedule
+    #[inline(always)]
     fn reschedule(&mut self, to_reschedule_vec: Vec<(Arc<TimerEntry<I, O, P>>, Duration)>) {
         for (new_e, delay) in to_reschedule_vec {
             match self.timer.insert_ref_with_delay(new_e, delay) {

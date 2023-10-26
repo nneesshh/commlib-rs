@@ -148,6 +148,7 @@ where
     }
 
     /// Insert a new timeout into the wheel to be returned after `delay` ticks
+    #[inline(always)]
     pub fn insert_with_delay(
         &mut self,
         e: EntryType,

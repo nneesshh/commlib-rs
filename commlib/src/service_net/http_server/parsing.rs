@@ -23,6 +23,7 @@ pub struct Header<'a> {
 }
 
 impl Request {
+    #[inline(always)]
     pub fn split_body(&mut self) -> Vec<u8> {
         let body = self.buffer.drain(self.body.0..).collect();
         let (start, _) = self.body;
@@ -30,14 +31,17 @@ impl Request {
         body
     }
 
+    #[inline(always)]
     pub fn method(&self) -> &str {
         self.method.as_str()
     }
 
+    #[inline(always)]
     pub fn path(&self) -> &str {
         ::std::str::from_utf8(&self.buffer[self.proto.path.0..self.proto.path.1]).unwrap()
     }
 
+    #[inline(always)]
     pub fn headers<'a>(&'a self) -> HeaderIter<'a> {
         HeaderIter(&self.buffer, self.headers.iter())
     }
@@ -48,6 +52,7 @@ pub struct HeaderIter<'a>(&'a [u8], ::std::slice::Iter<'a, HeaderIndices>);
 impl<'a> Iterator for HeaderIter<'a> {
     type Item = Header<'a>;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         use std::str;
         self.1.next().map(
@@ -81,6 +86,7 @@ fn slice_indices(buffer: &[u8], value: &[u8]) -> (usize, usize) {
     (start, start + value.len())
 }
 
+#[inline(always)]
 pub fn try_parse_request(buffer: &[u8]) -> Result<ParseResult, httparse::Error> {
     let result = {
         let mut header_buffer = [httparse::EMPTY_HEADER; 32];

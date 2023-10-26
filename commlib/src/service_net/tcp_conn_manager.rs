@@ -71,7 +71,7 @@ pub fn on_connection_closed(srv_net: &ServiceNetRs, hd: ConnId) {
         (*close_fn)(conn.hd);
     } else {
         //
-        log::error!("[on_connection_closed][hd={}] conn not found!!!", hd);
+        log::error!("[on_connection_closed][hd={}] conn already closed!!!", hd);
     }
 }
 
@@ -128,7 +128,7 @@ pub fn insert_connection(srv_net: &ServiceNetRs, hd: ConnId, conn: &Arc<TcpConn>
     assert!(srv_net.is_in_service_thread());
 
     with_tls_mut!(G_TCP_CONN_STORAGE, g, {
-        log::info!("[hd={}] ++++++++ insert_connection", hd);
+        //log::info!("[hd={}] ++++++++ insert_connection", hd);
         g.conn_table.insert(hd, conn.clone());
     });
 }
@@ -139,7 +139,7 @@ fn remove_connection(srv_net: &ServiceNetRs, hd: ConnId) -> Option<Arc<TcpConn>>
     assert!(srv_net.is_in_service_thread());
 
     with_tls_mut!(G_TCP_CONN_STORAGE, g, {
-        log::info!("[hd={}] -------- remove_connection", hd);
+        //log::info!("[hd={}] -------- remove_connection", hd);
         g.conn_table.remove(&hd)
     })
 }

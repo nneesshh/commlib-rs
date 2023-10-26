@@ -45,7 +45,14 @@ impl TcpConn {
     pub fn close(&self) {
         let hd = self.hd;
 
-        log::info!("[hd={}] low level close", hd);
+        // already closed?
+        if self.is_closed() {
+            log::error!("[hd={}] already closed!!!", hd);
+            return;
+        }
+
+        //
+        //log::info!("[hd={}] low level close", hd);
         self.netctrl.close(hd);
 
         let srv_net2 = self.srv_net.clone();
@@ -61,8 +68,6 @@ impl TcpConn {
     #[inline(always)]
     pub fn send(&self, data: &[u8]) {
         let hd = self.hd;
-
-        log::debug!("[hd={}] send data ...", hd);
         self.netctrl.send(hd, self.sock_addr, data);
     }
 

@@ -60,6 +60,7 @@ pub use service_net::{
     ClientStatus, ConnId, NetProxy, ServerStatus, ServiceNetRs, TcpClient, TcpConn, TcpServer,
 };
 pub use service_net::{RedisClient, RedisReply, RedisReplyType};
+pub use service_net::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 
 ///
 mod service_http_client;

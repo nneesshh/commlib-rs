@@ -11,9 +11,11 @@
 
 use std::sync::Arc;
 
+use net_packet::NetPacketGuard;
+
 use commlib::with_tls;
 use commlib::{connect_to_tcp_server, G_SERVICE_NET};
-use commlib::{ConnId, NetPacketGuard, ServiceRs, TcpConn};
+use commlib::{ConnId, ServiceRs, TcpConn};
 
 use app_helper::{conf::Conf, Startup};
 

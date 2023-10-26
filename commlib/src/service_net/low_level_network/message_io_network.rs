@@ -192,13 +192,13 @@ impl MessageIoNetwork {
                     let raw_id = endpoint.resource_id().raw();
                     let hd = ConnId::from(raw_id);
                     let listener_id = ListenerId::from(id.raw());
-                    log::info!(
+                    /*log::info!(
                         "[hd={}] {} endpoint {} accepted, listener_id={}",
                         hd,
                         raw_id,
                         endpoint,
                         listener_id
-                    );
+                    );*/
 
                     //
                     (on_accept)(&srv_net, listener_id, hd, endpoint.addr().into());
