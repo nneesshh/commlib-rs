@@ -166,7 +166,6 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
     //
     let netctrl = cli.netctrl().clone();
     let srv_net = cli.srv_net().clone();
-    let srv = cli.srv().clone();
 
     let conn = Arc::new(TcpConn {
         //
@@ -174,14 +173,13 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
 
         //
         sock_addr,
-        netctrl: netctrl.clone(),
 
         //
         packet_type,
         closed: Atomic::new(false),
 
         //
-        srv: srv.clone(),
+        netctrl: netctrl.clone(),
         srv_net: srv_net.clone(),
 
         //

@@ -118,11 +118,6 @@ pub fn test_http_server(_conf: &Arc<Conf>) {
         Ok(response)
     };
 
-    http_server_listen(
-        srv,
-        "127.0.0.1",
-        g_conf.http_port,
-        request_fn,
-        &G_SERVICE_NET,
-    );
+    let addr = std::format!("127.0.0.1:{}", g_conf.http_port);
+    http_server_listen(srv, addr.as_str(), request_fn, &G_SERVICE_NET);
 }

@@ -46,8 +46,7 @@ impl HttpServerStorage {
 /// Listen on [ip:port] over service net
 pub fn http_server_listen<T, F>(
     srv: &Arc<T>,
-    ip: &str,
-    port: u16,
+    addr: &str,
     request_fn: F,
     srv_net: &Arc<ServiceNetRs>,
 ) -> bool
@@ -58,7 +57,7 @@ where
         + Sync
         + 'static,
 {
-    log::info!("http_server_listen: {}:{}...", ip, port);
+    log::info!("http_server_listen: {}...", addr);
 
     let conn_fn = |_conn: Arc<TcpConn>| {
         //let hd = _conn.hd;
@@ -74,13 +73,13 @@ where
     // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let srv2 = srv.clone();
-    let addr = std::format!("{}:{}", ip, port);
+    let addr2 = addr.to_owned();
 
     let func = move || {
         //
         let http_server = Arc::new(create_http_server(
             &srv2,
-            addr.as_str(),
+            addr2.as_str(),
             conn_fn,
             request_fn,
             close_fn,
@@ -178,7 +177,6 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
     //
     let netctrl = http_server.netctrl().clone();
     let srv_net = http_server.srv_net().clone();
-    let srv = http_server.srv().clone();
 
     let conn = Arc::new(TcpConn {
         //
@@ -192,7 +190,6 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
         closed: Atomic::new(false),
 
         //
-        srv: srv.clone(),
         netctrl: netctrl.clone(),
         srv_net: srv_net.clone(),
 

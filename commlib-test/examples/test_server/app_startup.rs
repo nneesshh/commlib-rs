@@ -126,10 +126,10 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
 
     //
     with_tls!(G_TEST_CONF, cfg, {
+        let addr = std::format!("{}:{}", cfg.my.addr.as_str(), cfg.my.port);
         tcp_server_listen(
             srv,
-            cfg.my.addr.as_str(),
-            cfg.my.port,
+            addr.as_str(),
             conn_fn,
             pkt_fn,
             close_fn,

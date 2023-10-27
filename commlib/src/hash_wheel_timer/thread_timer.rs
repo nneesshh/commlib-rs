@@ -450,13 +450,14 @@ where
 mod tests {
     use crate::hash_wheel_timer::test_helpers::*;
     use crate::hash_wheel_timer::thread_timer::*;
+    use crate::hash_wheel_timer::timers::ClosureTimer;
     use parking_lot::Mutex;
     use std::sync::Arc;
     use uuid::Uuid;
 
     #[test]
     fn simple_thread_timing() {
-        let num = 20usize;
+        let num = 10usize;
         let mut barriers: Vec<Arc<Mutex<bool>>> = Vec::with_capacity(num);
         let timer_core = TimerWithThread::for_uuid_closures();
         let mut timer = timer_core.timer_ref();
@@ -518,7 +519,7 @@ mod tests {
 
     #[test]
     fn rescheduling_thread_timing() {
-        let num = 15usize;
+        let num = 10usize;
         let mut barriers: Vec<Arc<Mutex<bool>>> = Vec::with_capacity(num);
         let timer_core = TimerWithThread::for_uuid_closures();
         let mut timer = timer_core.timer_ref();

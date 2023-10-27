@@ -36,8 +36,7 @@ impl TcpServerStorage {
 /// Listen on [ip:port] over service net
 pub fn tcp_server_listen<T, C, P, S>(
     srv: &Arc<T>,
-    ip: &str,
-    port: u16,
+    addr: &str,
     conn_fn: C,
     pkt_fn: P,
     close_fn: S,
@@ -50,20 +49,20 @@ where
     P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
     S: Fn(ConnId) + Send + Sync + 'static,
 {
-    log::info!("tcp_server_listen: {}:{}...", ip, port);
+    log::info!("tcp_server_listen: {}...", addr);
 
     let (promise, pinky) = PinkySwear::<bool>::new();
 
     // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let srv2 = srv.clone();
-    let addr = std::format!("{}:{}", ip, port);
+    let addr2 = addr.to_owned();
 
     let func = move || {
         //
         let tcp_server = Arc::new(create_tcp_server(
             &srv2,
-            addr.as_str(),
+            addr2.as_str(),
             conn_fn,
             pkt_fn,
             close_fn,
@@ -161,7 +160,6 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     //
     let netctrl = tcp_server.netctrl().clone();
     let srv_net = tcp_server.srv_net().clone();
-    let srv = tcp_server.srv().clone();
 
     let conn = Arc::new(TcpConn {
         //
@@ -175,7 +173,6 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
         closed: Atomic::new(false),
 
         //
-        srv: srv.clone(),
         netctrl: netctrl.clone(),
         srv_net: srv_net.clone(),
 

@@ -28,7 +28,7 @@
 //! #[cfg(target_family = "windows")]
 //! use winapi::um::ws2tcpip::socklen_t;
 //!
-//! use commlib::service_net::OsSocketAddr;
+//! use commlib::OsSocketAddr;
 //!
 //! ////////// unix examples //////////
 //!
