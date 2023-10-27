@@ -25,7 +25,6 @@ pub struct TcpConn {
     pub closed: Atomic<bool>,
 
     //
-    pub srv: Arc<dyn ServiceRs>,
     pub netctrl: Arc<MessageIoNetwork>,
     pub srv_net: Arc<ServiceNetRs>,
 

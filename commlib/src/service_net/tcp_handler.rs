@@ -96,7 +96,6 @@ fn on_accept_cb(
     // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let func = move || {
-        //
         on_listener_accept(srv_net2.as_ref(), listener_id, hd, sock_addr);
     };
     srv_net.run_in_service(Box::new(func));

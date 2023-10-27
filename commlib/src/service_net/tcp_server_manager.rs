@@ -161,7 +161,6 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     //
     let netctrl = tcp_server.netctrl().clone();
     let srv_net = tcp_server.srv_net().clone();
-    let srv = tcp_server.srv().clone();
 
     let conn = Arc::new(TcpConn {
         //
@@ -175,7 +174,6 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
         closed: Atomic::new(false),
 
         //
-        srv: srv.clone(),
         netctrl: netctrl.clone(),
         srv_net: srv_net.clone(),
 
