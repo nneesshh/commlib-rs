@@ -70,6 +70,3 @@
 [submodule "tungstenite-rs"]
 	path = tungstenite-rs
 	url = https://github.com/nneesshh/tungstenite-rs
-[submodule "rust-threadpool"]
-	path = rust-threadpool
-	url = https://github.com/nneesshh/rust-threadpool
