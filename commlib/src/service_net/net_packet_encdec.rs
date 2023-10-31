@@ -3,7 +3,7 @@ use std::collections::LinkedList;
 
 use net_packet::NetPacketGuard;
 
-use crate::rand_between_exclusive_i8;
+use crate::utils::rand_between_exclusive_i8;
 
 use super::ConnId;
 

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use net_packet::take_packet;
 use net_packet::{CmdId, NetPacketGuard};
 
-use crate::Base64;
+use crate::utils::Base64;
 
 use super::net_packet_encdec::EncryptData;
 use super::net_packet_encdec::PacketType;

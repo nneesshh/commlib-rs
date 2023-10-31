@@ -21,3 +21,7 @@ pub use self::rand::*;
 ///
 mod string;
 pub use self::string::*;
+
+///
+mod thread_pool;
+pub use thread_pool::{Builder as ThreadPoolBuilder, ThreadPool};
