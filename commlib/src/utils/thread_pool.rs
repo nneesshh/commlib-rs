@@ -904,12 +904,12 @@ mod test {
         if 1 == pool.active_count() {
             assert_eq!(
             debug,
-            "ThreadPool { name: None, queued_count: 0, total_count: 1, active_count: 1, max_count: 4 }"
+            "ThreadPool { name: None, queued_count: 0, active_count: 1, max_count: 4 }"
         );
         } else {
             assert_eq!(
             debug,
-            "ThreadPool { name: None, queued_count: 0, total_count: 1, active_count: 0, max_count: 4 }"
+            "ThreadPool { name: None, queued_count: 0, active_count: 0, max_count: 4 }"
         );
         }
     }
