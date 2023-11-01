@@ -289,6 +289,7 @@ impl Builder {
             empty_trigger: Mutex::new(()),
             join_generation: AtomicUsize::new(0),
             queued_count: AtomicUsize::new(0),
+            total_count: AtomicUsize::new(0),
             active_count: AtomicUsize::new(0),
             max_thread_count: AtomicUsize::new(num_threads),
             panic_count: AtomicUsize::new(0),
@@ -318,6 +319,7 @@ struct ThreadPoolSharedData {
     empty_condvar: Condvar,
     join_generation: AtomicUsize,
     queued_count: AtomicUsize,
+    total_count: AtomicUsize,
     active_count: AtomicUsize,
     max_thread_count: AtomicUsize,
     panic_count: AtomicUsize,
@@ -328,6 +330,7 @@ struct ThreadPoolSharedData {
 }
 
 impl ThreadPoolSharedData {
+    #[inline(always)]
     fn has_work(&self) -> bool {
         self.queued_count.load(Ordering::SeqCst) > 0 || self.active_count.load(Ordering::SeqCst) > 0
     }
@@ -428,6 +431,7 @@ impl ThreadPool {
         assert!(num_job_tx >= 1);
 
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
+        self.shared_data.total_count.fetch_add(1, Ordering::Relaxed);
 
         let pos = pos % num_job_tx;
         let job_tx = &self.job_tx_vec[pos];
@@ -467,8 +471,15 @@ impl ThreadPool {
     /// sleep(Duration::from_secs(1)); // wait for threads to start
     /// assert_eq!(8, pool.queued_count());
     /// ```
+    #[inline(always)]
     pub fn queued_count(&self) -> usize {
         self.shared_data.queued_count.load(Ordering::Relaxed)
+    }
+
+    /// Returns the number of total jobs already executed in the pool.
+    #[inline(always)]
+    pub fn total_count(&self) -> usize {
+        self.shared_data.total_count.load(Ordering::Relaxed)
     }
 
     /// Returns the number of currently active threads.
@@ -490,6 +501,7 @@ impl ThreadPool {
     /// sleep(Duration::from_secs(1)); // wait for threads to start
     /// assert_eq!(4, pool.active_count());
     /// ```
+    #[inline(always)]
     pub fn active_count(&self) -> usize {
         self.shared_data.active_count.load(Ordering::SeqCst)
     }
@@ -504,6 +516,7 @@ impl ThreadPool {
     /// let mut pool = ThreadPool::new(4);
     /// assert_eq!(4, pool.max_count());
     /// ```
+    #[inline(always)]
     pub fn max_count(&self) -> usize {
         self.shared_data.max_thread_count.load(Ordering::Relaxed)
     }
@@ -528,6 +541,7 @@ impl ThreadPool {
     ///
     /// assert_eq!(5, pool.panic_count());
     /// ```
+    #[inline(always)]
     pub fn panic_count(&self) -> usize {
         self.shared_data.panic_count.load(Ordering::Relaxed)
     }
@@ -647,6 +661,7 @@ impl fmt::Debug for ThreadPool {
         f.debug_struct("ThreadPool")
             .field("name", &self.shared_data.name)
             .field("queued_count", &self.queued_count())
+            .field("total_count", &self.total_count())
             .field("active_count", &self.active_count())
             .field("max_count", &self.max_count())
             .finish()
@@ -887,14 +902,14 @@ mod test {
         let debug = format!("{:?}", pool);
         assert_eq!(
             debug,
-            "ThreadPool { name: None, queued_count: 0, active_count: 0, max_count: 4 }"
+            "ThreadPool { name: None, queued_count: 0, total_count: 0, active_count: 0, max_count: 4 }"
         );
 
         let pool = ThreadPool::with_name("hello".into(), 4);
         let debug = format!("{:?}", pool);
         assert_eq!(
             debug,
-            "ThreadPool { name: Some(\"hello\"), queued_count: 0, active_count: 0, max_count: 4 }"
+            "ThreadPool { name: Some(\"hello\"), queued_count: 0, total_count: 0, active_count: 0, max_count: 4 }"
         );
 
         let pool = ThreadPool::new(4);
