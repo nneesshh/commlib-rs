@@ -1,7 +1,7 @@
 //! Commlib: Conf
 
-use commlib::{split_string_to_set, string_to_value};
-use commlib::{Base64, GroupId, NodeId, XmlReader, ZoneId};
+use commlib::utils::{split_string_to_set, string_to_value, Base64};
+use commlib::{GroupId, NodeId, XmlReader, ZoneId};
 
 pub const TEST_NODE: NodeId = 999;
 

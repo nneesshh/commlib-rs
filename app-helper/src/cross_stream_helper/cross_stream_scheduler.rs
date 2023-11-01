@@ -4,7 +4,8 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use commlib::{connect_to_redis, redis, string_to_value, NodeId, SpecialZone};
+use commlib::utils::string_to_value;
+use commlib::{connect_to_redis, redis, NodeId, SpecialZone};
 use commlib::{RedisClient, RedisReply, RedisReplyType, ServiceNetRs, ServiceRs, ZoneId};
 
 use crate::cross_stream_keys::{

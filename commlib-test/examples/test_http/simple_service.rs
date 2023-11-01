@@ -92,7 +92,7 @@ pub fn test_http_client(srv: &Arc<SimpleService>) {
 ///
 pub fn test_http_server(_conf: &Arc<Conf>) {
     // pre-startup, main manager init
-    commlib::ossl_init();
+    commlib::utils::ossl_init();
 
     //
     let srv: &Arc<SimpleService> = &G_SIMPLE_SERVICE;

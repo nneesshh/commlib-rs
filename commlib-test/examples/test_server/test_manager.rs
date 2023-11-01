@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use net_packet::CmdId;
 
+use commlib::utils::Blowfish;
 use commlib::{connect_to_redis, redis, with_tls, with_tls_mut};
-use commlib::{Blowfish, ConnId, NetProxy, NodeState, PacketType, RedisClient, ServiceRs, TcpConn};
+use commlib::{ConnId, NetProxy, NodeState, PacketType, RedisClient, ServiceRs, TcpConn};
 use commlib::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
@@ -147,7 +148,7 @@ fn send_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn) {
 
     // 消息包加密 key
     let mut code_buf = vec![0_u8; ENCRYPT_KEY_LEN];
-    commlib::gen_random_code(&mut code_buf);
+    commlib::utils::gen_random_code(&mut code_buf);
 
     //
     let g_conf = G_CONF.load();
