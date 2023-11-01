@@ -289,11 +289,12 @@ impl Builder {
             empty_trigger: Mutex::new(()),
             join_generation: AtomicUsize::new(0),
             queued_count: AtomicUsize::new(0),
-            total_count: AtomicUsize::new(0),
             active_count: AtomicUsize::new(0),
             max_thread_count: AtomicUsize::new(num_threads),
             panic_count: AtomicUsize::new(0),
             stack_size: self.thread_stack_size,
+
+            round_robin_id: AtomicUsize::new(0),
         });
 
         // Threadpool threads
@@ -317,11 +318,13 @@ struct ThreadPoolSharedData {
     empty_condvar: Condvar,
     join_generation: AtomicUsize,
     queued_count: AtomicUsize,
-    total_count: AtomicUsize,
     active_count: AtomicUsize,
     max_thread_count: AtomicUsize,
     panic_count: AtomicUsize,
     stack_size: Option<usize>,
+
+    //
+    round_robin_id: AtomicUsize,
 }
 
 impl ThreadPoolSharedData {
@@ -424,7 +427,6 @@ impl ThreadPool {
         let num_job_tx = self.job_tx_vec.len();
         assert!(num_job_tx >= 1);
 
-        self.shared_data.total_count.fetch_add(1, Ordering::SeqCst);
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
 
         let pos = pos % num_job_tx;
@@ -432,6 +434,18 @@ impl ThreadPool {
         job_tx
             .send(Box::new(job))
             .expect("ThreadPool::execute unable to send job into queue.");
+    }
+
+    /// Executes the function `job` on a thread in the pool with round-robin scheduling.
+    pub fn execute_rr<F>(&self, job: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let pos = self
+            .shared_data
+            .round_robin_id
+            .fetch_add(1, Ordering::SeqCst);
+        self.execute(pos, job);
     }
 
     /// Returns the number of jobs waiting to executed in the pool.
@@ -455,11 +469,6 @@ impl ThreadPool {
     /// ```
     pub fn queued_count(&self) -> usize {
         self.shared_data.queued_count.load(Ordering::Relaxed)
-    }
-
-    /// Returns the number of total jobs already executed in the pool.
-    pub fn total_count(&self) -> usize {
-        self.shared_data.total_count.load(Ordering::Relaxed)
     }
 
     /// Returns the number of currently active threads.
@@ -638,7 +647,6 @@ impl fmt::Debug for ThreadPool {
         f.debug_struct("ThreadPool")
             .field("name", &self.shared_data.name)
             .field("queued_count", &self.queued_count())
-            .field("total_count", &self.total_count())
             .field("active_count", &self.active_count())
             .field("max_count", &self.max_count())
             .finish()
@@ -879,14 +887,14 @@ mod test {
         let debug = format!("{:?}", pool);
         assert_eq!(
             debug,
-            "ThreadPool { name: None, queued_count: 0, total_count: 0, active_count: 0, max_count: 4 }"
+            "ThreadPool { name: None, queued_count: 0, active_count: 0, max_count: 4 }"
         );
 
         let pool = ThreadPool::with_name("hello".into(), 4);
         let debug = format!("{:?}", pool);
         assert_eq!(
             debug,
-            "ThreadPool { name: Some(\"hello\"), queued_count: 0, total_count: 0, active_count: 0, max_count: 4 }"
+            "ThreadPool { name: Some(\"hello\"), queued_count: 0, active_count: 0, max_count: 4 }"
         );
 
         let pool = ThreadPool::new(4);

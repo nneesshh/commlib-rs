@@ -2,7 +2,8 @@ use std::cell::UnsafeCell;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{ServiceNetRs, ServiceRs, G_SERVICE_DNS_RESOLVER};
+use super::dns_resolve;
+use crate::{ServiceNetRs, ServiceRs};
 
 use super::low_level_network::MessageIoNetwork;
 use super::ConnId;
@@ -80,7 +81,7 @@ impl Connector {
         };
 
         // DNS resolve
-        G_SERVICE_DNS_RESOLVER.resolve(self, raddr, &self.srv_net)
+        dns_resolve(self, raddr, &self.srv_net)
     }
 }
 

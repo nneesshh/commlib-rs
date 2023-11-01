@@ -43,10 +43,6 @@ mod service_signal;
 pub use service_signal::ServiceSignalRs;
 
 ///
-mod service_dns_resolver;
-pub use service_dns_resolver::ServiceDnsResolverRs;
-
-///
 mod service_net;
 pub use service_net::http_parsing;
 pub use service_net::{

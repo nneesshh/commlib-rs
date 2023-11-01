@@ -69,6 +69,10 @@ mod os_socket_addr;
 pub use os_socket_addr::OsSocketAddr;
 
 ///
+mod dns_resolver;
+pub use dns_resolver::dns_resolve;
+
+///
 mod low_level_network;
 pub use low_level_network::MessageIoNetwork;
 
