@@ -423,6 +423,7 @@ impl ThreadPool {
     /// pool.execute(0, || println!("bar"));
     /// pool.join();
     /// ```
+    #[inline(always)]
     pub fn execute<F>(&self, pos: usize, job: F)
     where
         F: FnOnce() + Send + 'static,
@@ -441,6 +442,7 @@ impl ThreadPool {
     }
 
     /// Executes the function `job` on a thread in the pool with round-robin scheduling.
+    #[inline(always)]
     pub fn execute_rr<F>(&self, job: F)
     where
         F: FnOnce() + Send + 'static,
@@ -684,6 +686,7 @@ impl PartialEq for ThreadPool {
     /// assert!(a != b);
     /// assert!(b != a);
     /// ```
+    #[inline(always)]
     fn eq(&self, other: &ThreadPool) -> bool {
         let a: &ThreadPoolSharedData = &*self.shared_data;
         let b: &ThreadPoolSharedData = &*other.shared_data;
