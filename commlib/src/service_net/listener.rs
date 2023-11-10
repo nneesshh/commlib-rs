@@ -61,11 +61,19 @@ impl Listener {
     }
 
     ///
-    pub fn start(self: &Arc<Self>, addr: &str) {
+    pub fn listen_with_tcp(self: &Arc<Self>, addr: &str) {
         // 运行于 srv_net 线程
         assert!(self.srv_net.is_in_service_thread());
 
-        self.netctrl.listen_with_listener(self, addr, &self.srv_net);
+        self.netctrl.listen_with_tcp(self, addr, &self.srv_net);
+    }
+
+    ///
+    pub fn listen_with_ssl(self: &Arc<Self>, addr: &str) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net.is_in_service_thread());
+
+        self.netctrl.listen_with_ssl(self, addr, &self.srv_net);
     }
 }
 

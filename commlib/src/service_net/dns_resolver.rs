@@ -16,6 +16,7 @@ pub fn dns_resolve(connector: &Arc<Connector>, raddr: &str, srv_net: &Arc<Servic
     let raddr2 = raddr.to_owned();
     let srv_net2 = srv_net.clone();
 
+    // post 到线程池
     G_THREAD_POOL.execute_rr(move || {
         //
         do_dns_resolve(&connector2, raddr2.as_str(), &srv_net2);

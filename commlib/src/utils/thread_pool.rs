@@ -101,14 +101,20 @@ type Thunk<'a> = Box<dyn FnBox + Send + 'a>;
 struct Sentinel {
     shared_data: Arc<ThreadPoolSharedData>,
     rx: Receiver<Thunk<'static>>,
+    rx_index: usize,
     active: bool,
 }
 
 impl Sentinel {
-    fn new(shared_data: &Arc<ThreadPoolSharedData>, rx: Receiver<Thunk<'static>>) -> Sentinel {
+    fn new(
+        shared_data: &Arc<ThreadPoolSharedData>,
+        rx: Receiver<Thunk<'static>>,
+        rx_index: usize,
+    ) -> Sentinel {
         Sentinel {
             shared_data: shared_data.clone(),
             rx,
+            rx_index,
             active: true,
         }
     }
@@ -127,7 +133,7 @@ impl Drop for Sentinel {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
             self.shared_data.no_work_notify_all();
-            spawn_in_pool(self.shared_data.clone(), self.rx.clone())
+            spawn_in_pool(self.shared_data.clone(), self.rx.clone(), self.rx_index);
         }
     }
 }
@@ -300,9 +306,9 @@ impl Builder {
 
         // Threadpool threads
         let mut jobs = Vec::new();
-        for _ in 0..num_threads {
+        for i in 0..num_threads {
             let (tx, rx) = channel::unbounded::<Thunk<'static>>();
-            spawn_in_pool(shared_data.clone(), rx);
+            spawn_in_pool(shared_data.clone(), rx, i + 1);
             jobs.push(tx);
         }
 
@@ -697,18 +703,27 @@ impl PartialEq for ThreadPool {
 }
 impl Eq for ThreadPool {}
 
-fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>, rx: Receiver<Thunk<'static>>) {
+fn spawn_in_pool(
+    shared_data: Arc<ThreadPoolSharedData>,
+    rx: Receiver<Thunk<'static>>,
+    rx_index: usize,
+) {
     let mut builder = thread::Builder::new();
     if let Some(ref name) = shared_data.name {
         builder = builder.name(name.clone());
+        log::info!("[spawn_in_pool]({}) name: {}", rx_index, name);
     }
     if let Some(ref stack_size) = shared_data.stack_size {
         builder = builder.stack_size(stack_size.to_owned());
+        log::info!("[spawn_in_pool]({}) stack_size: {}", rx_index, stack_size);
     }
+
+    log::info!("[spawn_in_pool]({}) start ...", rx_index);
+
     builder
         .spawn(move || {
             // Will spawn a new thread on panic unless it is cancelled.
-            let sentinel = Sentinel::new(&shared_data, rx.clone());
+            let sentinel = Sentinel::new(&shared_data, rx.clone(), rx_index);
 
             loop {
                 // Shutdown this thread if the pool has become smaller

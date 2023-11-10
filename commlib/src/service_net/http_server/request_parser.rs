@@ -2,8 +2,6 @@ use std::sync::Arc;
 
 use net_packet::{take_large_packet, NetPacketGuard};
 
-use crate::ServiceRs;
-
 use crate::{ConnId, TcpConn};
 
 use super::error;
@@ -49,9 +47,6 @@ impl RequestParser {
     /// 解析数据包，触发数据包回调函数
     #[inline(always)]
     pub fn parse(&mut self, conn: &Arc<TcpConn>, input_buffer: NetPacketGuard) {
-        // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
-
         //
         match self.parse_once(conn.hd, input_buffer) {
             RequestResult::Suspend => {

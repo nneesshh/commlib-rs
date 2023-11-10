@@ -199,7 +199,7 @@ impl TcpServer {
             &self.netctrl,
             &self.srv_net,
         ));
-        listener.start(self.addr.as_str());
+        listener.listen_with_tcp(self.addr.as_str());
     }
 
     ///

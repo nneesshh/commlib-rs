@@ -298,6 +298,7 @@ where
                     }
                     Err(_err) => {
                         //log::error!("service receive cb error: {:?}", _err);
+                        break;
                     }
                 }
             }

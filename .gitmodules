@@ -73,3 +73,21 @@
 [submodule "shared_memory"]
 	path = shared_memory
 	url = https://github.com/nneesshh/shared_memory
+[submodule "mio"]
+	path = mio
+	url = https://github.com/nneesshh/mio
+[submodule "ring"]
+	path = ring
+	url = https://github.com/nneesshh/ring
+[submodule "rustls"]
+	path = rustls
+	url = https://github.com/nneesshh/rustls
+[submodule "webpki"]
+	path = webpki
+	url = https://github.com/nneesshh/webpki
+[submodule "webpki-roots"]
+	path = webpki-roots
+	url = https://github.com/nneesshh/webpki-roots
+[submodule "rustls-native-certs"]
+	path = rustls-native-certs
+	url = https://github.com/nneesshh/rustls-native-certs

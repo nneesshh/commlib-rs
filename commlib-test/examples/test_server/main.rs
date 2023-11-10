@@ -5,6 +5,8 @@ pub mod proto {
     include!("../../protos/out/proto.rs");
 }
 
+//mod simple_cluster;
+
 mod cross_manager;
 
 mod test_conf;

@@ -125,8 +125,7 @@ where
 
 /// Create http server: netctrl is private
 #[allow(dead_code)]
-pub fn create_http_server<T, C, R, S>(
-    srv: &Arc<T>,
+pub fn create_http_server<C, R, S>(
     addr: &str,
     conn_fn: C,
     request_fn: R,
@@ -135,7 +134,6 @@ pub fn create_http_server<T, C, R, S>(
     srv_net: &Arc<ServiceNetRs>,
 ) -> HttpServer
 where
-    T: ServiceRs + 'static,
     C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
     R: Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
         + Send
@@ -144,7 +142,6 @@ where
     S: Fn(ConnId) + Send + Sync + 'static,
 {
     let http_server = HttpServer::new(
-        &srv,
         addr,
         conn_fn,
         request_fn,

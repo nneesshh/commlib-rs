@@ -38,7 +38,7 @@ impl MessageIoNetwork {
     }
 
     ///
-    pub fn listen_with_listener(
+    pub fn listen_with_tcp(
         &self,
         listener: &Arc<Listener>,
         addr: &str,
@@ -46,6 +46,35 @@ impl MessageIoNetwork {
     ) -> bool {
         // listen at tcp addr
         let ret = self.node_handler.network().listen(Transport::Tcp, addr);
+
+        //
+        match ret {
+            Ok((id, sock_addr)) => {
+                let listener_id = ListenerId::from(id.raw());
+                insert_listener(srv_net, listener_id, listener);
+
+                //
+                let on_listen = self.tcp_handler.on_listen;
+                (on_listen)(srv_net, listener_id, sock_addr.into());
+                true
+            }
+
+            Err(err) => {
+                log::error!("network listening at {} failed!!! error {:?}!!!", addr, err);
+                false
+            }
+        }
+    }
+
+    ///
+    pub fn listen_with_ssl(
+        &self,
+        listener: &Arc<Listener>,
+        addr: &str,
+        srv_net: &Arc<ServiceNetRs>,
+    ) -> bool {
+        // listen at tcp addr
+        let ret = self.node_handler.network().listen(Transport::Ssl, addr);
 
         //
         match ret {

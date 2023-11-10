@@ -95,9 +95,6 @@ pub fn test_http_server(_conf: &Arc<Conf>) {
     commlib::utils::ossl_init();
 
     //
-    let srv: &Arc<SimpleService> = &G_SIMPLE_SERVICE;
-
-    //
     let g_conf = G_CONF.load();
 
     let request_fn = |conn: Arc<TcpConn>,
@@ -110,8 +107,64 @@ pub fn test_http_server(_conf: &Arc<Conf>) {
         let rand_pass = commlib::gen_password(10);
         let msg = std::format!("hello simple service, rand_pass={}", rand_pass);
         */
-        let msg = "hello simple servic";
-        let resp_body_vec = msg.as_bytes().to_vec();
+        //let msg = "hello simple servic";
+        let msg = json!({
+            "msg": "ok",
+            "ec": 0,
+            "data": {
+                "configs": [
+                    {
+                        "groups": "1001,1009|1016,1021|1024,1025,1026|1027,1028,1029,1030,1031|1032,1033,1034|1035,1036,1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 1
+                    },
+                    {
+                        "groups": "1001,1009|1016,1021,1024|1025,1026,1027|1028,1029,1030|1031,1032,1033|1034,1035,1036|1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 2
+                    },
+                    {
+                        "groups": "1001,1009|1016,1021|1024,1025,1026|1027,1028,1029,1030,1031|1032,1033,1034|1035,1036,1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 3
+                    },
+                    {
+                        "groups": "1001,1009|1016,1021|1024,1025,1026|1027,1028,1029,1030,1031|1032,1033,1034|1035,1036,1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 4
+                    },
+                    {
+                        "groups": "1001,1009,1016,1021|1024,1025,1026,1027,1028,1029,1030,1031|1032,1033,1034|1035,1036,1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 5
+                    },
+                    {
+                        "groups": "1001,1009|1016,1021|1024,1025,1026|1027,1028,1029,1030,1031|1032,1033,1034|1035,1036,1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 7
+                    },
+                    {
+                        "groups": "1001,1009|1016,1021|1024,1025,1026|1027,1028,1029,1030,1031|1032,1033,1034|1035,1036,1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 8
+                    },
+                    {
+                        "groups": "1001,1009|1016,1021|1024,1025,1026|1027,1028,1029,1030,1031|1032,1033,1034|1035,1036,1037,1038,1039",
+                        "node": 999990001,
+                        "zone": 500,
+                        "id": 9
+                    }
+                ]
+            }
+        });
+        let resp_body_vec = msg.to_string().as_bytes().to_vec();
 
         //
         let response = response_builder.body(resp_body_vec).unwrap();
@@ -119,5 +172,5 @@ pub fn test_http_server(_conf: &Arc<Conf>) {
     };
 
     let addr = std::format!("127.0.0.1:{}", g_conf.http_port);
-    http_server_listen(srv, addr.as_str(), request_fn, &G_SERVICE_NET);
+    http_server_listen(addr.as_str(), request_fn, true, &G_SERVICE_NET);
 }
