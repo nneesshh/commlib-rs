@@ -27,10 +27,6 @@ winapi = { version = "0.3", features = ["minwindef", "windef", "consoleapi", "wi
 windows-sys = { version = "0.48", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO", "Win32_System_Threading", "Win32_Security", "Win32_System_Console"] }
 rustix = { version = "0.38", features = ["fs"] }
 
-[target.'cfg(windows)'.dev-dependencies]
-windows-sys = { version = "0.48", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO", "Win32_System_Console"] }
-rustix = { version = "0.38", features = ["fs"] }
-
 [dependencies]
 libc = "0.2"
 lazy_static = "1"
@@ -64,6 +60,13 @@ thread_local = { path = "../thread_local-rs" }
 openssl = { path = "../rust-openssl/openssl" }
 commlib-sys = { path = "../commlib-sys" }
 net_packet = { path = "../net_packet-rs" }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.48", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO", "Win32_System_Console"] }
+rustix = { version = "0.38", features = ["fs"] }
+
+[dev-dependencies]
+tempfile = "2"
 
 [build-dependencies]
 dunce = "1"

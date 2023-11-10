@@ -3,6 +3,10 @@ mod ossl_init;
 pub use ossl_init::*;
 
 ///
+mod rand_bytes;
+pub use self::rand_bytes::{rand_bytes, rand_bytes2};
+
+///
 mod base64;
 pub use self::base64::Base64;
 

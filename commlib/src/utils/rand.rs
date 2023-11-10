@@ -3,12 +3,12 @@
 use std::cell::UnsafeCell;
 use std::collections::LinkedList;
 
-use openssl::rand::rand_bytes;
-
 //use rand::distributions::uniform::SampleUniform;
 use rand::rngs::{Mt64, SmallRng};
 use rand::{seq::SliceRandom, Rng, SeedableRng};
 use std::time::SystemTime;
+
+use super::rand_bytes;
 
 /// 创建生成器 Mt64
 pub fn create_mt64(seed: u64) -> Mt64 {

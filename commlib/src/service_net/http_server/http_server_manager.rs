@@ -38,7 +38,12 @@ impl HttpServerStorage {
 }
 
 /// Listen on [ip:port] over service net
-pub fn http_server_listen<F>(addr: &str, request_fn: F, with_ssl: bool, srv_net: &Arc<ServiceNetRs>) -> bool
+pub fn http_server_listen<F>(
+    addr: &str,
+    request_fn: F,
+    with_ssl: bool,
+    srv_net: &Arc<ServiceNetRs>,
+) -> bool
 where
     F: Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
         + Send
