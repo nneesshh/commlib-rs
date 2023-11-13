@@ -11,35 +11,31 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\include\commlib-sys\ffi\common.rs.h">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClInclude>
-    <ClInclude Include="net_bindings.h" />
-    <ClInclude Include="net_proxy.h" />
-    <ClInclude Include="packet.h" />
+    <ClInclude Include="crypto\blowfish.h" />
+    <ClInclude Include="crypto\blowfish_cfb64.h" />
+    <ClInclude Include="hash\crc32.h" />
+    <ClInclude Include="hash\hash.h" />
+    <ClInclude Include="hash\hmac.h" />
+    <ClInclude Include="hash\keccak.h" />
+    <ClInclude Include="hash\md5.h" />
+    <ClInclude Include="hash\sha1.h" />
+    <ClInclude Include="hash\sha256.h" />
+    <ClInclude Include="hash\sha3.h" />
+    <ClInclude Include="hash_bindings.h" />
     <ClInclude Include="rust\cxx.h" />
-    <ClInclude Include="rust\common.rs.h" />
-    <ClInclude Include="service_net.h" />
     <ClInclude Include="signal_bindings.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\common.rs.cc">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\net.rs.cc">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\signal.rs.cc">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="net_bindings.cc" />
-    <ClCompile Include="net_proxy.cc" />
-    <ClCompile Include="packet.cc" />
-    <ClCompile Include="service_net.cc" />
+    <ClCompile Include="crypto\blowfish.cc" />
+    <ClCompile Include="crypto\blowfish_cfb64.cc" />
+    <ClCompile Include="hash\crc32.cc" />
+    <ClCompile Include="hash\digest.cc" />
+    <ClCompile Include="hash\keccak.cc" />
+    <ClCompile Include="hash\md5.cc" />
+    <ClCompile Include="hash\sha1.cc" />
+    <ClCompile Include="hash\sha256.cc" />
+    <ClCompile Include="hash\sha3.cc" />
+    <ClCompile Include="hash_bindings.cc" />
     <ClCompile Include="signal_bindings.cc" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

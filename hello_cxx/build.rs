@@ -23,36 +23,37 @@ fn main() -> miette::Result<()> {
         &profile, &target, &out_dir
     );
 
-    // Libs
+    // Includes and libs
     let manifest_path = std::path::PathBuf::from(manifest_dir);
-
-    // This assumes all your C++ bindings are in main.rs
-    println!("cargo:rerun-if-changed=src/ffi_main.rs");
-    println!("cargo:rerun-if-changed=src/lib.rs");
-    println!("cargo:rerun-if-changed=src/main.rs");
 
     // Define path to resolve #include relative position
     let include_paths = vec![
-        manifest_path.join("cpp"),
+        manifest_path.join("../../rust"),
+        manifest_path.join("../cpplibs/mylibs/src/commlib_cxx"),
     ];
 
-    // Protos
-    tonic_build::configure()
-        .build_client(false)
-        .build_server(false)
-        .build_transport(false)
-        .out_dir("protos/out")
-        .compile(&["protos/voting.proto"], &["protos"])
-        .unwrap();
+    // Include headers path
+    println!(
+        "cargo:include={}",
+        manifest_path.join("../cpplibs/mylibs/src/commlib_cxx").display(),
+    );
 
-    // Bridge -- cxx
-    cxx_build::bridge("src/ffi_main.rs")
-        .flag("-I/usr/local/include")
-        .flag_if_supported("-std=c++14")
-        .includes(&include_paths)
-        .file("cpp/signal.cpp")
-        .compile("cxxbridge-demo");
+    // Windows libs
+    #[cfg(target_os = "windows")]
+    {
+        // Include cpplib target dir
+        println!(
+            "cargo:rustc-link-search=native={}",
+            manifest_path
+                .join("../cpplibs/mylibs/libs/win/Release")
+                .as_path()
+                .display()
+        );
 
+        // Link static cpplib library
+        println!("cargo:rustc-link-lib=static=commlib_cxx");
+    }
+    
     // Add instructions to link to any C++ libraries you need.
     Ok(())
 }

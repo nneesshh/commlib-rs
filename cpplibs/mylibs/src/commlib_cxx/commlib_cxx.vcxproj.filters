@@ -16,57 +16,87 @@
     <Filter Include="rust">
       <UniqueIdentifier>{94f53700-39e4-4e76-8465-d1674ea3abeb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="hash">
+      <UniqueIdentifier>{ebb02655-e4f0-4fab-adec-7ea8f3a79f5f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="crypto">
+      <UniqueIdentifier>{bf616d89-833c-48a8-94dd-f796f32bf100}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="signal_bindings.h">
       <Filter>源文件</Filter>
     </ClInclude>
-    <ClInclude Include="net_proxy.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="packet.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="service_net.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="net_bindings.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="rust\common.rs.h">
-      <Filter>rust</Filter>
-    </ClInclude>
     <ClInclude Include="rust\cxx.h">
       <Filter>rust</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\include\commlib-sys\ffi\common.rs.h">
+    <ClInclude Include="hash\sha1.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash\sha3.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash\sha256.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash\crc32.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash\hash.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash\hmac.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash\keccak.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash\md5.h">
+      <Filter>hash</Filter>
+    </ClInclude>
+    <ClInclude Include="hash_bindings.h">
       <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="crypto\blowfish_cfb64.h">
+      <Filter>crypto</Filter>
+    </ClInclude>
+    <ClInclude Include="crypto\blowfish.h">
+      <Filter>crypto</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="signal_bindings.cc">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="net_proxy.cc">
+    <ClCompile Include="hash\sha3.cc">
+      <Filter>hash</Filter>
+    </ClCompile>
+    <ClCompile Include="hash\sha256.cc">
+      <Filter>hash</Filter>
+    </ClCompile>
+    <ClCompile Include="hash\crc32.cc">
+      <Filter>hash</Filter>
+    </ClCompile>
+    <ClCompile Include="hash\digest.cc">
+      <Filter>hash</Filter>
+    </ClCompile>
+    <ClCompile Include="hash\keccak.cc">
+      <Filter>hash</Filter>
+    </ClCompile>
+    <ClCompile Include="hash\md5.cc">
+      <Filter>hash</Filter>
+    </ClCompile>
+    <ClCompile Include="hash\sha1.cc">
+      <Filter>hash</Filter>
+    </ClCompile>
+    <ClCompile Include="hash_bindings.cc">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="packet.cc">
-      <Filter>源文件</Filter>
+    <ClCompile Include="crypto\blowfish_cfb64.cc">
+      <Filter>crypto</Filter>
     </ClCompile>
-    <ClCompile Include="service_net.cc">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="net_bindings.cc">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\net.rs.cc">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\signal.rs.cc">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\commlib-test\target\debug\build\commlib-sys-6f76a1ed24116e51\out\cxxbridge\sources\commlib-sys\ffi\common.rs.cc">
-      <Filter>源文件</Filter>
+    <ClCompile Include="crypto\blowfish.cc">
+      <Filter>crypto</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
