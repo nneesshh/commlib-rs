@@ -23,23 +23,6 @@ fn main() -> miette::Result<()> {
         &profile, &target, &out_dir
     );
 
-    // Libs
-    let manifest_path = std::path::PathBuf::from(manifest_dir);
-    #[cfg(target_os = "windows")]
-    {
-        // Include cpplib target dir
-        println!(
-            "cargo:rustc-link-search=native={}",
-            manifest_path
-                .join("../cpplibs/mylibs/libs/win/Release")
-                .as_path()
-                .display()
-        );
-
-        // Link static cpplib library
-        println!("cargo:rustc-link-lib=static=commlib_cxx");
-    }
-
     // Re-run
     println!("cargo:rerun-if-changed=src/main.rs");
 
