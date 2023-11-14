@@ -5,19 +5,19 @@
 #include <string>
 #include <cstddef>
 
-class Blowfish
+class CBlowfish
 {
   public:
     // @throws std::bad_alloc
-    Blowfish();
+    CBlowfish();
 
     // @throws std::bad_alloc
-    Blowfish(const Blowfish& other);
-    Blowfish& operator=(const Blowfish& other);
-    Blowfish(Blowfish&& orig);
-    Blowfish& operator=(Blowfish&& orig);
+    CBlowfish(const CBlowfish& other);
+    CBlowfish& operator=(const CBlowfish& other);
+    CBlowfish(CBlowfish&& orig);
+    CBlowfish& operator=(CBlowfish&& orig);
 
-    virtual ~Blowfish() noexcept;
+    virtual ~CBlowfish() noexcept;
 
     /**
      * Reinitializes the cipher instance, so that a new key can be set, and the cipher can be reused

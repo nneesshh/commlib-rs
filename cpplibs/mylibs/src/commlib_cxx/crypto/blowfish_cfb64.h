@@ -4,7 +4,7 @@
 #include <cstddef>
 #include "blowfish.h"
 
-class BlowfishCfb64
+class CBlowfishCfb64
 {
   public:
     // Block size in bytes (8 == 64 bits)
@@ -19,12 +19,12 @@ class BlowfishCfb64
     // Byte shift value (8 bits == 1 byte)
     static const size_t BYTE_SHIFT = 8;
 
-    BlowfishCfb64(Blowfish& cipher_ref);
-    BlowfishCfb64(const BlowfishCfb64& orig) = default;
-    BlowfishCfb64& operator=(const BlowfishCfb64& orig) = default;
-    BlowfishCfb64(BlowfishCfb64&& orig) = default;
-    BlowfishCfb64& operator=(BlowfishCfb64&& orig) = default;
-    virtual ~BlowfishCfb64();
+    CBlowfishCfb64(CBlowfish& cipher_ref);
+    CBlowfishCfb64(const CBlowfishCfb64& orig) = default;
+    CBlowfishCfb64& operator=(const CBlowfishCfb64& orig) = default;
+    CBlowfishCfb64(CBlowfishCfb64&& orig) = default;
+    CBlowfishCfb64& operator=(CBlowfishCfb64&& orig) = default;
+    virtual ~CBlowfishCfb64();
 
     /**
      * Encrypts the supplied data in-place
@@ -51,7 +51,7 @@ class BlowfishCfb64
 
   private:
     uint64_t  feedback {0};
-    Blowfish* cipher;
+    CBlowfish* cipher;
 };
 
 #endif	/* BLOWFISH_CFB64_H */

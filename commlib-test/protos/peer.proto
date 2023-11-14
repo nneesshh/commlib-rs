@@ -1,0 +1,39 @@
+syntax = "proto3";
+package Proto;
+
+// 对等节点
+message Peer {
+  string name = 1; // peer name
+  string raddr = 2; // addr such as "ip:port"
+}
+
+// 上行：注册对等节点
+message P2S_RegisterPeer {
+  Peer peer = 1; // 对等节点
+}
+
+// 上行：注销对等节点
+message P2S_UnregisterPeer {
+  string peer_name = 1; // 对等节点名称
+}
+
+// 下行：对等节点列表
+message S2P_PeerList {
+  repeated Peer peer_list = 1; // 对等节点列表
+}
+
+// 下行：添加对等节点通知
+message S2P_PeerNotificationAdded {
+  Peer peer = 1; // 对等节点
+}
+
+// 下行：移除对等节点通知
+message S2P_PeerNotificationRemoved {
+  string peer_name = 1; // 对等节点名称
+}
+
+// 平行：Greetings
+message P2P_Greetings {
+  string peer_name = 1; // 对等节点名称
+  string greeting = 2; // 问候语
+}

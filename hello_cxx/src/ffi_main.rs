@@ -12,8 +12,5 @@ pub mod ffi {
             cb2: SignalCallback,
             cb3: SignalCallback,
         );
-
-        #[namespace = "commlib_cxx"]
-        unsafe fn new_abc();
     }
 }

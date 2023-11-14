@@ -20,9 +20,4 @@ namespace commlib
 		signal(SIGUSR2, cb_usr2); // 热更新配置
 #endif
 	}
-
-	void new_abc()
-	{
-		printf("test new_abc");
-	}
 }

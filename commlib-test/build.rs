@@ -51,6 +51,7 @@ fn main() -> miette::Result<()> {
         .out_dir("protos/out")
         .compile(
             &[
+                "protos/peer.proto",
                 "protos/cmd.proto",
                 "protos/base.proto",
                 "protos/inner/commlib.proto",

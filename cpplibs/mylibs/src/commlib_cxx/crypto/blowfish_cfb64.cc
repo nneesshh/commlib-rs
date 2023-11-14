@@ -1,16 +1,16 @@
 #include "blowfish_cfb64.h"
 
-BlowfishCfb64::BlowfishCfb64(Blowfish& cipher_ref):
+CBlowfishCfb64::CBlowfishCfb64(CBlowfish& cipher_ref):
     cipher(&cipher_ref)
 {
 }
 
-BlowfishCfb64::~BlowfishCfb64()
+CBlowfishCfb64::~CBlowfishCfb64()
 {
     feedback = 0;
 }
 
-void BlowfishCfb64::encrypt(unsigned char* const data, const size_t data_length)
+void CBlowfishCfb64::encrypt(unsigned char* const data, const size_t data_length)
 {
     uint64_t cipher_text = feedback;
     size_t full_blocks = data_length / BLOCK_SIZE;
@@ -71,7 +71,7 @@ void BlowfishCfb64::encrypt(unsigned char* const data, const size_t data_length)
     feedback = cipher_text;
 }
 
-void BlowfishCfb64::decrypt(unsigned char* const data, const size_t data_length)
+void CBlowfishCfb64::decrypt(unsigned char* const data, const size_t data_length)
 {
     uint64_t cipher_base = feedback;
 
@@ -137,7 +137,7 @@ void BlowfishCfb64::decrypt(unsigned char* const data, const size_t data_length)
     feedback = cipher_base;
 }
 
-void BlowfishCfb64::set_init_vector(const uint64_t init_vector)
+void CBlowfishCfb64::set_init_vector(const uint64_t init_vector)
 {
     feedback = init_vector;
 }

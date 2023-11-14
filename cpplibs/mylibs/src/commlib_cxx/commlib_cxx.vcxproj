@@ -13,6 +13,7 @@
   <ItemGroup>
     <ClInclude Include="crypto\blowfish.h" />
     <ClInclude Include="crypto\blowfish_cfb64.h" />
+    <ClInclude Include="crypto_bindings.h" />
     <ClInclude Include="hash\crc32.h" />
     <ClInclude Include="hash\hash.h" />
     <ClInclude Include="hash\hmac.h" />
@@ -28,6 +29,7 @@
   <ItemGroup>
     <ClCompile Include="crypto\blowfish.cc" />
     <ClCompile Include="crypto\blowfish_cfb64.cc" />
+    <ClCompile Include="crypto_bindings.cc" />
     <ClCompile Include="hash\crc32.cc" />
     <ClCompile Include="hash\digest.cc" />
     <ClCompile Include="hash\keccak.cc" />

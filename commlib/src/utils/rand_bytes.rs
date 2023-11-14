@@ -32,7 +32,6 @@ fn rng() -> &'static dyn SecureRandom {
 mod tests {
     use std::fs::File;
     use std::io::{self, BufWriter, Read, Write};
-    use tempfile::NamedTempFile;
 
     use super::*;
 
@@ -45,8 +44,8 @@ mod tests {
         Box::new(BufWriter::new(output))
     }
 
-    fn write_bytes<W: Write>(size: usize, mut writer: W) -> Result<(), String> {
-        let bytes = rand_bytes(size)?;
+    fn write_bytes<W: Write>(size: usize, writer: &mut W) -> Result<(), String> {
+        let bytes = rand_bytes2(size)?;
         writer.write_all(&bytes).map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -54,15 +53,15 @@ mod tests {
     /// Smoke test to generate a 32 bytes random value to some temporary file
     #[test]
     fn smoke_test() {
-        let mut file = NamedTempFile::new().unwrap();
         {
-            let writer = get_writer(Some("output"));
+            let mut file = get_writer(Some("rand_bytes.smoke_test"));
             let size = 128;
-            write_bytes(size, writer).unwrap();
+            write_bytes(size, &mut file).unwrap();
         }
 
+        let mut file = File::open("rand_bytes.smoke_test").unwrap();
         let mut bytes = Vec::<u8>::new();
         let actual_size = file.read_to_end(&mut bytes).unwrap();
-        assert_eq!(32, actual_size);
+        assert_eq!(128, actual_size);
     }
 }

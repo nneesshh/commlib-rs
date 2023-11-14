@@ -18,7 +18,6 @@ commlib-sys = { path="../commlib-sys" }
 hex = { path="../rust-hex" }
 roxmltree = { path="../roxmltree" }
 serde_json = { path="../json" }
-openssl = { path = "../rust-openssl/openssl" }
 
 [build-dependencies]
 cxx-build = "1"

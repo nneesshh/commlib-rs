@@ -28,7 +28,7 @@ fn main() -> miette::Result<()> {
 
     // Define path to resolve #include relative position
     let include_paths = vec![
-        manifest_path.join("../../rust"),
+        manifest_path.join("cpp"),
         manifest_path.join("../cpplibs/mylibs/src/commlib_cxx"),
     ];
 
@@ -53,6 +53,14 @@ fn main() -> miette::Result<()> {
         // Link static cpplib library
         println!("cargo:rustc-link-lib=static=commlib_cxx");
     }
+
+     // Bridge -- cxx
+    cxx_build::bridge("src/ffi_main.rs")
+    .flag("-I/usr/local/include")
+    .flag_if_supported("-std=c++14")
+    .includes(&include_paths)
+    .file("cpp/signal.cpp")
+        .compile("hello_cxx");
     
     // Add instructions to link to any C++ libraries you need.
     Ok(())

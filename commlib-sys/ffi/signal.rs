@@ -8,10 +8,6 @@ pub mod ffi_sig {
 
         #[namespace = "commlib"]
         fn init_signal_handlers(cb1: SignalCallback, cb2: SignalCallback, cb3: SignalCallback);
-
-        #[namespace = "commlib"]
-        fn new_abc();
-
     }
 }
 

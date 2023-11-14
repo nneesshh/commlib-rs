@@ -63,6 +63,9 @@
     <ClInclude Include="crypto\blowfish.h">
       <Filter>crypto</Filter>
     </ClInclude>
+    <ClInclude Include="crypto_bindings.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="signal_bindings.cc">
@@ -97,6 +100,9 @@
     </ClCompile>
     <ClCompile Include="crypto\blowfish.cc">
       <Filter>crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="crypto_bindings.cc">
+      <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

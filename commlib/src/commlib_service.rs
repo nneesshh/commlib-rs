@@ -14,8 +14,8 @@ use spdlog::get_current_tid;
 use super::G_EXIT_CV;
 use super::{Clock, PinkySwear, StopWatch, XmlReader};
 
-/* 0.3ms */
-const RECV_WAIT_TIME: std::time::Duration = std::time::Duration::from_micros(300);
+const MAX_TASKS: usize = 4096_usize;
+const RECV_WAIT_TIME: std::time::Duration = std::time::Duration::from_micros(300); // 0.3 ms
 
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone, NoUninit)]
 #[repr(u8)]
@@ -281,23 +281,21 @@ where
             handle.quit_service();
             break;
         } else {
-            // update thread local Clock
+            // update thread local clock
             Clock::update();
 
             // update
             srv.update();
 
-            // dispatch cb -- process async tasks
-            let mut count = 4096_i32;
-            while count > 0 {
+            // process async tasks
+            let mut count = 0_usize;
+            while count < MAX_TASKS {
                 match handle.rx.recv_timeout(RECV_WAIT_TIME) {
                     Ok(cb) => {
-                        //log::info!("Dequeued item ID={}", handle.id);
                         cb();
-                        count -= 1;
+                        count += 1;
                     }
                     Err(_err) => {
-                        //log::error!("service receive cb error: {:?}", _err);
                         break;
                     }
                 }

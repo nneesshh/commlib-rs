@@ -1,3 +1,65 @@
+/// 对等节点
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Peer {
+    /// peer name
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    /// addr such as "ip:port"
+    #[prost(string, tag = "2")]
+    pub raddr: ::prost::alloc::string::String,
+}
+/// 上行：注册对等节点
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct P2sRegisterPeer {
+    /// 对等节点
+    #[prost(message, optional, tag = "1")]
+    pub peer: ::core::option::Option<Peer>,
+}
+/// 上行：注销对等节点
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct P2sUnregisterPeer {
+    /// 对等节点名称
+    #[prost(string, tag = "1")]
+    pub peer_name: ::prost::alloc::string::String,
+}
+/// 下行：对等节点列表
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct S2pPeerList {
+    /// 对等节点列表
+    #[prost(message, repeated, tag = "1")]
+    pub peer_list: ::prost::alloc::vec::Vec<Peer>,
+}
+/// 下行：添加对等节点通知
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct S2pPeerNotificationAdded {
+    /// 对等节点
+    #[prost(message, optional, tag = "1")]
+    pub peer: ::core::option::Option<Peer>,
+}
+/// 下行：移除对等节点通知
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct S2pPeerNotificationRemoved {
+    /// 对等节点名称
+    #[prost(string, tag = "1")]
+    pub peer_name: ::prost::alloc::string::String,
+}
+/// 平行：Greetings
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct P2pGreetings {
+    /// 对等节点名称
+    #[prost(string, tag = "1")]
+    pub peer_name: ::prost::alloc::string::String,
+    /// 问候语
+    #[prost(string, tag = "2")]
+    pub greeting: ::prost::alloc::string::String,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum EnumMsgType {
@@ -25,6 +87,7 @@ impl EnumMsgType {
         }
     }
 }
+/// 加密 token
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct S2cEncryptToken {

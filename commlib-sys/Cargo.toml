@@ -2,16 +2,15 @@
 name = "commlib-sys"
 version = "1.0.0"
 authors = ["nneesshh <neckshotk@gmail.com>"]
-description = "Common library for Rust projects"
+description = "Common cxx library for Rust projects"
 documentation = ""
 homepage = ""
-keywords = ["service", "signal", "event", "log"]
+keywords = ["crypto", "hash", "signal"]
 categories = ["os"]
 license = "MIT/Apache-2.0"
 repository = ""
 exclude = ["/.travis.yml", "/appveyor.yml"]
 edition = "2021"
-readme = "README.md"
 build = "build-sys.rs"
 links = "commlib"
 

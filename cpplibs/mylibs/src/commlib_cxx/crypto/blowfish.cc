@@ -1,25 +1,25 @@
 #include "blowfish.h"
 #include <string>
 
-const size_t Blowfish::P_BOXES       =  18;
-const size_t Blowfish::S_BOXES       =   4;
-const size_t Blowfish::S_BOX_ENTRIES = 256;
+const size_t CBlowfish::P_BOXES       =  18;
+const size_t CBlowfish::S_BOXES       =   4;
+const size_t CBlowfish::S_BOX_ENTRIES = 256;
 
 // Cipher rounds
-const size_t Blowfish::ROUNDS = 16;
+const size_t CBlowfish::ROUNDS = 16;
 
 // Step width for the unrolled loops
-const size_t Blowfish::UNROLLED_STEP = 2;
+const size_t CBlowfish::UNROLLED_STEP = 2;
 
 // @throws std::bad_alloc
-Blowfish::Blowfish()
+CBlowfish::CBlowfish()
 {
     state = new bf_state;
     copy_bf_state(INIT_STATE);
 }
 
 // @throws std::bad_alloc
-Blowfish::Blowfish(const Blowfish& other)
+CBlowfish::CBlowfish(const CBlowfish& other)
 {
     // Copy the other instance's state
     state = new bf_state;
@@ -27,7 +27,7 @@ Blowfish::Blowfish(const Blowfish& other)
     is_clear = other.is_clear;
 }
 
-Blowfish& Blowfish::operator=(const Blowfish& other)
+CBlowfish& CBlowfish::operator=(const CBlowfish& other)
 {
     if (this != &other)
     {
@@ -38,7 +38,7 @@ Blowfish& Blowfish::operator=(const Blowfish& other)
     return *this;
 }
 
-Blowfish::Blowfish(Blowfish&& orig)
+CBlowfish::CBlowfish(CBlowfish&& orig)
 {
     // Move the other instance's state
     state = orig.state;
@@ -46,7 +46,7 @@ Blowfish::Blowfish(Blowfish&& orig)
     orig.state = nullptr;
 }
 
-Blowfish& Blowfish::operator=(Blowfish&& orig)
+CBlowfish& CBlowfish::operator=(CBlowfish&& orig)
 {
     if (this != &orig)
     {
@@ -63,7 +63,7 @@ Blowfish& Blowfish::operator=(Blowfish&& orig)
     return *this;
 }
 
-Blowfish::~Blowfish() noexcept
+CBlowfish::~CBlowfish() noexcept
 {
     if (state != nullptr)
     {
@@ -75,13 +75,13 @@ Blowfish::~Blowfish() noexcept
     }
 }
 
-void Blowfish::reinitialize() noexcept
+void CBlowfish::reinitialize() noexcept
 {
     is_clear = false;
     copy_bf_state(INIT_STATE);
 }
 
-void Blowfish::clear() volatile noexcept
+void CBlowfish::clear() volatile noexcept
 {
     // Clear the P Box
     for (size_t p_index = 0; p_index < P_BOXES; ++p_index)
@@ -100,7 +100,7 @@ void Blowfish::clear() volatile noexcept
     is_clear = true;
 }
 
-uint64_t Blowfish::encrypt64(const uint64_t data) noexcept
+uint64_t CBlowfish::encrypt64(const uint64_t data) noexcept
 {
     uint32_t data_l = static_cast<uint32_t> (data >> 32);
     uint32_t data_r = static_cast<uint32_t> (data & 0xFFFFFFFF);
@@ -113,7 +113,7 @@ uint64_t Blowfish::encrypt64(const uint64_t data) noexcept
     return encrypted;
 }
 
-uint64_t Blowfish::decrypt64(const uint64_t data) noexcept
+uint64_t CBlowfish::decrypt64(const uint64_t data) noexcept
 {
     uint32_t data_l = static_cast<uint32_t> (data >> 32);
     uint32_t data_r = static_cast<uint32_t> (data & 0xFFFFFFFF);
@@ -126,7 +126,7 @@ uint64_t Blowfish::decrypt64(const uint64_t data) noexcept
     return decrypted;
 }
 
-void Blowfish::encrypt(uint32_t* const data_l_ref, uint32_t* const data_r_ref) noexcept
+void CBlowfish::encrypt(uint32_t* const data_l_ref, uint32_t* const data_r_ref) noexcept
 {
     uint32_t data_l = (*data_l_ref);
     uint32_t data_r = (*data_r_ref);
@@ -145,7 +145,7 @@ void Blowfish::encrypt(uint32_t* const data_l_ref, uint32_t* const data_r_ref) n
     (*data_r_ref) = data_l;
 }
 
-void Blowfish::decrypt(uint32_t* const data_l_ref, uint32_t* const data_r_ref) noexcept
+void CBlowfish::decrypt(uint32_t* const data_l_ref, uint32_t* const data_r_ref) noexcept
 {
     uint32_t data_l = (*data_l_ref);
     uint32_t data_r = (*data_r_ref);
@@ -166,12 +166,12 @@ void Blowfish::decrypt(uint32_t* const data_l_ref, uint32_t* const data_r_ref) n
     (*data_r_ref) = data_l;
 }
 
-void Blowfish::set_key(const std::string& key) noexcept
+void CBlowfish::set_key(const std::string& key) noexcept
 {
     set_key(key.c_str(), key.length());
 }
 
-void Blowfish::set_key(const char* const key, const size_t key_length) noexcept
+void CBlowfish::set_key(const char* const key, const size_t key_length) noexcept
 {
     is_clear = false;
     const unsigned char* const key_data = reinterpret_cast<const unsigned char*> (key);
@@ -217,7 +217,7 @@ void Blowfish::set_key(const char* const key, const size_t key_length) noexcept
     }
 }
 
-inline uint32_t Blowfish::blowfish_f(const uint32_t value) noexcept
+inline uint32_t CBlowfish::blowfish_f(const uint32_t value) noexcept
 {
     uint32_t result = state->s_box[0][value >> 24];
     result += state->s_box[1][(value >> 16) & 0xFF];
@@ -227,7 +227,7 @@ inline uint32_t Blowfish::blowfish_f(const uint32_t value) noexcept
     return result;
 }
 
-inline void Blowfish::copy_bf_state(const bf_state& src_state) volatile noexcept
+inline void CBlowfish::copy_bf_state(const bf_state& src_state) volatile noexcept
 {
     for (size_t p_index = 0; p_index < P_BOXES; ++p_index)
     {
@@ -243,7 +243,7 @@ inline void Blowfish::copy_bf_state(const bf_state& src_state) volatile noexcept
     }
 }
 
-const Blowfish::bf_state Blowfish::INIT_STATE =
+const CBlowfish::bf_state CBlowfish::INIT_STATE =
 {
     // P boxes 1 - 18 (p_box[0] - p_box[17])
     {
