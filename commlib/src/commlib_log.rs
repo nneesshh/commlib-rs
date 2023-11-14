@@ -42,7 +42,7 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u16, log_to_co
     };
 
     // Sink: ss_sink
-    let sss_sink = std::sync::Arc::new(
+    let ss_sink = std::sync::Arc::new(
         spdlog::sink::StdStreamSink::builder()
             .std_stream(spdlog::sink::StdStream::Stdout)
             .style_mode(spdlog::terminal_style::StyleMode::Never)
@@ -54,13 +54,27 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u16, log_to_co
     sinks.push(file_sink);
 
     if log_to_console {
-        sinks.push(sss_sink);
+        sinks.push(ss_sink);
     }
 
-    #[cfg(windows)]
     {
+        #[cfg(windows)]
         let logger: std::sync::Arc<spdlog::Logger> =
             std::sync::Arc::new(spdlog::Logger::builder().sinks(sinks).build().unwrap());
+
+        #[cfg(unix)]
+        // Building a `AsyncPoolSink`.
+        // Log and flush operations with this sink will be processed asynchronously.
+        let async_sink = std::sync::Arc::new(
+            spdlog::sink::AsyncPoolSink::builder()
+                .sinks(sinks)
+                .build()
+                .unwrap(),
+        );
+
+        #[cfg(unix)]
+        let logger: std::sync::Arc<spdlog::Logger> =
+            std::sync::Arc::new(spdlog::Logger::builder().sink(async_sink).build().unwrap());
 
         // Log level filter
         let mut log_level = spdlog::Level::Info;
@@ -78,43 +92,11 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u16, log_to_co
             log_path_with_pattern, name, log_level, flush_level
         );
 
+        #[cfg(windows)]
         // From now on, auto-flush the `logger` buffer every 1 seconds.
         logger.set_flush_period(Some(std::time::Duration::from_secs(1)));
 
-        // Notice: "logger" is moved here
-        spdlog::set_default_logger(logger);
-    }
-
-    #[cfg(unix)]
-    {
-        // Building a `AsyncPoolSink`.
-        // Log and flush operations with this sink will be processed asynchronously.
-        let async_sink = std::sync::Arc::new(
-            spdlog::sink::AsyncPoolSink::builder()
-                .sinks(sinks)
-                .build()
-                .unwrap(),
-        );
-
-        let logger: std::sync::Arc<spdlog::Logger> =
-            std::sync::Arc::new(spdlog::Logger::builder().sink(async_sink).build().unwrap());
-
-        // Log level filter
-        let mut log_level = spdlog::Level::Info;
-        if spdlog::Level::Critical as u16 <= level && level < spdlog::Level::Trace as u16 {
-            log_level = spdlog::Level::from_usize(level as usize).unwrap();
-        }
-        logger.set_level_filter(spdlog::LevelFilter::MoreSevereEqual(log_level));
-
-        // Flush when error
-        let flush_level = spdlog::Level::Error;
-        logger.set_level_filter(spdlog::LevelFilter::MoreSevereEqual(flush_level));
-
-        println!(
-            "[init_logger_once()]: log_path_with_pattern={:?}, name={}, level={:?}, flush_level={:?}",
-            log_path_with_pattern, name, log_level, flush_level
-        );
-
+        #[cfg(unix)]
         // From now on, auto-flush the `logger` buffer every 3 seconds.
         logger.set_flush_period(Some(std::time::Duration::from_secs(3)));
 

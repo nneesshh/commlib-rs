@@ -27,6 +27,7 @@ fn main() -> miette::Result<()> {
     println!("cargo:rerun-if-changed=src/main.rs");
 
     // Protos
+    #[cfg(windows)]
     tonic_build::configure()
         .build_client(false)
         .build_server(false)
