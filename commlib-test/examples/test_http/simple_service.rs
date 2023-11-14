@@ -92,9 +92,6 @@ pub fn test_http_client(srv: &Arc<SimpleService>) {
 ///
 pub fn test_http_server(_conf: &Arc<Conf>) {
     // pre-startup, main manager init
-    commlib::utils::ossl_init();
-
-    //
     let g_conf = G_CONF.load();
 
     let request_fn = |conn: Arc<TcpConn>,

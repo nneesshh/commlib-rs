@@ -88,3 +88,6 @@
 [submodule "rustls-native-certs"]
 	path = rustls-native-certs
 	url = https://github.com/nneesshh/rustls-native-certs
+[submodule "pprof-rs"]
+	path = pprof-rs
+	url = https://github.com/nneesshh/pprof-rs

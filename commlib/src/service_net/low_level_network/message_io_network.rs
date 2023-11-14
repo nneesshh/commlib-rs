@@ -1,8 +1,10 @@
 use parking_lot::RwLock;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use message_io::network::{Endpoint, NetEvent, ResourceId, Transport};
+use message_io::adapters::ssl::ssl_adapter::SslListenConfig;
+use message_io::network::{Endpoint, NetEvent, ResourceId, Transport, TransportListen};
 use message_io::node::{split, NodeHandler, NodeListener, NodeTask};
 
 use crate::service_net::connector::{insert_connector, Connector};
@@ -71,10 +73,16 @@ impl MessageIoNetwork {
         &self,
         listener: &Arc<Listener>,
         addr: &str,
+        cert_path: PathBuf,
+        pri_key_path: PathBuf,
         srv_net: &Arc<ServiceNetRs>,
     ) -> bool {
         // listen at tcp addr
-        let ret = self.node_handler.network().listen(Transport::Ssl, addr);
+        let config = SslListenConfig::new(None, None, cert_path, pri_key_path);
+        let ret = self
+            .node_handler
+            .network()
+            .listen_with(TransportListen::Ssl(config), addr);
 
         //
         match ret {
@@ -246,7 +254,7 @@ impl MessageIoNetwork {
                     //
                     let raw_id = endpoint.resource_id().raw();
                     let hd = ConnId::from(raw_id);
-                    log::info!("[hd={}] endpoint {} disconnected", hd, endpoint);
+                    //log::info!("[hd={}] endpoint {} disconnected", hd, endpoint);
 
                     //
                     (on_close)(&srv_net, hd);

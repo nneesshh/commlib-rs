@@ -155,7 +155,7 @@ fn send_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn) {
 
     // 发送前先加密
     let mut encrypt_buf =
-        Blowfish::encrypt(g_conf.encrypt_token.as_slice(), code_buf.as_slice()).unwrap();
+        Blowfish::encrypt(g_conf.encrypt_token.as_slice(), 0, code_buf.as_slice()).unwrap();
 
     // send
     {

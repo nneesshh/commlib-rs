@@ -164,7 +164,12 @@ impl HttpServer {
     }
 
     /// Create a http server and listen on [ip:port]
-    pub fn listen(self: &Arc<Self>, with_ssl: bool) {
+    pub fn listen(
+        self: &Arc<Self>,
+        with_ssl: bool,
+        cert_path_opt: Option<String>,
+        private_key_path_opt: Option<String>,
+    ) {
         //
         self.set_status(ServerStatus::Starting);
 
@@ -211,7 +216,14 @@ impl HttpServer {
         ));
 
         if with_ssl {
-            listener.listen_with_ssl(self.addr.as_str());
+            let cert_ptah = cert_path_opt.unwrap_or("certificate/myserver.pem".to_owned());
+            let pri_key_path =
+                private_key_path_opt.unwrap_or("certificate/myserver.key".to_owned());
+            listener.listen_with_ssl(
+                self.addr.as_str(),
+                cert_ptah.as_str(),
+                pri_key_path.as_str(),
+            );
         } else {
             listener.listen_with_tcp(self.addr.as_str());
         }

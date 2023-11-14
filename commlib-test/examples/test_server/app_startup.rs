@@ -51,8 +51,6 @@ pub fn launch(_conf: &Arc<Conf>) {
     let srv: &Arc<TestService> = &G_TEST_SERVICE;
 
     // pre-startup, main manager init
-    commlib::utils::ossl_init();
-
     G_MAIN.with(|g| {
         let mut main_manager = g.borrow_mut();
         main_manager.init(srv);
