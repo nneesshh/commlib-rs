@@ -14,8 +14,8 @@ use super::net_packet_encdec::{
 use super::{ConnId, TcpConn};
 
 ///
-pub type EncryptTokenHander = Box<dyn Fn(&mut NetProxy, &TcpConn) + Send + Sync>;
-pub type PacketHander = Box<dyn Fn(&mut NetProxy, &TcpConn, CmdId, &[u8]) + Send + Sync>;
+pub type EncryptTokenHander = Box<dyn Fn(&mut NetProxy, &TcpConn)>;
+pub type PacketHander = Box<dyn Fn(&mut NetProxy, &TcpConn, CmdId, &[u8])>;
 
 ///
 pub struct NetProxy {
@@ -143,7 +143,7 @@ impl NetProxy {
     ///
     pub fn set_encrypt_token_handler<F>(&mut self, f: F)
     where
-        F: Fn(&mut NetProxy, &TcpConn) + Send + Sync + 'static,
+        F: Fn(&mut NetProxy, &TcpConn) + 'static,
     {
         self.encrypt_token_handler = Rc::new(Box::new(f));
     }
@@ -151,7 +151,7 @@ impl NetProxy {
     /// cmd handler
     pub fn set_packet_handler<F>(&mut self, cmd: CmdId, f: F)
     where
-        F: Fn(&mut NetProxy, &TcpConn, CmdId, &[u8]) + Send + Sync + 'static,
+        F: Fn(&mut NetProxy, &TcpConn, CmdId, &[u8]) + 'static,
     {
         self.handlers.insert(cmd, Rc::new(Box::new(f)));
     }
