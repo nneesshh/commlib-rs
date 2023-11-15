@@ -3,7 +3,7 @@
 //!
 
 use std::cell::UnsafeCell;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, SubAssign};
 use std::time::SystemTime;
 
 use crate::hash_wheel_timer::{self, ClosureTimer, TimerReturn::Reschedule};
@@ -140,7 +140,16 @@ impl Clock {
                     clock.now_stamp += d.as_millis() as u64;
                 }
                 Err(err) => {
-                    log::error!("clock update error: {:?}!!!", err);
+                    //
+                    let d = err.duration();
+                    clock.last_time.sub_assign(d);
+
+                    //
+                    log::error!(
+                        "clock update error: {:?}!!! turn back last time to {:?}",
+                        err,
+                        clock.last_time
+                    );
                 }
             }
         });

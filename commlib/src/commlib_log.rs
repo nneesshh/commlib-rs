@@ -58,11 +58,6 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u16, log_to_co
     }
 
     {
-        #[cfg(windows)]
-        let logger: std::sync::Arc<spdlog::Logger> =
-            std::sync::Arc::new(spdlog::Logger::builder().sinks(sinks).build().unwrap());
-
-        #[cfg(unix)]
         // Building a `AsyncPoolSink`.
         // Log and flush operations with this sink will be processed asynchronously.
         let async_sink = std::sync::Arc::new(
@@ -72,7 +67,6 @@ fn init_logger_once(path: &std::path::PathBuf, name: &str, level: u16, log_to_co
                 .unwrap(),
         );
 
-        #[cfg(unix)]
         let logger: std::sync::Arc<spdlog::Logger> =
             std::sync::Arc::new(spdlog::Logger::builder().sink(async_sink).build().unwrap());
 

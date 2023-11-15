@@ -15,7 +15,7 @@ use super::G_EXIT_CV;
 use super::{Clock, PinkySwear, StopWatch, XmlReader};
 
 const MAX_TASKS: usize = 4096_usize;
-const RECV_WAIT_TIME: std::time::Duration = std::time::Duration::from_micros(300); // 0.3 ms
+const RECV_WAIT_TIME: std::time::Duration = std::time::Duration::from_millis(60); // 60 ms
 
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone, NoUninit)]
 #[repr(u8)]
