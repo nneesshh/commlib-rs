@@ -2,10 +2,12 @@
 //! SimpleService
 //!
 
+#[cfg(unix)]
+use std::io::Write;
 use std::sync::Arc;
 
-use commlib::{http_server_listen, G_SERVICE_NET};
-use commlib::{NodeState, ServiceHandle, ServiceRs, TcpConn};
+use commlib::{http_server_listen, G_SERVICE_NET, G_SERVICE_SIGNAL};
+use commlib::{Clock, NodeState, ServiceHandle, ServiceRs, TcpConn};
 
 use app_helper::conf::Conf;
 use app_helper::G_CONF;
@@ -170,4 +172,49 @@ pub fn test_http_server(_conf: &Arc<Conf>) {
 
     let addr = std::format!("0.0.0.0:{}", g_conf.http_port);
     http_server_listen(addr.as_str(), request_fn, true, &G_SERVICE_NET);
+
+    /*#[cfg(unix)]
+    let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(100)
+        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+        .build()
+        .unwrap();*/
+
+    #[cfg(unix)]
+    let guard = pprof::ProfilerGuard::new(100).unwrap();
+
+    let srv = G_SIMPLE_SERVICE.as_ref();
+
+    /*Clock::set_timeout(srv, 10 * 1000, move || {
+        //
+        log::info!("simple service timeout.");
+
+        //
+        #[cfg(unix)]
+        if let Ok(report) = guard.report().build() {
+            let file = std::fs::File::create("flamegraph.svg").unwrap();
+            let mut options = pprof::flamegraph::Options::default();
+            options.image_width = Some(2500);
+            report.flamegraph_with_options(file, &mut options).unwrap();
+        }
+
+        std::process::exit(0);
+    });*/
+
+    G_SERVICE_SIGNAL.listen_sig_int(srv, move || {
+        //
+        log::info!("simple service signal raised.");
+
+        //
+        #[cfg(unix)]
+        if let Ok(report) = guard.report().build() {
+            let file = std::fs::File::create("flamegraph.svg").unwrap();
+            let mut options = pprof::flamegraph::Options::default();
+            options.image_width = Some(2500);
+            report.flamegraph_with_options(file, &mut options).unwrap();
+            println!("report: {:?}", &report);
+        }
+
+        std::process::exit(0);
+    })
 }
