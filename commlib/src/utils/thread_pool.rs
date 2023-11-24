@@ -20,7 +20,7 @@
 //! Every thread sends one message over the channel, which then is collected with the `take()`.
 //!
 //! ```rust, no_run
-//! use crossbeam::channel;
+//! use crossbeam_channel as channel;
 //! use commlib::utils::ThreadPool;
 //!
 //! let n_workers = 4;
@@ -78,7 +78,7 @@
 //! assert_eq!(an_atomic.load(Ordering::SeqCst), /* n_jobs = */ 23);
 //! ```
 
-use crossbeam::channel::{self, Receiver, Sender};
+use crossbeam_channel as channel;
 use parking_lot::{Condvar, Mutex};
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -100,7 +100,7 @@ type Thunk<'a> = Box<dyn FnBox + Send + 'a>;
 
 struct Sentinel {
     shared_data: Arc<ThreadPoolSharedData>,
-    rx: Receiver<Thunk<'static>>,
+    rx: channel::Receiver<Thunk<'static>>,
     rx_index: usize,
     active: bool,
 }
@@ -108,7 +108,7 @@ struct Sentinel {
 impl Sentinel {
     fn new(
         shared_data: &Arc<ThreadPoolSharedData>,
-        rx: Receiver<Thunk<'static>>,
+        rx: channel::Receiver<Thunk<'static>>,
         rx_index: usize,
     ) -> Sentinel {
         Sentinel {
@@ -356,7 +356,7 @@ pub struct ThreadPool {
     //
     // This is the only such Sender, so when it is dropped all subthreads will
     // quit.
-    job_tx_vec: Vec<Sender<Thunk<'static>>>,
+    job_tx_vec: Vec<channel::Sender<Thunk<'static>>>,
     shared_data: Arc<ThreadPoolSharedData>,
 }
 
@@ -617,7 +617,7 @@ impl Clone for ThreadPool {
     /// We could for example submit jobs from multiple threads concurrently.
     ///
     /// ```rust, no_run
-    /// use crossbeam::channel;
+    /// use crossbeam_channel as channel;
     /// use std::thread;
     /// use commlib::utils::ThreadPool;
     ///
@@ -705,7 +705,7 @@ impl Eq for ThreadPool {}
 
 fn spawn_in_pool(
     shared_data: Arc<ThreadPoolSharedData>,
-    rx: Receiver<Thunk<'static>>,
+    rx: channel::Receiver<Thunk<'static>>,
     rx_index: usize,
 ) {
     let mut builder = thread::Builder::new();

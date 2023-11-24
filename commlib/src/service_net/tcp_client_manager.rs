@@ -6,9 +6,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use net_packet::NetPacketGuard;
+use pinky_swear::PinkySwear;
 
 use crate::service_net::tcp_conn_manager::on_connection_established;
-use crate::{PinkySwear, ServiceNetRs, ServiceRs};
+use crate::{ServiceNetRs, ServiceRs};
 
 use super::net_packet_encdec::PacketType;
 use super::service_net_impl::create_tcp_client;

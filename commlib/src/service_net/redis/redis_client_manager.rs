@@ -6,10 +6,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use net_packet::NetPacketGuard;
+use pinky_swear::PinkySwear;
 
 use crate::RedisClient;
-use crate::{pinky_swear::PinkySwear, ServiceNetRs, ServiceRs};
 use crate::{ClientStatus, ConnId, PacketType, TcpConn};
+use crate::{ServiceNetRs, ServiceRs};
 
 use crate::service_net::service_net_impl::create_redis_client;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};

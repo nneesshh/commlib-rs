@@ -8,11 +8,12 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use atomic::{Atomic, Ordering};
-use crossbeam::channel;
+use crossbeam_channel as channel;
+use pinky_swear::PinkySwear;
 use spdlog::get_current_tid;
 
 use super::G_EXIT_CV;
-use super::{Clock, PinkySwear, StopWatch, XmlReader};
+use super::{Clock, StopWatch, XmlReader};
 
 const MAX_TASKS: usize = 4096_usize;
 const RECV_WAIT_TIME: std::time::Duration = std::time::Duration::from_millis(60); // 60 ms

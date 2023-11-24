@@ -11,10 +11,6 @@ pub mod utils;
 mod stop_watch;
 pub use stop_watch::StopWatch;
 
-/// util for promise blocking wait
-pub mod pinky_swear;
-pub use pinky_swear::{Pinky, PinkySwear};
-
 ///
 mod commlib_event;
 pub use commlib_event::*;

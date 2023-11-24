@@ -2,14 +2,12 @@ use std::collections::VecDeque;
 use std::fmt::Write;
 use std::sync::Arc;
 
-use net_packet::Buffer;
+use net_packet::{take_large_packet, NetPacketGuard};
 
 use crate::{RedisReply, TcpConn};
 
 const MAX_COMMAND_PART_NUM: usize = 64;
-
 const CMD_BUFFER_INITIAL_SIZE: usize = 4096;
-const CMD_BUFFER_RESERVED_PREPEND_SIZE: usize = 0;
 
 ///
 pub type ReplyCallback = Box<dyn FnOnce(&mut RedisCommander, RedisReply) + Send + Sync>;
@@ -33,7 +31,7 @@ pub struct RedisCommander {
     running_cb_num: usize,
 
     //
-    buffer: Buffer,
+    buffer: Option<NetPacketGuard>,
 
     //
     auth_ready: bool,
@@ -52,7 +50,7 @@ impl RedisCommander {
             commands: VecDeque::new(),
             running_cb_num: 0,
 
-            buffer: Buffer::new(CMD_BUFFER_INITIAL_SIZE, CMD_BUFFER_RESERVED_PREPEND_SIZE),
+            buffer: Some(take_large_packet(CMD_BUFFER_INITIAL_SIZE)),
 
             auth_ready: false,
             select_ready: false,
@@ -142,8 +140,10 @@ impl RedisCommander {
             let conn = conn.clone();
             if !conn.is_closed() {
                 //
-                let data = self.buffer.next_all();
+                let buffer = self.buffer.take().unwrap();
+
                 /*{
+                    let data = buffer.peek();
                     let s = unsafe { std::str::from_utf8_unchecked(data) };
                     log::info!(
                         "[do_commit]({}) send: ({}){:?} -- cmds_num={}, running_cb_num={}",
@@ -154,8 +154,10 @@ impl RedisCommander {
                         self.running_cb_num
                     );
                 }*/
-                conn.send(data);
+                conn.send_buffer(buffer);
 
+                //
+                self.buffer = Some(take_large_packet(CMD_BUFFER_INITIAL_SIZE));
                 true
             } else {
                 false
@@ -273,17 +275,22 @@ impl RedisCommander {
     }
 
     fn build_one_command(&mut self, cmd: &Vec<String>) {
+        let buffer = self.buffer.as_mut().unwrap();
+
         // part num in a cmd vec
         let part_num = cmd.len();
-        self.buffer
-            .ensure_writable_bytes(5_usize + 5_usize * part_num);
+        buffer.ensure_writable_bytes(5_usize + 5_usize * part_num);
 
         // array
-        write!(self.buffer, "*{}\r\n", part_num).unwrap();
+        buffer
+            .write_fmt(std::format_args!("*{part_num}\r\n"))
+            .unwrap();
 
         // string item
         for part in cmd {
-            write!(self.buffer, "${}\r\n{}\r\n", part.len(), part).unwrap();
+            buffer
+                .write_fmt(std::format_args!("${}\r\n{}\r\n", part.len(), part))
+                .unwrap();
         }
     }
 }

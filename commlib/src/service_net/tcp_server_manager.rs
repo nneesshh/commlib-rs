@@ -6,8 +6,9 @@ use std::sync::Arc;
 use thread_local::ThreadLocal;
 
 use net_packet::NetPacketGuard;
+use pinky_swear::PinkySwear;
 
-use crate::{PinkySwear, ServiceNetRs, ServiceRs};
+use crate::{ServiceNetRs, ServiceRs};
 
 use super::net_packet_encdec::PacketType;
 use super::packet_builder::PacketBuilder;

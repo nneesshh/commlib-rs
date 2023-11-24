@@ -52,6 +52,6 @@ pub fn write_response<T: Borrow<[u8]>>(response: http::Response<T>, conn: &Arc<T
     resp_buffer.append_slice(b"\r\n"); // http EOF
     resp_buffer.append_slice(body); // http content
 
-    conn.send(resp_buffer.consume());
+    conn.send_buffer(resp_buffer);
     conn.close();
 }

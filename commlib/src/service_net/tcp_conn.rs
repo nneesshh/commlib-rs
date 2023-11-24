@@ -65,9 +65,9 @@ impl TcpConn {
 
     ///
     #[inline(always)]
-    pub fn send(&self, data: &[u8]) {
+    pub fn send_buffer(&self, buffer: NetPacketGuard) {
         let hd = self.hd;
-        self.netctrl.send(hd, self.sock_addr, data);
+        self.netctrl.send_buffer(hd, self.sock_addr, buffer);
     }
 
     ///

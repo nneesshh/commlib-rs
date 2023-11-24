@@ -91,3 +91,6 @@
 [submodule "pprof-rs"]
 	path = pprof-rs
 	url = https://github.com/nneesshh/pprof-rs
+[submodule "pinky-swear"]
+	path = pinky-swear
+	url = https://github.com/nneesshh/pinky-swear

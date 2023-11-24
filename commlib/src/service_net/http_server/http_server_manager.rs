@@ -6,12 +6,13 @@ use std::sync::Arc;
 use thread_local::ThreadLocal;
 
 use net_packet::NetPacketGuard;
+use pinky_swear::PinkySwear;
 
 use crate::service_net::net_packet_encdec::PacketType;
 use crate::service_net::service_net_impl::create_http_server;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
 use crate::service_net::{ConnId, TcpConn};
-use crate::{PinkySwear, ServiceNetRs, ServiceRs};
+use crate::{ServiceNetRs, ServiceRs};
 
 use super::http_server_impl::ResponseResult;
 use super::request_parser::RequestParser;

@@ -214,3 +214,11 @@ impl NetPacket {
         self.buffer.length() >= self.leading_field_size() as usize
     }
 }
+
+impl std::fmt::Write for NetPacket {
+    #[inline]
+    fn write_str(&mut self, s: &str) -> Result<(), std::fmt::Error> {
+        self.buffer.write_slice(s.as_bytes());
+        Ok(())
+    }
+}

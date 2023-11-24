@@ -197,7 +197,7 @@ impl NetProxy {
 
         //
         if encode_packet(conn.packet_type(), hd, &mut pkt, &mut self.hd_encrypt_table) {
-            let slice = pkt.consume();
+            let slice = pkt.peek();
             log::info!(
                 "[hd={}] send packet cmd({}) -- ({}){:?}",
                 hd,
@@ -205,7 +205,7 @@ impl NetProxy {
                 slice.len(),
                 slice
             );
-            conn.send(slice);
+            conn.send_buffer(pkt);
         } else {
             //
             let peek = pkt.peek();
