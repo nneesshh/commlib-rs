@@ -14,7 +14,7 @@ use crate::service_net::connector::{insert_connector, Connector};
 use crate::service_net::listener::{insert_listener, Listener};
 use crate::service_net::tcp_handler::InputBuffer;
 use crate::service_net::{ListenerId, TcpHandler};
-use crate::{ConnId, ServiceNetRs};
+use crate::{ConnId, ServiceNetRs, ServiceRs};
 
 /// message io
 pub struct MessageIoNetwork {
@@ -113,7 +113,7 @@ impl MessageIoNetwork {
         srv_net: &Arc<ServiceNetRs>,
     ) {
         //
-        let srv_net = srv_net.clone();
+        let srv_net2 = srv_net.clone();
         let connector = connector.clone();
         let cb = move |ret: io::Result<(Endpoint, SocketAddr)>| {
             match ret {
@@ -121,7 +121,7 @@ impl MessageIoNetwork {
                     // async, add connector only, see "NetEvent::Connected" for real callback
                     let raw_id = endpoint.resource_id().raw();
                     let hd = ConnId::from(raw_id);
-                    insert_connector(srv_net.as_ref(), hd, &connector);
+                    insert_connector(srv_net2.as_ref(), hd, &connector);
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::ConnectionRefused => {
                     log::error!(
@@ -143,9 +143,16 @@ impl MessageIoNetwork {
         };
 
         // connect
+        let srv_net3 = srv_net.clone();
         self.node_handler
             .network()
-            .connect(Transport::Tcp, sock_addr, Box::new(cb));
+            .connect(Transport::Tcp, sock_addr, move |ret| {
+                //
+                srv_net3.run_in_service(Box::new(move || {
+                    //
+                    cb(ret);
+                }));
+            });
     }
 
     ///
