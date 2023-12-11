@@ -171,7 +171,7 @@ pub fn test_http_server(_conf: &Arc<Conf>) {
     };
 
     let addr = std::format!("0.0.0.0:{}", g_conf.http_port);
-    http_server_listen(addr.as_str(), request_fn, true, &G_SERVICE_NET);
+    http_server_listen(addr.as_str(), request_fn, false, &G_SERVICE_NET);
 
     /*#[cfg(unix)]
     let guard = pprof::ProfilerGuardBuilder::default()

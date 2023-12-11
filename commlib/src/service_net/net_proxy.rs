@@ -1,5 +1,6 @@
 use std::collections::LinkedList;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use net_packet::take_packet;
 use net_packet::{CmdId, NetPacketGuard};
@@ -21,10 +22,10 @@ pub type PacketHander = Box<dyn Fn(&mut NetProxy, &TcpConn, CmdId, &[u8])>;
 pub struct NetProxy {
     packet_type: PacketType, // 通信 packet 类型
     leading_field_size: u8,  // 包体前导长度字段占用字节数
+    conn_table: hashbrown::HashMap<ConnId, Arc<TcpConn>>, // hd -> connection info
+    hd_encrypt_table: hashbrown::HashMap<ConnId, EncryptData>, // 包序号和密钥
 
-    hd_encrypt_table: hashbrown::HashMap<ConnId, EncryptData>, // 每条连接的包序号和密钥
     encrypt_token_handler: Rc<EncryptTokenHander>,
-
     default_handler: Rc<PacketHander>,
     handlers: hashbrown::HashMap<CmdId, Rc<PacketHander>>,
 }
@@ -37,18 +38,21 @@ impl NetProxy {
         Self {
             packet_type,
             leading_field_size,
-
+            conn_table: hashbrown::HashMap::with_capacity(4096),
             hd_encrypt_table: hashbrown::HashMap::with_capacity(4096),
-            encrypt_token_handler: Rc::new(Box::new(|_1, _2| {})),
 
+            encrypt_token_handler: Rc::new(Box::new(|_1, _2| {})),
             default_handler: Rc::new(Box::new(|_1, _2, _3, _4| {})),
             handlers: hashbrown::HashMap::new(),
         }
     }
 
     ///
-    pub fn on_incomming_conn(&mut self, conn: &TcpConn, push_encrypt_token: bool) {
+    pub fn on_incomming_conn(&mut self, conn: &Arc<TcpConn>, push_encrypt_token: bool) {
+        // 
         let hd = conn.hd;
+        self.add_conn(hd, conn);
+
         //
         log::info!(
             "[hd={}] on_incomming_conn  packet_type={:?}",
@@ -99,8 +103,8 @@ impl NetProxy {
     }
 
     ///
-    pub fn on_hd_lost(&mut self, _hd: ConnId) {
-        // TODO:
+    pub fn on_hd_lost(&mut self, hd: ConnId) -> Option<Arc<TcpConn>> {
+        self.remove_conn(hd)
     }
 
     ///
@@ -216,6 +220,29 @@ impl NetProxy {
                 peek.len(),
                 peek
             );
+        }
+    }
+
+    ///
+    #[inline(always)]
+    pub fn add_conn(&mut self, hd: ConnId, conn: &Arc<TcpConn>) {
+        self.conn_table.insert(hd, conn.clone());
+    }
+
+    ///
+    #[inline(always)]
+    pub fn remove_conn(&mut self, hd: ConnId) -> Option<Arc<TcpConn>> {
+        self.conn_table.remove(&hd)
+    }
+
+    ///
+    #[inline(always)]
+    pub fn get_conn(&self, hd: ConnId) -> Arc<TcpConn> {
+        match self.conn_table.get(&hd) {
+            Some(conn) => {
+                conn.clone()
+            },
+            None => std::unreachable!()
         }
     }
 }

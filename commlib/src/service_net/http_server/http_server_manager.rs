@@ -51,7 +51,7 @@ where
         + Sync
         + 'static,
 {
-    log::info!("http_server_listen: {}...", addr);
+    log::info!("http_server_listen: {} with_ssl={} ...", addr, with_ssl);
 
     let conn_fn = |_conn: Arc<TcpConn>| {
         //let hd = _conn.hd;

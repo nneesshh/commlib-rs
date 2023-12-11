@@ -1,0 +1,25 @@
+[package]
+name = "hello1"
+version = "0.1.0"
+edition = "2021"
+#build = "build.rs"
+#build = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crossbeam-channel = "0.5"
+log = "0.4"
+lazy_static = "1"
+fern = "0.6"
+chrono = "0.4"
+
+commlib-sys = { path="../commlib-sys" }
+hex = { path="../rust-hex" }
+message-io = { path = "../message-io" }
+my_logger = { path = "../my_logger-rs" }
+parking_lot = { path = "../parking_lot" }
+rand = { path = "../rand" }
+roxmltree = { path="../roxmltree" }
+serde_json = { path="../json" }
+net_packet = { path = "../net_packet-rs" }

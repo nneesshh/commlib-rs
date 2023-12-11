@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use commlib::{init_logger, proc_service_ready, start_network, start_service};
+use commlib::{proc_service_ready, start_network, start_service};
 use commlib::{NodeState, ServiceRs};
 use commlib::{G_EXIT_CV, G_SERVICE_HTTP_CLIENT, G_SERVICE_NET, G_SERVICE_SIGNAL};
 
@@ -92,7 +92,7 @@ impl App {
 
         // init logger
         let log_path = std::path::PathBuf::from("auto-legend");
-        init_logger(&log_path, "testlog", spdlog::Level::Info as u16, true);
+        my_logger::init(&log_path, "testlog", my_logger::LogLevel::Info as u16, true);
     }
 
     fn add_service<T>(services: &mut Vec<Arc<dyn ServiceRs>>, service: &Arc<T>)

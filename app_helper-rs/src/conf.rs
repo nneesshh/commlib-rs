@@ -26,7 +26,7 @@ pub fn get_run_env() -> Result<String, String> {
 
 #[allow(dead_code)]
 pub struct Log {
-    level: u32,                 // log级别
+    level: u16,                 // log级别
     path: std::path::PathBuf,   // 日志路径
     bipath: std::path::PathBuf, // BI日志路径
     console: bool,              // 是否输出到控制台
@@ -127,7 +127,7 @@ impl Conf {
             http_port: 8081,
 
             log: Log {
-                level: spdlog::Level::Debug as u32,
+                level: my_logger::LogLevel::Debug as u16,
                 path: std::path::PathBuf::from("log"),
                 bipath: std::path::PathBuf::from("bi"),
                 console: true,
@@ -243,7 +243,7 @@ impl Conf {
         //
         let loglevel = matches.get_one::<u32>("loglevel").unwrap();
         if *loglevel > 0 {
-            self.log.level = *loglevel;
+            self.log.level = (*loglevel) as u16;
         }
 
         //

@@ -4,8 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use message_io::adapters::ssl::ssl_adapter::SslListenConfig;
-use message_io::network::{Endpoint, NetEvent, PollEngine, ResourceId, Transport, TransportListen};
+use message_io::network::{Endpoint, ListenConfig, Multiplexor, NetEvent, ResourceId, Transport};
 use message_io::node::{self, NodeHandler, NodeTask};
 
 use net_packet::NetPacketGuard;
@@ -18,8 +17,8 @@ use crate::{ConnId, ServiceNetRs, ServiceRs};
 
 /// message io
 pub struct MessageIoNetwork {
+    pub mux_opt: RwLock<Option<Multiplexor>>, // NOTICE: use option as temp storage
     pub node_handler: NodeHandler,
-    pub poll_engine_opt: RwLock<Option<PollEngine>>, // NOTICE: use option as temp storage
     pub node_task_opt: RwLock<Option<NodeTask>>,
 
     tcp_handler: TcpHandler,
@@ -31,11 +30,11 @@ impl MessageIoNetwork {
         // Create a node, the main message-io entity. It is divided in 2 parts:
         // The 'handler', used to make actions (connect, send messages, signals, stop the node...)
         // The 'listener', used to read events from the network or signals.
-        let (poll_engine, node_handler) = node::split();
+        let (mux, node_handler) = node::split();
 
         Self {
+            mux_opt: RwLock::new(Some(mux)),
             node_handler,
-            poll_engine_opt: RwLock::new(Some(poll_engine)),
             node_task_opt: RwLock::new(None),
 
             tcp_handler: TcpHandler::new(),
@@ -50,10 +49,7 @@ impl MessageIoNetwork {
         srv_net: &Arc<ServiceNetRs>,
     ) -> bool {
         // listen at tcp addr
-        let ret = self
-            .node_handler
-            .network()
-            .listen_sync(Transport::Tcp, addr);
+        let ret = self.node_handler.listen_sync(Transport::Tcp, addr);
         match ret {
             Ok((id, sock_addr)) => {
                 let listener_id = ListenerId::from(id.raw());
@@ -82,11 +78,15 @@ impl MessageIoNetwork {
         srv_net: &Arc<ServiceNetRs>,
     ) -> bool {
         // listen at tcp addr
-        let config = SslListenConfig::new(None, None, cert_path, pri_key_path);
+        let config = ListenConfig {
+            bind_device_opt: None,
+            keepalive_opt: None,
+            cert_path,
+            pri_key_path,
+        };
         let ret = self
             .node_handler
-            .network()
-            .listen_sync_with(TransportListen::Ssl(config), addr);
+            .listen_sync_with(config, Transport::Ssl, addr);
         match ret {
             Ok((id, sock_addr)) => {
                 let listener_id = ListenerId::from(id.raw());
@@ -145,8 +145,7 @@ impl MessageIoNetwork {
         // connect
         let srv_net3 = srv_net.clone();
         self.node_handler
-            .network()
-            .connect(Transport::Tcp, sock_addr, move |ret| {
+            .connect(Transport::Tcp, sock_addr, move |_h, ret| {
                 //
                 srv_net3.run_in_service(Box::new(move || {
                     //
@@ -170,7 +169,7 @@ impl MessageIoNetwork {
     #[inline(always)]
     pub fn close(&self, hd: ConnId) {
         let rid = ResourceId::from(hd.id);
-        self.node_handler.network().close(rid);
+        self.node_handler.close(rid);
     }
 
     ///
@@ -178,7 +177,7 @@ impl MessageIoNetwork {
     pub fn send_buffer(&self, hd: ConnId, sock_addr: SocketAddr, buffer: NetPacketGuard) {
         let rid = ResourceId::from(hd.id);
         let endpoint = Endpoint::new(rid, sock_addr);
-        self.node_handler.network().send(endpoint, buffer);
+        self.node_handler.send(endpoint, buffer);
     }
 
     /// 异步启动 message io network
@@ -193,10 +192,10 @@ impl MessageIoNetwork {
     }
 
     fn create_node_task(&self, srv_net: &Arc<ServiceNetRs>) -> NodeTask {
-        // poll engine
-        let poll_engine = {
-            let mut poll_engine_opt_mut = self.poll_engine_opt.write();
-            poll_engine_opt_mut.take().unwrap()
+        // multiplexor
+        let mux = {
+            let mut mux_opt_mut = self.mux_opt.write();
+            mux_opt_mut.take().unwrap()
         };
 
         // callbacks
@@ -211,7 +210,7 @@ impl MessageIoNetwork {
 
         // read incoming network events.
         let node_task =
-            node::node_listener_for_each_async(poll_engine, &self.node_handler, move |event| {
+            node::node_listener_for_each_async(mux, &self.node_handler, move |_h, event| {
                 //
                 match event.network() {
                     NetEvent::Connected(endpoint, handshake) => {

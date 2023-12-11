@@ -1,0 +1,13 @@
+[package]
+name = "my_logger"
+version = "1.0.0"
+authors = ["nneesshh <neckshotk@gmail.com>"]
+description = "Logger wrapper for spdlog"
+documentation = ""
+homepage = ""
+keywords = ["logger"]
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+spdlog-rs = { path = "../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location", "flexible-string"] }

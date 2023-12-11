@@ -94,3 +94,6 @@
 [submodule "pinky-swear"]
 	path = pinky-swear
 	url = https://github.com/nneesshh/pinky-swear
+[submodule "pemfile"]
+	path = pemfile
+	url = https://github.com/nneesshh/pemfile

@@ -96,7 +96,7 @@ pub fn do_connect_to_test_server(srv: &Arc<CliService>, index: usize) -> bool {
             let push_encrypt_token = false;
             cli_manager
                 .proxy
-                .on_incomming_conn(conn.as_ref(), push_encrypt_token);
+                .on_incomming_conn(&conn, push_encrypt_token);
         });
     };
 

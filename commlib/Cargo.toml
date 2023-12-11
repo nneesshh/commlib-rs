@@ -47,6 +47,7 @@ hex = { path = "../rust-hex" }
 http = { path = "../http" }
 httparse = { path = "../httparse" }
 message-io = { path = "../message-io" }
+my_logger = { path = "../my_logger-rs" }
 opool = { path = "../opool" }
 parking_lot = { path = "../parking_lot" }
 pinky-swear = { path = "../pinky-swear" }

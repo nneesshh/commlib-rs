@@ -70,7 +70,7 @@ impl CliManager {
     }
 
     /// 消息处理: encrypt token
-    pub fn handle_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn, cmd: CmdId, slice: &[u8]) {
+    pub fn handle_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn, _cmd: CmdId, slice: &[u8]) {
         // 消息包加密 key
         let msg = proto::S2cEncryptToken::decode(slice).unwrap();
 
