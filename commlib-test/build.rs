@@ -39,6 +39,7 @@ fn main() -> miette::Result<()> {
                 "protos/cmd.proto",
                 "protos/base.proto",
                 "protos/inner/commlib.proto",
+                "protos/inner/rpc.proto",
             ],
             &["protos"],
         )

@@ -1,0 +1,10 @@
+syntax = "proto3";
+package Proto;
+
+enum RpcCmd
+{
+	RPC_None = 0;
+	RPC_CROSS_CALL = 24;           // 跨服方法调用
+	RPC_CROSS_RETURN = 25;         // 跨服方法调用回包
+
+}

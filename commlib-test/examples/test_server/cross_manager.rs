@@ -107,7 +107,7 @@ impl CrossManager {
         let zone = sp_zone as i8 as i32;
 
         //
-        let mut req = proto::InnerCrossCall {
+        let req = proto::InnerCrossCall {
             node,
             zone,
 
@@ -126,7 +126,7 @@ impl CrossManager {
         };
 
         //
-        cluster.send_to_world(req.encode_to_vec().as_slice());
+        cluster.send_to_world(proto::RpcCmd::RpcCrossCall as u16, &req);
     }
 
     /// 通过 world 节点中转，上行 return 回 cross
@@ -151,7 +151,7 @@ impl CrossManager {
         let zone = sp_zone as i8 as i32;
 
         //
-        let mut req = proto::InnerCrossCall {
+        let req = proto::InnerCrossCall {
             node,
             zone,
 
@@ -170,7 +170,7 @@ impl CrossManager {
         };
 
         //
-        cluster.send_to_world(req.encode_to_vec().as_slice());
+        cluster.send_to_world(proto::RpcCmd::RpcCrossCall as u16, &req);
     }
 
     /// 通过 redis 中转，上行发送到 cross
@@ -201,7 +201,7 @@ impl CrossManager {
         let zone = sp_zone as i8 as i32;
 
         //
-        let mut req = proto::InnerCrossCall {
+        let req = proto::InnerCrossCall {
             node,
             zone,
 
@@ -245,7 +245,7 @@ impl CrossManager {
         let zone = sp_zone as i8 as i32;
 
         //
-        let mut req = proto::InnerCrossCall {
+        let req = proto::InnerCrossCall {
             node,
             zone,
 
@@ -292,7 +292,7 @@ impl CrossManager {
         let rpcid = cross_rpc.add_cross_rpc_call_stub(cb);
 
         //
-        let mut req = proto::InnerCrossCall {
+        let req = proto::InnerCrossCall {
             node,
             zone,
 
@@ -332,7 +332,7 @@ impl CrossManager {
         let msg_vec = msg.encode_to_vec();
 
         //
-        let mut req = proto::InnerCrossCall {
+        let req = proto::InnerCrossCall {
             node,
             zone,
 

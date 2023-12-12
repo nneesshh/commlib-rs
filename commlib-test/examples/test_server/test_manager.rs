@@ -7,8 +7,8 @@ use std::sync::Arc;
 use net_packet::CmdId;
 
 use commlib::utils::Blowfish;
-use commlib::{connect_to_redis, redis, with_tls, with_tls_mut};
-use commlib::{ConnId, NetProxy, NodeState, PacketType, RedisClient, ServiceRs, TcpConn};
+use commlib::{connect_to_redis, redis, with_tls_mut};
+use commlib::{NetProxy, NodeState, PacketType, RedisClient, ServiceRs, TcpConn};
 use commlib::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
 use commlib::{G_SERVICE_NET, G_SERVICE_SIGNAL};
 
@@ -133,13 +133,19 @@ impl TestManager {
         self.cross_mgr = Some(cross_mgr);
     }
 
-    fn handle_encrypt_token(proxy: &mut NetProxy, conn: &TcpConn, cmd: CmdId, slice: &[u8]) {
+    fn handle_encrypt_token(_proxy: &mut NetProxy, conn: &TcpConn, cmd: CmdId, slice: &[u8]) {
         // 消息包加密 key
         let msg = proto::S2cEncryptToken::decode(slice).unwrap();
 
         let key = msg.token();
 
-        log::info!("handle_encrypt_token: key: ({}){:?}", key.len(), key);
+        log::info!(
+            "[hd={}] cmd={} handle_encrypt_token: key: ({}){:?} ",
+            conn.hd,
+            cmd,
+            key.len(),
+            key
+        );
     }
 }
 

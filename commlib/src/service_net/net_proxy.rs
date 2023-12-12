@@ -20,9 +20,9 @@ pub type PacketHander = Box<dyn Fn(&mut NetProxy, &TcpConn, CmdId, &[u8])>;
 
 ///
 pub struct NetProxy {
-    packet_type: PacketType, // 通信 packet 类型
-    leading_field_size: u8,  // 包体前导长度字段占用字节数
-    conn_table: hashbrown::HashMap<ConnId, Arc<TcpConn>>, // hd -> connection info
+    packet_type: PacketType,                                   // 通信 packet 类型
+    leading_field_size: u8,                                    // 包体前导长度字段占用字节数
+    conn_table: hashbrown::HashMap<ConnId, Arc<TcpConn>>,      // hd -> connection info
     hd_encrypt_table: hashbrown::HashMap<ConnId, EncryptData>, // 包序号和密钥
 
     encrypt_token_handler: Rc<EncryptTokenHander>,
@@ -49,7 +49,7 @@ impl NetProxy {
 
     ///
     pub fn on_incomming_conn(&mut self, conn: &Arc<TcpConn>, push_encrypt_token: bool) {
-        // 
+        //
         let hd = conn.hd;
         self.add_conn(hd, conn);
 
@@ -239,10 +239,8 @@ impl NetProxy {
     #[inline(always)]
     pub fn get_conn(&self, hd: ConnId) -> Arc<TcpConn> {
         match self.conn_table.get(&hd) {
-            Some(conn) => {
-                conn.clone()
-            },
-            None => std::unreachable!()
+            Some(conn) => conn.clone(),
+            None => std::unreachable!(),
         }
     }
 }

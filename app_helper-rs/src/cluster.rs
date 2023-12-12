@@ -13,6 +13,25 @@ use super::proto;
 static WAITER_NEXT_ID: Atomic<u64> = Atomic::new(1_u64);
 
 ///
+#[allow(dead_code)]
+pub enum ServerType {
+    Unknown = 0,
+    ClientSrv = 1000,
+    GateWaySrv = 1001,
+    CrossSrv = 1002,
+    GameSrv = 1003,
+    DBSrv = 1004,
+    BattleSrv = 1005,
+    WorldSrv = 1006,
+    GMSrv = 1007,
+    CommonSrv = 1008,
+    LogSrv = 1009,
+    ChatSrv = 1010,
+    SocialSrv = 1011,
+    GuildSrv = 1012,
+}
+
+///
 pub type ReturnHander = Box<dyn Fn(&mut NetProxy, &TcpConn, CmdId, &[u8])>;
 
 ///节点数据
@@ -300,6 +319,12 @@ impl Cluster {
         self.net_proxy.send_proto(conn, cmd, msg);
     }
 
+    ///
+    #[inline(always)]
+    pub fn send_to_world(&mut self, cmd: CmdId, msg: &impl prost::Message) {
+        self.send_to_server(ServerType::WorldSrv as NodeId, cmd, msg);
+    }
+
     /// 发送到指定节点
     #[inline(always)]
     pub fn send_to_server(&mut self, nid: NodeId, cmd: CmdId, msg: &impl prost::Message) {
@@ -365,34 +390,42 @@ impl Cluster {
 /// use thread local unsafe cell -- mut
 #[macro_export]
 macro_rules! cluster_register_packet_handler {
-    ($source:ident, $cmd:path, $member_fn:ident) => {
-        {
-            let clone1 = $source.clone();
-            let mut s = $source.borrow_mut();
-            s.net_proxy.set_packet_handler(
-                $cmd as CmdId,
-                move |proxy, conn, cmd, data| {
-                    let ret = clone1.try_borrow_mut();
-                    match ret {
-                        Ok(mut s) => {
-                            paste::paste! {
-                                s.[< $member_fn >](proxy, conn, cmd, data);
-                            }
-                        }
-                        Err(err) => {
-                            log::error!("source try_borrow_mut error: {:?}!!! cmd={cmd:?}!!!", err);
+    ($source:ident, $cmd:path, $member_fn:ident) => {{
+        let clone1 = $source.clone();
+        let mut s = $source.borrow_mut();
+        s.net_proxy
+            .set_packet_handler($cmd as CmdId, move |proxy, conn, cmd, data| {
+                let ret = clone1.try_borrow_mut();
+                match ret {
+                    Ok(mut s) => {
+                        paste::paste! {
+                            s.[< $member_fn >](proxy, conn, cmd, data);
                         }
                     }
-                },
-            );
-        }
-    };
+                    Err(err) => {
+                        log::error!("source try_borrow_mut error: {:?}!!! cmd={cmd:?}!!!", err);
+                    }
+                }
+            });
+    }};
 }
 
 /// 注册消息监听
 pub fn regitser_packet_handler(cluster: &Rc<RefCell<Cluster>>) {
     //
-    cluster_register_packet_handler!(cluster, proto::InnerReservedCmd::IrcNodeHandshake, handle_node_handshake);
-    cluster_register_packet_handler!(cluster, proto::InnerReservedCmd::IrcNodeInfoNtf, handle_node_info_notify);
-    cluster_register_packet_handler!(cluster, proto::InnerReservedCmd::IrcRpcReturn, handle_rpc_return);
- }
+    cluster_register_packet_handler!(
+        cluster,
+        proto::InnerReservedCmd::IrcNodeHandshake,
+        handle_node_handshake
+    );
+    cluster_register_packet_handler!(
+        cluster,
+        proto::InnerReservedCmd::IrcNodeInfoNtf,
+        handle_node_info_notify
+    );
+    cluster_register_packet_handler!(
+        cluster,
+        proto::InnerReservedCmd::IrcRpcReturn,
+        handle_rpc_return
+    );
+}

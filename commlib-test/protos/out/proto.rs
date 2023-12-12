@@ -273,3 +273,34 @@ impl InnerReservedCmd {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RpcCmd {
+    RpcNone = 0,
+    /// 跨服方法调用
+    RpcCrossCall = 24,
+    /// 跨服方法调用回包
+    RpcCrossReturn = 25,
+}
+impl RpcCmd {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            RpcCmd::RpcNone => "RPC_None",
+            RpcCmd::RpcCrossCall => "RPC_CROSS_CALL",
+            RpcCmd::RpcCrossReturn => "RPC_CROSS_RETURN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "RPC_None" => Some(Self::RpcNone),
+            "RPC_CROSS_CALL" => Some(Self::RpcCrossCall),
+            "RPC_CROSS_RETURN" => Some(Self::RpcCrossReturn),
+            _ => None,
+        }
+    }
+}

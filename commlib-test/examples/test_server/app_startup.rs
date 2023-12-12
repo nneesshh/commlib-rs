@@ -99,7 +99,7 @@ pub fn startup_network_listen(srv: &Arc<TestService>) -> bool {
             let push_encrypt_token = true; // 是否推送 encrypt token
             main_manager
                 .c2s_proxy
-                .on_incomming_conn(conn.as_ref(), push_encrypt_token);
+                .on_incomming_conn(&conn, push_encrypt_token);
         });
     };
 
