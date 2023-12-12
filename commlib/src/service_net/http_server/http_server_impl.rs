@@ -174,8 +174,9 @@ impl HttpServer {
         self.set_status(ServerStatus::Starting);
 
         log::info!(
-            "http server start listen at addr: {} ... status: {}",
+            "http server start listen at addr: {} with_ssl={} ... status: {}",
             self.addr,
+            with_ssl,
             self.status().to_string()
         );
 
