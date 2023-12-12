@@ -73,9 +73,6 @@
 [submodule "mio"]
 	path = mio
 	url = https://github.com/nneesshh/mio
-[submodule "ring"]
-	path = ring
-	url = https://github.com/nneesshh/ring
 [submodule "rustls"]
 	path = rustls
 	url = https://github.com/nneesshh/rustls
