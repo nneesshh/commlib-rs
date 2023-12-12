@@ -79,9 +79,6 @@
 [submodule "rustls"]
 	path = rustls
 	url = https://github.com/nneesshh/rustls
-[submodule "webpki"]
-	path = webpki
-	url = https://github.com/nneesshh/webpki
 [submodule "webpki-roots"]
 	path = webpki-roots
 	url = https://github.com/nneesshh/webpki-roots
