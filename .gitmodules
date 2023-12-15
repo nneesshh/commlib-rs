@@ -64,9 +64,6 @@
 [submodule "bytes"]
 	path = bytes
 	url = https://github.com/nneesshh/bytes
-[submodule "tungstenite-rs"]
-	path = tungstenite-rs
-	url = https://github.com/nneesshh/tungstenite-rs
 [submodule "shared_memory"]
 	path = shared_memory
 	url = https://github.com/nneesshh/shared_memory
@@ -88,3 +85,6 @@
 [submodule "pemfile"]
 	path = pemfile
 	url = https://github.com/nneesshh/pemfile
+[submodule "data-encoding"]
+	path = data-encoding
+	url = https://github.com/nneesshh/data-encoding

@@ -40,9 +40,9 @@ chrono = "0.4"
 ring = "0.17"
 
 atomic = { path = "../atomic-rs" }
+base64 = { path = "../rust-base64" }
 bytemuck = { path = "../bytemuck", features = ["derive"] }
 bytes = { path = "../bytes" }
-base64 = { path = "../rust-base64" }
 curl = { path = "../curl-rust" }
 hashbrown = { path = "../hashbrown" }
 hex = { path = "../rust-hex" }
