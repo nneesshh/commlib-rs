@@ -88,3 +88,6 @@
 [submodule "data-encoding"]
 	path = data-encoding
 	url = https://github.com/nneesshh/data-encoding
+[submodule "rust-protobuf"]
+	path = rust-protobuf
+	url = https://github.com/stepancheg/rust-protobuf
