@@ -73,7 +73,7 @@ impl PacketBuilder {
     }
 
     /* input_buffer 中存放 input 数据，一次性处理完毕，Ok 返回 pkt_list, Err 返回错误信息 */
-    #[inline(always)]
+    //#[inline(always)]
     fn build_once(&mut self, _hd: ConnId, input_buffer: NetPacketGuard) -> PacketResult {
         //
         let mut pkt_list = Vec::new();

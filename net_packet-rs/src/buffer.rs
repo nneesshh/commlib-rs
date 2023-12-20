@@ -8,23 +8,23 @@ const CRLF: &[u8; 2] = b"\r\n";
 pub struct Buffer {
     storage: Cursor<Vec<u8>>, // storage.position() is the read_pos( cusor is for read only )
     write_pos: u64,
-    reserved_prepend_size: usize, // send write data with this offset for prepend header later
+    header_reserve_size: usize, // send write data with this offset for prepend header later
 }
 
 impl Buffer {
     ///
-    pub fn new(init_size: usize, reserved_prepend_size: usize) -> Self {
+    pub fn new(init_size: usize, header_reserve_size: usize) -> Self {
         // at least hold more than 1 CRLF
-        assert!(init_size > reserved_prepend_size as usize + CRLF.len());
+        assert!(init_size > header_reserve_size as usize + CRLF.len());
 
         let mut b = Self {
             storage: Cursor::new(vec![0_u8; init_size]),
-            write_pos: reserved_prepend_size as u64,
-            reserved_prepend_size: reserved_prepend_size,
+            write_pos: header_reserve_size as u64,
+            header_reserve_size: header_reserve_size,
         };
 
         // pad prepending zeros with cursor( as placeholder )
-        for _ in 0..reserved_prepend_size {
+        for _ in 0..header_reserve_size {
             b.storage.write(&[0]).unwrap();
         }
         b
@@ -60,13 +60,13 @@ impl Buffer {
         self.readable_bytes()
     }
 
-    /// It means bytes between p_pos and write_pos
+    /// It means bytes between body_pos and write_pos (for write only)
     #[inline(always)]
-    pub fn body_len(&self) -> usize {
+    pub fn wrote_body_len(&self) -> usize {
         let w_pos = self.write_pos();
-        let p_pos = self.reserved_prepend_size as u64;
-        assert!(w_pos >= p_pos);
-        (w_pos - p_pos) as usize
+        let b_pos = self.header_reserve_size as u64;
+        assert!(w_pos >= b_pos);
+        (w_pos - b_pos) as usize
     }
 
     /// It means writable bytes in buffer
@@ -93,9 +93,9 @@ impl Buffer {
     /// It is the same as truncate_to(0)
     #[inline(always)]
     pub fn reset(&mut self) {
-        let p_pos = self.reserved_prepend_size as u64;
-        self.set_read_pos(p_pos);
-        self.set_write_pos(p_pos);
+        let b_pos = self.header_reserve_size as u64;
+        self.set_read_pos(b_pos);
+        self.set_write_pos(b_pos);
     }
 
     /*================================ write ================================*/
@@ -103,7 +103,7 @@ impl Buffer {
     /// Ensure buffer capacity
     #[inline(always)]
     pub fn ensure(&mut self, cnt: usize) {
-        let p_size = self.reserved_prepend_size;
+        let p_size = self.header_reserve_size;
         let capacity = self.capacity();
         if capacity < p_size + cnt {
             self.grow(p_size + cnt - capacity);
@@ -113,9 +113,9 @@ impl Buffer {
     /// Ensure free space for write
     #[inline(always)]
     pub fn ensure_free_space(&mut self, cnt: usize) {
-        let p_pos = self.reserved_prepend_size as u64;
-        assert!(p_pos <= self.write_pos);
-        let used_bytes = self.write_pos - p_pos;
+        let b_pos = self.header_reserve_size as u64;
+        assert!(b_pos <= self.write_pos);
+        let used_bytes = self.write_pos - b_pos;
         self.ensure(used_bytes as usize + cnt);
     }
 
@@ -292,7 +292,7 @@ impl Buffer {
     }
 
     /// Backward the read_pos(cursor) of the buffer
-    #[inline(always)]
+    //#[inline(always)]
     pub fn backward(&mut self, cnt: usize) -> u64 {
         let r_pos = self.read_pos();
         assert!(cnt as u64 <= r_pos);
@@ -519,12 +519,12 @@ impl Buffer {
     }
 
     #[inline(always)]
-    fn reserve_prepend_raw_parts(&mut self) -> (*mut u8, u64) {
-        let p_pos = self.reserved_prepend_size as u64;
+    fn body_raw_parts(&mut self) -> (*mut u8, u64) {
+        let b_pos = self.header_reserve_size as u64;
         unsafe {
             (
-                self.begin_ptr().offset(self.reserved_prepend_size as isize),
-                p_pos,
+                self.begin_ptr().offset(self.header_reserve_size as isize),
+                b_pos,
             )
         }
     }
@@ -544,27 +544,30 @@ impl Buffer {
     #[inline(always)]
     fn writable_bytes(&self) -> usize {
         let w_pos = self.write_pos();
-        assert!(self.capacity() >= w_pos as usize);
-        self.capacity() - w_pos as usize
+        let capacity = self.capacity();
+        assert!(capacity >= w_pos as usize);
+        capacity - w_pos as usize
     }
 
     #[inline(always)]
     fn readable_bytes(&self) -> usize {
-        assert!(self.write_pos() >= self.read_pos());
-        (self.write_pos() - self.read_pos()) as usize
+        let r_pos = self.read_pos();
+        let w_pos = self.write_pos();
+        assert!(w_pos >= r_pos);
+        (w_pos - r_pos) as usize
     }
 
     #[inline(always)]
     fn grow(&mut self, additional: usize) {
-        let p_pos = self.reserved_prepend_size as u64;
+        let b_pos = self.header_reserve_size as u64;
         let r_pos = self.read_pos();
         let w_pos = self.write_pos();
         let capacity = self.capacity();
 
         // if we can make space inside buffer
-        assert!(p_pos <= self.read_pos());
+        assert!(b_pos <= self.read_pos());
         let old_writable_bytes = capacity - w_pos as usize;
-        let already_read_bytes = (r_pos - p_pos) as usize;
+        let already_read_bytes = (r_pos - b_pos) as usize;
         if already_read_bytes < additional {
             // grow the capacity with resize
             self.storage.get_mut().resize(capacity + additional, 0_u8);
@@ -574,12 +577,12 @@ impl Buffer {
             let readable = self.size();
 
             let (src, _r_pos) = self.read_raw_parts();
-            let (dst, _p_pos) = self.reserve_prepend_raw_parts();
+            let (dst, _b_pos) = self.body_raw_parts();
             unsafe {
                 std::ptr::copy(src, dst, readable);
             }
-            self.set_read_pos(p_pos);
-            self.set_write_pos(p_pos + readable as u64);
+            self.set_read_pos(b_pos);
+            self.set_write_pos(b_pos + readable as u64);
 
             assert_eq!(self.size(), readable);
             assert!(self.writable_bytes() >= old_writable_bytes + additional);
@@ -662,7 +665,7 @@ mod tests {
         assert_eq!(buf.chunk(), b"ll");
         let w_pos = buf.write_pos();
         assert_eq!(
-            &buf.storage.get_mut()[buf.reserved_prepend_size..(w_pos as usize)],
+            &buf.storage.get_mut()[buf.header_reserve_size..(w_pos as usize)],
             b"Hell"
         );
 
@@ -672,7 +675,7 @@ mod tests {
         assert_eq!(buf.chunk(), b"llo Wo");
         let w_pos = buf.write_pos();
         assert_eq!(
-            &buf.storage.get_mut()[buf.reserved_prepend_size..(w_pos as usize)],
+            &buf.storage.get_mut()[buf.header_reserve_size..(w_pos as usize)],
             b"Hello Wo"
         );
 

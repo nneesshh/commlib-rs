@@ -2,10 +2,10 @@ use lazy_static::lazy_static;
 use opool::{Pool, PoolAllocator, RefGuard};
 
 use super::net_packet_impl::{NetPacket, PacketSizeType};
-use super::net_packet_impl::{BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE};
+use super::net_packet_impl::{BUFFER_INITIAL_SIZE, BUFFER_HEADER_RESERVE_SIZE};
 
 /// packet 初始内存分配量
-pub const SMALL_PACKET_MAX_SIZE: usize = BUFFER_INITIAL_SIZE - BUFFER_RESERVED_PREPEND_SIZE;
+pub const SMALL_PACKET_MAX_SIZE: usize = BUFFER_INITIAL_SIZE - BUFFER_HEADER_RESERVE_SIZE;
 pub const LARGE_BUFFER_INITIAL_SIZE: usize = BUFFER_INITIAL_SIZE * 4;
 
 /// 线程安全 packet

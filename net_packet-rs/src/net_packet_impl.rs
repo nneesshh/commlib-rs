@@ -4,7 +4,7 @@ use super::Buffer;
 
 /// Buffer size
 pub const BUFFER_INITIAL_SIZE: usize = 4096;
-pub const BUFFER_RESERVED_PREPEND_SIZE: usize = 8;
+pub const BUFFER_HEADER_RESERVE_SIZE: usize = 8;
 
 /// 协议号类型，2字节
 pub type CmdId = u16;
@@ -31,7 +31,6 @@ pub struct NetPacket {
     pub leading_field_size: u8,
 
     ///
-    pub body_size: usize, // 包体纯数据长度，不包含包头（包头：包体前导长度字段，协议号，包序号等）
     pub cmd: CmdId,
     pub client: ClientHead,
 
@@ -45,11 +44,10 @@ impl NetPacket {
             size_type: PacketSizeType::Small,
             leading_field_size: 4, // 缺省占用4字节
 
-            body_size: 0,
             cmd: 0,
             client: ClientHead { no: 0 },
 
-            buffer: Buffer::new(BUFFER_INITIAL_SIZE, BUFFER_RESERVED_PREPEND_SIZE),
+            buffer: Buffer::new(BUFFER_INITIAL_SIZE, BUFFER_HEADER_RESERVE_SIZE),
         }
     }
 
@@ -62,7 +60,6 @@ impl NetPacket {
     ///
     #[inline(always)]
     pub fn release(&mut self) {
-        self.body_size = 0;
         self.cmd = 0;
         self.set_client_no(0);
         self.buffer.reset();
@@ -85,10 +82,10 @@ impl NetPacket {
         self.leading_field_size = leading_field_size;
     }
 
-    /// 包体数据缓冲区尚未读取的数据数量
+    /// 包体数据缓冲区的 body 长度（包体缓冲区 = header + body ), for write only
     #[inline(always)]
-    pub fn body_len(&self) -> usize {
-        self.buffer.body_len()
+    pub fn wrote_body_len(&self) -> usize {
+        self.buffer.wrote_body_len()
     }
 
     /// 包体数据缓冲区尚未读取的数据数量
@@ -198,46 +195,37 @@ impl NetPacket {
     pub fn append_slice(&mut self, slice: &[u8]) {
         //
         self.buffer.write_slice(slice);
-
-        // body size 计数
-        let leading_size = self.leading_field_size() as usize;
-        self.body_size = if self.buffer_raw_len() >= leading_size {
-            self.buffer_raw_len() - leading_size
-        } else {
-            0
-        };
     }
 
-       /// Append: u128
-       #[inline(always)]
-       pub fn append_u128(&mut self, n: u128) {
-           self.buffer.append_u128(n);
-       }
+    /// Append: u128
+    #[inline(always)]
+    pub fn append_u128(&mut self, n: u128) {
+        self.buffer.append_u128(n);
+    }
 
-       /// Append: u64
-       #[inline(always)]
-       pub fn append_u64(&mut self, n: u64) {
-           self.buffer.append_u64(n);
-       }
+    /// Append: u64
+    #[inline(always)]
+    pub fn append_u64(&mut self, n: u64) {
+        self.buffer.append_u64(n);
+    }
 
-       /// Append: u32
-       #[inline(always)]
-       pub fn append_u32(&mut self, n: u32) {
-           self.buffer.append_u32(n);
-       }
+    /// Append: u32
+    #[inline(always)]
+    pub fn append_u32(&mut self, n: u32) {
+        self.buffer.append_u32(n);
+    }
 
-       /// Append: u16
-       #[inline(always)]
-       pub fn append_u16(&mut self, n: u16) {
-           self.buffer.append_u16(n);
-       }
+    /// Append: u16
+    #[inline(always)]
+    pub fn append_u16(&mut self, n: u16) {
+        self.buffer.append_u16(n);
+    }
 
-       /// Append: u8
-       #[inline(always)]
-       pub fn append_u8(&mut self, n: u8) {
-           self.buffer.append_u8(n);
-       }
-   
+    /// Append: u8
+    #[inline(always)]
+    pub fn append_u8(&mut self, n: u8) {
+        self.buffer.append_u8(n);
+    }
 }
 
 /* **************** */
