@@ -75,6 +75,6 @@ pub fn take_small_packet() -> NetPacketGuard {
 pub fn take_large_packet(ensure_bytes: usize) -> NetPacketGuard {
     let mut pkt = G_PACKET_POOL_LARGE.get();
     pkt.set_size_type(PacketSizeType::Large);
-    pkt.ensure_writable_bytes(std::cmp::max(LARGE_BUFFER_INITIAL_SIZE, ensure_bytes));
+    pkt.ensure_free_space(std::cmp::max(LARGE_BUFFER_INITIAL_SIZE, ensure_bytes));
     pkt
 }

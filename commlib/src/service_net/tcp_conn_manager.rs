@@ -29,7 +29,7 @@ impl TcpConnStorage {
 #[inline(always)]
 pub fn on_connection_established(conn: Arc<TcpConn>) {
     // 运行于 srv_net 线程
-    assert!(conn.srv_net.is_in_service_thread());
+    assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
     // trigger conn_fn
     let conn2 = conn.clone();

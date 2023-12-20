@@ -53,7 +53,7 @@ impl ReplySubBuilder for BulkStringBuilder {
                     if 0_i64 == len {
                         // "$0\r\n\r\n
                         let r = RedisReply::from("", RedisReplyType::BulkString);
-                        buffer.skip(2);
+                        buffer.advance(2);
 
                         self.build_state = BulkStringBuildState::Size;
                         return BuildResult::Success(r);
@@ -69,7 +69,7 @@ impl ReplySubBuilder for BulkStringBuilder {
                         if let Some(pos) = s.find(pat) {
                             let value = &s[..pos];
                             let r = RedisReply::from(value, RedisReplyType::BulkString);
-                            buffer.skip(pos + 2); // 2 is "\r\n" length
+                            buffer.advance(pos + 2); // 2 is "\r\n" length
 
                             self.build_state = BulkStringBuildState::Size;
                             return BuildResult::Success(r);

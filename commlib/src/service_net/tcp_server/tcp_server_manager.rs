@@ -8,13 +8,12 @@ use thread_local::ThreadLocal;
 use net_packet::NetPacketGuard;
 use pinky_swear::PinkySwear;
 
-use crate::{ServiceNetRs, ServiceRs};
+use crate::service_net::packet_builder::tcp_packet_builder::PacketBuilder;
+use crate::service_net::service_net_impl::create_tcp_server;
+use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
+use crate::{ConnId, PacketType, ServiceNetRs, ServiceRs, TcpConn};
 
-use super::net_packet_encdec::PacketType;
-use super::packet_builder::PacketBuilder;
-use super::service_net_impl::create_tcp_server;
-use super::tcp_conn_manager::{insert_connection, on_connection_established};
-use super::{ConnId, TcpConn, TcpServer};
+use super::tcp_server_impl::TcpServer;
 
 thread_local! {
     static G_TCP_SERVER_STORAGE: UnsafeCell<TcpServerStorage> = UnsafeCell::new(TcpServerStorage::new());
@@ -134,7 +133,7 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     let tcp_server2 = tcp_server.clone();
     let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
+        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
         tcp_server2.on_ll_connect(conn);
     });
@@ -143,7 +142,7 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
     let tcp_server2 = tcp_server.clone();
     let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
+        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
         let builder = get_packet_builder(&packet_builder, &tcp_server2);
         tcp_server2.on_ll_input(conn, input_buffer, builder);
@@ -174,8 +173,8 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
         closed: Atomic::new(false),
 
         //
-        netctrl: netctrl.clone(),
-        srv_net: srv_net.clone(),
+        netctrl_opt: Some(netctrl.clone()),
+        srv_net_opt: Some(srv_net.clone()),
 
         //
         connection_establish_fn,
@@ -204,7 +203,7 @@ fn get_packet_builder<'a>(
 
         let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
             // 运行于 srv_net 线程
-            assert!(conn.srv_net.is_in_service_thread());
+            assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
             // post 到指定 srv 工作线程中执行
             let pkt_fn2 = pkt_fn.clone();

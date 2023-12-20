@@ -8,8 +8,9 @@ use uuid::Uuid;
 use net_packet::NetPacketGuard;
 use pinky_swear::PinkySwear;
 
+use crate::service_net::PacketType;
 use crate::RedisClient;
-use crate::{ClientStatus, ConnId, PacketType, TcpConn};
+use crate::{ClientStatus, ConnId, TcpConn};
 use crate::{ServiceNetRs, ServiceRs};
 
 use crate::service_net::service_net_impl::create_redis_client;
@@ -142,7 +143,7 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
     let cli2 = cli.clone();
     let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
+        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
         cli2.on_ll_connect(conn);
     });
 
@@ -150,7 +151,7 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
     let cli2 = cli.clone();
     let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
+        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
         cli2.on_ll_input(conn, input_buffer);
     });
 
@@ -180,8 +181,8 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
         closed: Atomic::new(false),
 
         //
-        netctrl: netctrl.clone(),
-        srv_net: srv_net.clone(),
+        netctrl_opt: Some(netctrl.clone()),
+        srv_net_opt: Some(srv_net.clone()),
 
         //
         connection_establish_fn,

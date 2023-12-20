@@ -60,7 +60,7 @@ impl ReplyBuilder {
     #[inline(always)]
     pub fn build(&mut self, conn: &Arc<TcpConn>, input_buffer: NetPacketGuard) {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
+        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
         //
         match self.build_once(input_buffer) {

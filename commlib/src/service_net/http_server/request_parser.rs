@@ -125,7 +125,7 @@ impl RequestParser {
                         self.state = RequestParserState::Abort;
                     } else if remain > 0 {
                         // 检查 pkt 容量是否足够
-                        let writable_bytes = pkt.buffer_writable_bytes();
+                        let writable_bytes = pkt.free_space();
                         if writable_bytes < remain {
                             // state: 进入扩展包体缓冲区处理，重新申请 large pkt
                             self.state = RequestParserState::Expand(full_len);

@@ -7,20 +7,14 @@ mod conn_id;
 pub use conn_id::ConnId;
 
 ///
-mod net_packet_encdec;
-pub use net_packet_encdec::PacketType;
-pub use net_packet_encdec::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
-
-///
-mod packet_builder;
+pub mod packet;
+pub use packet::get_leading_field_size;
+pub use packet::PacketType;
+pub use packet::{FROM_CLIENT_PKT_LEADING_FIELD_SIZE, PKT_LEADING_FIELD_SIZE_DEFAULT};
 
 ///
 mod listener_id;
 pub use listener_id::ListenerId;
-
-///
-mod net_proxy;
-pub use net_proxy::NetProxy;
 
 ///
 mod tcp_handler;
@@ -36,17 +30,14 @@ pub use tcp_conn_manager::disconnect_connection;
 
 ///
 mod tcp_server;
+pub use tcp_server::tcp_server_listen;
 pub use tcp_server::TcpServer;
-
-///
-mod tcp_server_manager;
-pub use tcp_server_manager::tcp_server_listen;
 
 ///
 pub mod connector;
 
-///
 mod listener;
+mod packet_builder;
 
 ///
 mod tcp_client;
@@ -91,3 +82,11 @@ pub use redis::{RedisClient, RedisCommander, RedisReply, RedisReplyType};
 mod http_server;
 pub use http_server::HttpServer;
 pub use http_server::{http_server_listen, parsing as http_parsing};
+
+///
+#[cfg(feature = "websocket")]
+mod ws_server;
+#[cfg(feature = "websocket")]
+pub use ws_server::ws_server_listen;
+#[cfg(feature = "websocket")]
+pub use ws_server::WsServer;

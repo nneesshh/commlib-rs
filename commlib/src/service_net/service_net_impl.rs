@@ -9,7 +9,11 @@ use super::http_server::http_server_manager::notify_http_server_stop;
 use super::http_server::HttpServer;
 use super::http_server::ResponseResult;
 use super::low_level_network::MessageIoNetwork;
-use super::tcp_server_manager::notify_tcp_server_stop;
+use super::tcp_server::tcp_server_manager::notify_tcp_server_stop;
+#[cfg(feature = "websocket")]
+use super::ws_server::ws_server_manager::notify_ws_server_stop;
+#[cfg(feature = "websocket")]
+use super::WsServer;
 use super::{ConnId, RedisClient, TcpClient, TcpConn, TcpServer};
 
 static NEXT_CLIENT_ID: Atomic<usize> = Atomic::<usize>::new(1);
@@ -71,6 +75,10 @@ impl ServiceRs for ServiceNetRs {
 
         // notify http server to stop
         notify_http_server_stop(self);
+
+        // notify ws server to stop
+        #[cfg(feature = "websocket")]
+        notify_ws_server_stop(self);
 
         //
         self.get_handle().join_service();
@@ -151,6 +159,37 @@ where
         &srv_net,
     );
     http_server
+}
+
+/// Create websocket server: netctrl is private
+#[allow(dead_code)]
+#[cfg(feature = "websocket")]
+pub fn create_websocket_server<T, C, P, S>(
+    srv: &Arc<T>,
+    addr: &str,
+    conn_fn: C,
+    pkt_fn: P,
+    close_fn: S,
+    connection_limit: usize,
+    srv_net: &Arc<ServiceNetRs>,
+) -> WsServer
+where
+    T: ServiceRs + 'static,
+    C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
+    P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+    S: Fn(ConnId) + Send + Sync + 'static,
+{
+    let ws_server = WsServer::new(
+        &srv,
+        addr,
+        conn_fn,
+        pkt_fn,
+        close_fn,
+        connection_limit,
+        &srv_net.netctrl,
+        &srv_net,
+    );
+    ws_server
 }
 
 /// Create tcp client: netctrl is private

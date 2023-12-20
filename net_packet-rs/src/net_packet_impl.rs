@@ -1,3 +1,5 @@
+use std::io::{self, Cursor};
+
 use super::Buffer;
 
 /// Buffer size
@@ -33,7 +35,7 @@ pub struct NetPacket {
     pub cmd: CmdId,
     pub client: ClientHead,
 
-    pub buffer: Buffer, // 包体数据缓冲区
+    buffer: Buffer, // 包体数据缓冲区
 }
 
 impl NetPacket {
@@ -66,36 +68,6 @@ impl NetPacket {
         self.buffer.reset();
     }
 
-    /// 向 pkt 追加数据
-    #[inline(always)]
-    pub fn append(&mut self, data: *const u8, len: usize) {
-        //
-        self.buffer.write(data, len);
-
-        // body size 计数
-        let leading_size = self.leading_field_size as usize;
-        self.body_size = if self.buffer_raw_len() >= leading_size {
-            self.buffer_raw_len() - leading_size
-        } else {
-            0
-        };
-    }
-
-    /// 向 pkt 追加数据
-    #[inline(always)]
-    pub fn append_slice(&mut self, slice: &[u8]) {
-        //
-        self.buffer.write_slice(slice);
-
-        // body size 计数
-        let leading_size = self.leading_field_size() as usize;
-        self.body_size = if self.buffer_raw_len() >= leading_size {
-            self.buffer_raw_len() - leading_size
-        } else {
-            0
-        };
-    }
-
     #[inline(always)]
     pub fn set_size_type(&mut self, size_type: PacketSizeType) {
         self.size_type = size_type;
@@ -113,34 +85,28 @@ impl NetPacket {
         self.leading_field_size = leading_field_size;
     }
 
-    /// 包体数据缓冲区 剩余可写容量
+    /// 包体数据缓冲区尚未读取的数据数量
     #[inline(always)]
-    pub fn buffer_writable_bytes(&self) -> usize {
-        self.buffer.writable_bytes()
-    }
-
-    /// 确保包体数据缓冲区 剩余可写容量
-    #[inline(always)]
-    pub fn ensure_writable_bytes(&mut self, len: usize) {
-        self.buffer.ensure_writable_bytes(len);
+    pub fn body_len(&self) -> usize {
+        self.buffer.body_len()
     }
 
     /// 包体数据缓冲区尚未读取的数据数量
     #[inline(always)]
     pub fn buffer_raw_len(&self) -> usize {
-        self.buffer.length()
+        self.buffer.size()
     }
 
-    /// 扩展 write 缓冲空间
+    /// 包体数据缓冲区尚未读取的数据数量 是否 为空
     #[inline(always)]
-    pub fn extend(&mut self, len: usize) -> &mut [u8] {
-        self.buffer.extend(len)
+    pub fn has_remaining(&self) -> bool {
+        !self.is_empty()
     }
 
-    /// 截断 write 缓冲空间
+    ///
     #[inline(always)]
-    pub fn truncate(&mut self, remain_n: usize) {
-        self.buffer.truncate_to(remain_n);
+    pub fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
     }
 
     /// 协议号
@@ -182,16 +148,118 @@ impl NetPacket {
         }
     }
 
-    /// 内部消耗掉 buffer 数据，供给外部使用
+    /// 包头长度校验
     #[inline(always)]
-    pub fn consume(&mut self) -> &[u8] {
-        self.buffer.next_all()
+    pub fn check_packet(&self) -> bool {
+        self.buffer.size() >= self.leading_field_size() as usize
+    }
+}
+
+/* **************** */
+// for write packet
+/* **************** */
+impl NetPacket {
+    /// 包体数据缓冲区 剩余可写容量
+    #[inline(always)]
+    pub fn free_space(&self) -> usize {
+        self.buffer.free_space()
+    }
+
+    /// 确保包体数据缓冲区 剩余可写容量
+    #[inline(always)]
+    pub fn ensure_free_space(&mut self, len: usize) {
+        self.buffer.ensure_free_space(len);
+    }
+
+    /// write 缓冲空间
+    #[inline(always)]
+    pub fn as_write_mut(&mut self) -> &mut [u8] {
+        self.buffer.as_write_mut()
+    }
+
+    /// write end，重设缓冲空间长度
+    #[inline(always)]
+    pub fn end_write(&mut self, len: usize) -> u64 {
+        let w_pos = self.buffer.write_pos();
+        let new_w_pos = w_pos + len as u64;
+        self.buffer.set_write_pos(new_w_pos);
+        new_w_pos
+    }
+
+    /// 向 pkt 追加数据
+    #[inline(always)]
+    pub fn append(&mut self, data: *const u8, len: usize) {
+        let slice = unsafe { std::slice::from_raw_parts(data, len) };
+        self.append_slice(slice);
+    }
+
+    /// 向 pkt 追加数据 (slice)
+    #[inline(always)]
+    pub fn append_slice(&mut self, slice: &[u8]) {
+        //
+        self.buffer.write_slice(slice);
+
+        // body size 计数
+        let leading_size = self.leading_field_size() as usize;
+        self.body_size = if self.buffer_raw_len() >= leading_size {
+            self.buffer_raw_len() - leading_size
+        } else {
+            0
+        };
+    }
+
+       /// Append: u128
+       #[inline(always)]
+       pub fn append_u128(&mut self, n: u128) {
+           self.buffer.append_u128(n);
+       }
+
+       /// Append: u64
+       #[inline(always)]
+       pub fn append_u64(&mut self, n: u64) {
+           self.buffer.append_u64(n);
+       }
+
+       /// Append: u32
+       #[inline(always)]
+       pub fn append_u32(&mut self, n: u32) {
+           self.buffer.append_u32(n);
+       }
+
+       /// Append: u16
+       #[inline(always)]
+       pub fn append_u16(&mut self, n: u16) {
+           self.buffer.append_u16(n);
+       }
+
+       /// Append: u8
+       #[inline(always)]
+       pub fn append_u8(&mut self, n: u8) {
+           self.buffer.append_u8(n);
+       }
+   
+}
+
+/* **************** */
+// for read packet
+/* **************** */
+impl NetPacket {
+    ///
+    #[inline(always)]
+    pub fn advance(&mut self, cnt: usize) -> &mut [u8] {
+        self.buffer.advance(cnt)
     }
 
     /// 内部消耗掉 buffer 数据，供给外部使用
     #[inline(always)]
-    pub fn consume_n(&mut self, n: usize) -> &[u8] {
-        self.buffer.next(n)
+    pub fn consume(&mut self) -> &mut [u8] {
+        self.buffer.advance_all()
+    }
+
+    /// 内部消耗掉 buffer 数据，供给外部使用
+    #[inline(always)]
+    pub fn consume_n(&mut self, n: usize) -> &mut [u8] {
+        self.advance(n)
     }
 
     /// 内部消耗掉 buffer 数据，供给外部使用
@@ -202,16 +270,85 @@ impl NetPacket {
 
     ///
     #[inline(always)]
-    pub fn set_body(&mut self, slice: &[u8]) {
-        let len = slice.len();
-        self.buffer.write_slice(slice);
-        self.body_size = len;
+    pub fn as_read_mut(&mut self) -> &mut [u8] {
+        self.buffer.as_read_mut()
     }
 
-    /// 包头长度校验
+    /// Cursor mut for read
     #[inline(always)]
-    pub fn check_packet(&self) -> bool {
-        self.buffer.length() >= self.leading_field_size() as usize
+    pub fn as_cursor_mut(&mut self) -> &mut Cursor<Vec<u8>> {
+        self.buffer.as_cursor_mut()
+    }
+
+    /// Prepend: u128
+    #[inline(always)]
+    pub fn prepend_u128(&mut self, n: u128) {
+        self.buffer.prepend_u128(n);
+    }
+
+    /// Prepend: u64
+    #[inline(always)]
+    pub fn prepend_u64(&mut self, n: u64) {
+        self.buffer.prepend_u64(n);
+    }
+
+    /// Prepend: u32
+    #[inline(always)]
+    pub fn prepend_u32(&mut self, n: u32) {
+        self.buffer.prepend_u32(n);
+    }
+
+    /// Prepend: u16
+    #[inline(always)]
+    pub fn prepend_u16(&mut self, n: u16) {
+        self.buffer.prepend_u16(n);
+    }
+
+    /// Prepend: u8
+    #[inline(always)]
+    pub fn prepend_u8(&mut self, n: u8) {
+        self.buffer.prepend_u8(n);
+    }
+
+    /// Read and consume: u128
+    #[inline(always)]
+    pub fn read_u128(&mut self) -> u128 {
+        self.buffer.read_u128()
+    }
+
+    /// Read and consume: u64
+    #[inline(always)]
+    pub fn read_u64(&mut self) -> u64 {
+        self.buffer.read_u64()
+    }
+
+    /// Read and consume: u32
+    #[inline(always)]
+    pub fn read_u32(&mut self) -> u32 {
+        self.buffer.read_u32()
+    }
+
+    /// Read and consume: u16
+    #[inline(always)]
+    pub fn read_u16(&mut self) -> u16 {
+        self.buffer.read_u16()
+    }
+
+    /// Read and consume: u8
+    #[inline(always)]
+    pub fn read_u8(&mut self) -> u8 {
+        self.buffer.read_u8()
+    }
+}
+
+/* **************** */
+// for stream
+/* **************** */
+impl NetPacket {
+    ///
+    #[inline(always)]
+    pub fn read_from<S: io::Read>(&mut self, stream: &mut S) -> io::Result<usize> {
+        self.buffer.read_from(stream)
     }
 }
 

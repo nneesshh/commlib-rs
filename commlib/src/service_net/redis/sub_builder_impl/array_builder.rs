@@ -67,7 +67,7 @@ impl ReplySubBuilder for ArrayBuilder {
                         // "*0\r\n
                         let r = RedisReply::from("", RedisReplyType::BulkString);
 
-                        buffer.skip(2);
+                        buffer.advance(2);
                         self.reset();
                         return BuildResult::Success(r);
                     } else if -1_i64 == num {

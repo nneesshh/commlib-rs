@@ -1,6 +1,7 @@
 use atomic::{Atomic, Ordering};
 use parking_lot::RwLock;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use net_packet::NetPacketGuard;
@@ -8,9 +9,8 @@ use net_packet::NetPacketGuard;
 use crate::ServiceRs;
 
 use super::low_level_network::MessageIoNetwork;
-use super::net_packet_encdec::PacketType;
 use super::tcp_conn_manager::on_connection_closed;
-use super::{ConnId, ServiceNetRs};
+use super::{ConnId, PacketType, ServiceNetRs};
 
 /// Tcp connection: all fields are public for easy construct
 pub struct TcpConn {
@@ -25,8 +25,8 @@ pub struct TcpConn {
     pub closed: Atomic<bool>,
 
     //
-    pub netctrl: Arc<MessageIoNetwork>,
-    pub srv_net: Arc<ServiceNetRs>,
+    pub netctrl_opt: Option<Arc<MessageIoNetwork>>,
+    pub srv_net_opt: Option<Arc<ServiceNetRs>>,
 
     // 运行于 srv_net 线程：处理连接事件
     pub connection_establish_fn: Box<dyn Fn(Arc<TcpConn>) + Send + Sync>,
@@ -39,6 +39,30 @@ pub struct TcpConn {
 }
 
 impl TcpConn {
+    /// For debug only
+    pub fn new(hd: ConnId) -> Self {
+        Self {
+            //
+            hd,
+
+            //
+            sock_addr: SocketAddr::from_str("127.0.0.1:0").unwrap(),
+
+            //
+            packet_type: Atomic::new(PacketType::Server),
+            closed: Atomic::new(false),
+
+            //
+            netctrl_opt: None,
+            srv_net_opt: None,
+
+            //
+            connection_establish_fn: Box::new(|_1| {}),
+            connection_read_fn: Box::new(|_1, _2| {}),
+            connection_lost_fn: RwLock::new(Arc::new(|_1| {})),
+        }
+    }
+
     /// low level close
     #[inline(always)]
     pub fn close(&self) {
@@ -52,22 +76,28 @@ impl TcpConn {
 
         //
         //log::info!("[hd={}] low level close", hd);
-        self.netctrl.close(hd);
+        self.netctrl_opt.as_ref().unwrap().close(hd);
 
-        let srv_net2 = self.srv_net.clone();
+        let srv_net2 = self.srv_net_opt.as_ref().unwrap().clone();
 
         // trigger connetion closed event
         // 运行于 srv_net 线程 (不管当前是否已经位于 srv_net 线程中，始终投递)
-        self.srv_net.run_in_service(Box::new(move || {
-            on_connection_closed(&srv_net2, hd);
-        }));
+        self.srv_net_opt
+            .as_ref()
+            .unwrap()
+            .run_in_service(Box::new(move || {
+                on_connection_closed(&srv_net2, hd);
+            }));
     }
 
     ///
     #[inline(always)]
     pub fn send_buffer(&self, buffer: NetPacketGuard) {
         let hd = self.hd;
-        self.netctrl.send_buffer(hd, self.sock_addr, buffer);
+        self.netctrl_opt
+            .as_ref()
+            .unwrap()
+            .send_buffer(hd, self.sock_addr, buffer);
     }
 
     ///

@@ -78,6 +78,15 @@ impl Listener {
         self.netctrl
             .listen_with_ssl(self, addr, cert_path, pri_key_path, &self.srv_net);
     }
+
+    ///
+    #[cfg(feature = "websocket")]
+    pub fn listen_with_ws(self: &Arc<Self>, addr: &str) {
+        // 运行于 srv_net 线程
+        assert!(self.srv_net.is_in_service_thread());
+
+        self.netctrl.listen_with_ws(self, addr, &self.srv_net);
+    }
 }
 
 ///

@@ -41,16 +41,18 @@ pub use service_signal::ServiceSignalRs;
 ///
 mod service_net;
 pub use service_net::http_parsing;
+#[cfg(feature = "websocket")]
+pub use service_net::ws_server_listen;
 pub use service_net::{
-    connect_to_redis, connect_to_tcp_server, http_server_listen, start_network, stop_network,
-    tcp_server_listen,
+    connect_to_redis, connect_to_tcp_server, get_leading_field_size, http_server_listen,
+    start_network, stop_network, tcp_server_listen,
 };
 pub use service_net::{redis_cmds as redis, RedisClient, RedisReply, RedisReplyType};
 pub use service_net::{
-    ClientStatus, ConnId, NetProxy, OsSocketAddr, PacketType, ServerStatus, ServiceNetRs,
+    ClientStatus, ConnId, ListenerId, OsSocketAddr, PacketType, ServerStatus, ServiceNetRs,
     TcpClient, TcpConn, TcpServer,
 };
-pub use service_net::{ENCRYPT_KEY_LEN, ENCRYPT_MAX_LEN};
+pub use service_net::{FROM_CLIENT_PKT_LEADING_FIELD_SIZE, PKT_LEADING_FIELD_SIZE_DEFAULT};
 
 ///
 mod service_http_client;

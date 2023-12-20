@@ -53,7 +53,6 @@ my_logger = { path = "../my_logger-rs" }
 opool = { path = "../opool" }
 parking_lot = { path = "../parking_lot" }
 pinky-swear = { path = "../pinky-swear" }
-prost = { path = "../prost" }
 rand = { path = "../rand", features = ["small_rng"] }
 roxmltree = { path = "../roxmltree" }
 serde_json = { path = "../json" }

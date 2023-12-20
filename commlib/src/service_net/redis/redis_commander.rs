@@ -279,7 +279,7 @@ impl RedisCommander {
 
         // part num in a cmd vec
         let part_num = cmd.len();
-        buffer.ensure_writable_bytes(5_usize + 5_usize * part_num);
+        buffer.ensure_free_space(5_usize + 5_usize * part_num);
 
         // array
         buffer

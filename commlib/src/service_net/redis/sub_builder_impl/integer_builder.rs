@@ -17,7 +17,7 @@ impl ReplySubBuilder for IntegerBuilder {
             let value = &s[..pos];
             if let Ok(int_value) = value.parse::<i64>() {
                 let r = RedisReply::from_integer(int_value);
-                buffer.skip(pos + 2); // 2 is "\r\n" length
+                buffer.advance(pos + 2); // 2 is "\r\n" length
                 BuildResult::Success(r)
             } else {
                 BuildResult::ErrorInvalidInteger

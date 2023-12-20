@@ -17,7 +17,7 @@ impl ReplySubBuilder for SimpleStringBuilder {
             // "+abcdefg\r\n"
             let value = &s[..pos];
             let r = RedisReply::from(value, RedisReplyType::SimpleString);
-            buffer.skip(pos + 2); // 2 is "\r\n" length
+            buffer.advance(pos + 2); // 2 is "\r\n" length
             BuildResult::Success(r)
         } else {
             BuildResult::Suspend

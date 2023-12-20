@@ -51,7 +51,7 @@ impl ReplySubBuilder for RootBuilder {
             //
             match &self.state {
                 RootBuildState::Leading => {
-                    let buffer_raw_len = buffer.length();
+                    let buffer_raw_len = buffer.size();
 
                     // 包体前导长度字段是否完整？
                     if buffer_raw_len >= 1_usize {

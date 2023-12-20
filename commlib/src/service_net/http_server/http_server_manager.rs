@@ -8,15 +8,12 @@ use thread_local::ThreadLocal;
 use net_packet::NetPacketGuard;
 use pinky_swear::PinkySwear;
 
-use crate::service_net::net_packet_encdec::PacketType;
 use crate::service_net::service_net_impl::create_http_server;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
-use crate::service_net::{ConnId, TcpConn};
-use crate::{ServiceNetRs, ServiceRs};
+use crate::{ConnId, PacketType, ServiceNetRs, ServiceRs, TcpConn};
 
-use super::http_server_impl::ResponseResult;
+use super::http_server_impl::{HttpServer, ResponseResult};
 use super::request_parser::RequestParser;
-use super::HttpServer;
 
 const CONNECTION_LIMIT: usize = 10000;
 
@@ -136,7 +133,7 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
     let http_server2 = http_server.clone();
     let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
+        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
         http_server2.on_ll_connect(conn);
     });
@@ -145,7 +142,7 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
     let http_server2 = http_server.clone();
     let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net.is_in_service_thread());
+        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
         http_server2.on_ll_input(conn, input_buffer, &request_parser);
     });
@@ -174,8 +171,8 @@ pub fn http_server_make_new_conn(http_server: &Arc<HttpServer>, hd: ConnId, sock
         closed: Atomic::new(false),
 
         //
-        netctrl: netctrl.clone(),
-        srv_net: srv_net.clone(),
+        netctrl_opt: Some(netctrl.clone()),
+        srv_net_opt: Some(srv_net.clone()),
 
         //
         connection_establish_fn,

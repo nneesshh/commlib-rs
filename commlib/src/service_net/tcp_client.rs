@@ -16,11 +16,11 @@ use thread_local::ThreadLocal;
 
 use net_packet::NetPacketGuard;
 
+use crate::service_net::packet_builder::tcp_packet_builder::PacketBuilder;
 use crate::{Clock, ServiceNetRs, ServiceRs};
 
 use super::connector::Connector;
 use super::low_level_network::MessageIoNetwork;
-use super::packet_builder::PacketBuilder;
 use super::tcp_client_manager::{
     tcp_client_check_auto_reconnect, tcp_client_make_new_conn, tcp_client_reconnect,
 };
@@ -431,7 +431,7 @@ impl TcpClient {
 
             let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
                 // 运行于 srv_net 线程
-                assert!(conn.srv_net.is_in_service_thread());
+                assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
 
                 // post 到指定 srv 工作线程中执行
                 let pkt_fn2 = pkt_fn.clone();

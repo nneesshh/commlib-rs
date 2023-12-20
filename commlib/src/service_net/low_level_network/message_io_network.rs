@@ -105,6 +105,37 @@ impl MessageIoNetwork {
         }
     }
 
+    ///
+    #[cfg(feature = "websocket")]
+    pub fn listen_with_ws(
+        &self,
+        listener: &Arc<Listener>,
+        addr: &str,
+        srv_net: &Arc<ServiceNetRs>,
+    ) -> bool {
+        // listen at tcp addr
+        let config = ListenConfig::default();
+        let ret = self
+            .node_handler
+            .listen_sync_with(config, Transport::Ws, addr);
+        match ret {
+            Ok((id, sock_addr)) => {
+                let listener_id = ListenerId::from(id.raw());
+                insert_listener(srv_net, listener_id, listener);
+
+                //
+                let on_listen = self.tcp_handler.on_listen;
+                (on_listen)(srv_net, listener_id, sock_addr.into());
+                true
+            }
+
+            Err(err) => {
+                log::error!("network listening at {} failed!!! error {:?}!!!", addr, err);
+                false
+            }
+        }
+    }
+
     /// connect with connector
     pub fn connect_with_connector(
         &self,
