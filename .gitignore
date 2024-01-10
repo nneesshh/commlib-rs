@@ -25,3 +25,5 @@ obj/
 *.svg
 
 commlib-test/log/
+
+commlib/rand_bytes.smoke_test
