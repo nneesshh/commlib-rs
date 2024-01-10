@@ -4,9 +4,6 @@
 [submodule "hashbrown"]
 	path = hashbrown
 	url = https://github.com/nneesshh/hashbrown.git
-[submodule "spdlog-rs"]
-	path = spdlog-rs
-	url = https://github.com/nneesshh/spdlog-rs.git
 [submodule "json"]
 	path = json
 	url = https://github.com/nneesshh/json.git
@@ -91,12 +88,3 @@
 [submodule "rust-protobuf"]
 	path = rust-protobuf
 	url = https://github.com/stepancheg/rust-protobuf
-[submodule "iso8601-duration"]
-	path = iso8601-duration
-	url = https://github.com/nneesshh/iso8601-duration
-[submodule "rust-mysql-simple"]
-	path = rust-mysql-simple
-	url = https://github.com/nneesshh/rust-mysql-simple
-[submodule "my_logger-rs"]
-	path = my_logger-rs
-	url = https://github.com/nneesshh/my_logger-rs
