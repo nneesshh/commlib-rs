@@ -1,0 +1,23 @@
+[package]
+name = "db_access"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["column"]
+column = []
+
+[dependencies]
+chrono = "*"
+clap = { version = "4", features = ["derive", "env"] }
+hashbrown = "*"
+log = "*"
+serde = "*"
+serde_json = "*"
+
+hex = { path = "../rust-hex" }
+iso8601-duration = { path = "../iso8601-duration" }
+my_logger = { path = "../my_logger-rs" }
+mysql = { path = "../rust-mysql-simple", default-features = false, features = ["minimal", "rustls-tls"] }
