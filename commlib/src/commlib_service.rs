@@ -164,13 +164,19 @@ pub trait ServiceRs: Send + Sync {
     fn join(&self);
 }
 
-/// 启动 service 线程，service 需要使用 Arc 包装，否则无法跨线程 move.
-/// (采用独立函数是因为 self: &Arc<T> 和 泛型 会导致 ServiceRs 不是 object safe)
-pub fn start_service<T, I>(
-    srv: &Arc<T>,
-    name_of_thread: &str,
-    initializer: I,
-) -> Option<JoinHandle<()>>
+// 启动 service，service 需要使用 Arc 包装，否则无法跨线程 move.
+// (采用独立函数是因为 self: &Arc<T> 和 泛型 会导致 ServiceRs 不是 object safe)
+pub fn launch_service<T, I>(srv: &Arc<T>, initializer: I) -> bool
+where
+    T: ServiceRs + 'static,
+    I: FnOnce() + Send + 'static,
+{
+    let join_handle_opt = start_service(&srv, srv.name(), initializer);
+    proc_service_ready(srv.as_ref(), join_handle_opt)
+}
+
+// 开启 service 线程
+fn start_service<T, I>(srv: &Arc<T>, name_of_thread: &str, initializer: I) -> Option<JoinHandle<()>>
 where
     T: ServiceRs + 'static,
     I: FnOnce() + Send + 'static,
@@ -228,9 +234,8 @@ where
     Some(join_handle)
 }
 
-/// 线程启动完成，执行后续处理 (ThreadId.as_u64() is not stable yet, use ready_pair now)
-///    ready_pair: (join_handle_opt, tid)
-pub fn proc_service_ready<T>(srv: &T, join_handle_opt: Option<JoinHandle<()>>) -> bool
+// 线程启动完成，保存 JoinHandle
+fn proc_service_ready<T>(srv: &T, join_handle_opt: Option<JoinHandle<()>>) -> bool
 where
     T: ServiceRs + 'static,
 {
