@@ -88,3 +88,6 @@
 [submodule "net_packet-rs"]
 	path = net_packet-rs
 	url = https://github.com/nneesshh/net_packet-rs
+[submodule "db_access-rs"]
+	path = db_access-rs
+	url = https://github.com/nneesshh/db_access-rs
