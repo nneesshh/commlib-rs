@@ -386,7 +386,7 @@ fn remove_curl_payload(srv_http_cli: &ServiceHttpClientRs, token: usize) -> Opti
 mod http_test {
     use serde_json::json;
 
-    use crate::{start_service, G_SERVICE_HTTP_CLIENT};
+    use crate::{launch_service, G_SERVICE_HTTP_CLIENT};
 
     #[test]
     fn test_http_client() {
@@ -396,7 +396,7 @@ mod http_test {
         //
         let srv_http_cli = G_SERVICE_HTTP_CLIENT.clone();
 
-        start_service(&srv_http_cli, "srv_http_cli", || {
+        launch_service(&srv_http_cli, || {
             //
         });
 
