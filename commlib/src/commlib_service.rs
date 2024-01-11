@@ -10,7 +10,7 @@ use std::thread::JoinHandle;
 use atomic::{Atomic, Ordering};
 use crossbeam_channel as channel;
 use pinky_swear::PinkySwear;
-use spdlog::get_current_tid;
+use my_logger::get_current_tid;
 
 use super::G_EXIT_CV;
 use super::{Clock, StopWatch, XmlReader};

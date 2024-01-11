@@ -16,10 +16,6 @@ mod commlib_event;
 pub use commlib_event::*;
 
 ///
-mod commlib_log;
-pub use commlib_log::*;
-
-///
 mod commlib_service;
 pub use commlib_service::*;
 
