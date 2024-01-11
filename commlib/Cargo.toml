@@ -42,7 +42,7 @@ ring = "0.17"
 atomic = { path = "../atomic-rs" }
 base64 = { path = "../rust-base64" }
 bytemuck = { path = "../bytemuck", features = ["derive"] }
-bytes = { path = "../bytes" }
+#bytes = { path = "../bytes" }
 curl = { path = "../curl-rust" }
 hashbrown = { path = "../hashbrown" }
 hex = { path = "../rust-hex" }
@@ -50,16 +50,15 @@ http = { path = "../http" }
 httparse = { path = "../httparse" }
 message-io = { path = "../message-io" }
 my_logger = { path = "../my_logger-rs" }
-opool = { path = "../opool" }
+#opool = { path = "../opool" }
 parking_lot = { path = "../parking_lot" }
 pinky-swear = { path = "../pinky-swear" }
 rand = { path = "../rand", features = ["small_rng"] }
 roxmltree = { path = "../roxmltree" }
 serde_json = { path = "../json" }
-spdlog-rs = { path = "../spdlog-rs/spdlog", features = ["log", "multi-thread", "source-location", "flexible-string"] }
 thread_local = { path = "../thread_local-rs" }
 commlib-sys = { path = "../commlib-sys" }
-net_packet = { path = "../net_packet-rs" }
+#net_packet = { path = "../net_packet-rs" }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.48", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO", "Win32_System_Console"] }

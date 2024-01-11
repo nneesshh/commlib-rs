@@ -58,9 +58,6 @@
 [submodule "hecs"]
 	path = hecs
 	url = https://github.com/nneesshh/hecs
-[submodule "bytes"]
-	path = bytes
-	url = https://github.com/nneesshh/bytes
 [submodule "shared_memory"]
 	path = shared_memory
 	url = https://github.com/nneesshh/shared_memory
