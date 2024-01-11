@@ -19,9 +19,6 @@
 [submodule "message-io"]
 	path = message-io
 	url = https://github.com/nneesshh/message-io/
-[submodule "opool"]
-	path = opool
-	url = https://github.com/nneesshh/opool
 [submodule "prost"]
 	path = prost
 	url = https://github.com/nneesshh/prost.git
