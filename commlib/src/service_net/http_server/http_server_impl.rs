@@ -215,18 +215,19 @@ impl HttpServer {
             &self.srv_net,
         ));
 
-        if with_ssl {
-            let cert_ptah = cert_path_opt.unwrap_or("certificate/myserver.pem".to_owned());
-            let pri_key_path =
-                private_key_path_opt.unwrap_or("certificate/myserver.key".to_owned());
-            listener.listen_with_ssl(
-                self.addr.as_str(),
-                cert_ptah.as_str(),
-                pri_key_path.as_str(),
-            );
-        } else {
-            listener.listen_with_tcp(self.addr.as_str());
-        }
+        listener.listen_with_tcp(self.addr.as_str());
+        // if with_ssl {
+        //     let cert_ptah = cert_path_opt.unwrap_or("certificate/myserver.pem".to_owned());
+        //     let pri_key_path =
+        //         private_key_path_opt.unwrap_or("certificate/myserver.key".to_owned());
+        //     listener.listen_with_ssl(
+        //         self.addr.as_str(),
+        //         cert_ptah.as_str(),
+        //         pri_key_path.as_str(),
+        //     );
+        // } else {
+        //     listener.listen_with_tcp(self.addr.as_str());
+        // }
     }
 
     ///

@@ -69,15 +69,15 @@ impl Listener {
     }
 
     ///
-    pub fn listen_with_ssl(self: &Arc<Self>, addr: &str, cert_path: &str, pri_key_path: &str) {
-        // 运行于 srv_net 线程
-        assert!(self.srv_net.is_in_service_thread());
+    // pub fn listen_with_ssl(self: &Arc<Self>, addr: &str, cert_path: &str, pri_key_path: &str) {
+    //     // 运行于 srv_net 线程
+    //     assert!(self.srv_net.is_in_service_thread());
 
-        let cert_path = std::path::PathBuf::from(cert_path);
-        let pri_key_path = std::path::PathBuf::from(pri_key_path);
-        self.netctrl
-            .listen_with_ssl(self, addr, cert_path, pri_key_path, &self.srv_net);
-    }
+    //     let cert_path = std::path::PathBuf::from(cert_path);
+    //     let pri_key_path = std::path::PathBuf::from(pri_key_path);
+    //     self.netctrl
+    //         .listen_with_ssl(self, addr, cert_path, pri_key_path, &self.srv_net);
+    // }
 
     ///
     #[cfg(feature = "websocket")]

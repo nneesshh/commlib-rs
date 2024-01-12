@@ -93,7 +93,10 @@ pub fn try_parse_request(buffer: &[u8]) -> Result<ParseResult, httparse::Error> 
         let mut request = httparse::Request::new(&mut header_buffer);
         let request_opt = match request.parse(&*buffer)? {
             httparse::Status::Partial => None,
-            httparse::Status::Complete(n) => Some((request, n)),
+            httparse::Status::Complete(n) => {
+                //
+                Some((request, n))
+            },
         };
 
         request_opt

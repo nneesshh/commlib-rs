@@ -69,6 +69,7 @@ impl MessageIoNetwork {
     }
 
     ///
+    #[cfg(feature = "ssl")]
     pub fn listen_with_ssl(
         &self,
         listener: &Arc<Listener>,
