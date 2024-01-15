@@ -1,6 +1,7 @@
 use std::cell::UnsafeCell;
 use std::sync::Arc;
 
+use commlib::with_tls_mut;
 use net_packet::NetPacketGuard;
 
 use crate::{ServiceNetRs, ServiceRs};

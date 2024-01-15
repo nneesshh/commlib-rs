@@ -5,36 +5,39 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
+use commlib::with_tls_mut;
 use net_packet::NetPacketGuard;
 use pinky_swear::PinkySwear;
 
-use crate::service_net::packet_builder::tcp_packet_builder::PacketBuilder;
-use crate::service_net::service_net_impl::create_tcp_server;
+use crate::service_net::packet_builder::ws_packet_builder::WsPacketBuilder;
+use crate::service_net::service_net_impl::create_websocket_server;
 use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
 use crate::{ConnId, PacketType, ServiceNetRs, ServiceRs, TcpConn};
 
-use super::tcp_server_impl::TcpServer;
+use super::ws_server_impl::WsServer;
+
+const CONNECTION_LIMIT: usize = 10000;
 
 thread_local! {
-    static G_TCP_SERVER_STORAGE: UnsafeCell<TcpServerStorage> = UnsafeCell::new(TcpServerStorage::new());
+    static G_WS_SERVER_STORAGE: UnsafeCell<WsServerStorage> = UnsafeCell::new(WsServerStorage::new());
 }
 
-struct TcpServerStorage {
-    /// tcp server vector
-    tcp_server_vec: Vec<Arc<TcpServer>>,
+struct WsServerStorage {
+    /// websocket server vector
+    ws_server_vec: Vec<Arc<WsServer>>,
 }
 
-impl TcpServerStorage {
+impl WsServerStorage {
     ///
     pub fn new() -> Self {
         Self {
-            tcp_server_vec: Vec::new(),
+            ws_server_vec: Vec::new(),
         }
     }
 }
 
 /// Listen on [ip:port] over service net
-pub fn tcp_server_listen<T, C, P, S>(
+pub fn ws_server_listen<T, C, P, S>(
     srv: &Arc<T>,
     addr: &str,
     conn_fn: C,
@@ -49,7 +52,7 @@ where
     P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
     S: Fn(ConnId) + Send + Sync + 'static,
 {
-    log::info!("tcp_server_listen: {}...", addr);
+    log::info!("ws_server_listen: {}...", addr);
 
     let (promise, pinky) = PinkySwear::<bool>::new();
 
@@ -60,7 +63,7 @@ where
 
     let func = move || {
         //
-        let tcp_server = Arc::new(create_tcp_server(
+        let ws_server = Arc::new(create_websocket_server(
             &srv2,
             addr2.as_str(),
             conn_fn,
@@ -71,18 +74,18 @@ where
         ));
 
         // listen
-        tcp_server.listen(&srv2, |listener_id, sock_addr| {
+        ws_server.listen(&srv2, |listener_id, sock_addr| {
             //
             log::info!(
-                "tcp_server_listen: listener_id={} sock_addr={} ready.",
+                "ws_server_listen: listener_id={} sock_addr={} ready.",
                 listener_id,
                 sock_addr
             );
         });
 
         // add tcp server to serivce net
-        with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
-            g.tcp_server_vec.push(tcp_server);
+        with_tls_mut!(G_WS_SERVER_STORAGE, g, {
+            g.ws_server_vec.push(ws_server);
         });
 
         //
@@ -94,16 +97,16 @@ where
     promise.wait()
 }
 
-/// Notify tcp server to stop
-pub fn notify_tcp_server_stop(srv_net: &ServiceNetRs) {
-    log::info!("notify_tcp_server_stop ...");
+/// Notify http server to stop
+pub fn notify_ws_server_stop(srv_net: &ServiceNetRs) {
+    log::info!("notify_ws_server_stop ...");
 
     // 投递到 srv_net 线程
     let (promise, pinky) = PinkySwear::<bool>::new();
     let func = move || {
-        with_tls_mut!(G_TCP_SERVER_STORAGE, g, {
-            for tcp_server in &mut g.tcp_server_vec {
-                tcp_server.stop();
+        with_tls_mut!(G_WS_SERVER_STORAGE, g, {
+            for ws_server in &mut g.ws_server_vec {
+                ws_server.stop();
             }
         });
 
@@ -115,51 +118,56 @@ pub fn notify_tcp_server_stop(srv_net: &ServiceNetRs) {
     promise.wait();
 }
 
-/// Make new tcp conn with callbacks from tcp server
-pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_addr: SocketAddr) {
+/// Make new http conn with callbacks from http server
+//#[inline(always)]
+pub fn ws_server_make_new_conn(ws_server: &Arc<WsServer>, hd: ConnId, sock_addr: SocketAddr) {
     // 运行于 srv_net 线程
-    assert!(tcp_server.srv_net().is_in_service_thread());
+    assert!(ws_server.srv_net().is_in_service_thread());
+
+    // 运行于 srv_net 线程
+    assert!(ws_server.srv_net().is_in_service_thread());
 
     let packet_type = PacketType::Server;
-    let packet_builder: Arc<ThreadLocal<UnsafeCell<PacketBuilder>>> = Arc::new(ThreadLocal::new());
+    let packet_builder: Arc<ThreadLocal<UnsafeCell<WsPacketBuilder>>> =
+        Arc::new(ThreadLocal::new());
 
     // 连接数量
-    if tcp_server.check_connection_limit() {
-        log::error!("connection overflow!!! tcp_server_make_new_conn failed!!!");
+    if ws_server.check_connection_limit() {
+        log::error!("connection overflow!!! ws_server_make_new_conn failed!!!");
         return;
     }
 
     // event handler: connect
-    let tcp_server2 = tcp_server.clone();
+    let ws_server2 = ws_server.clone();
     let connection_establish_fn = Box::new(move |conn: Arc<TcpConn>| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
+        assert!(conn.srv_net.is_in_service_thread());
 
-        tcp_server2.on_ll_connect(conn);
+        ws_server2.on_ll_connect(conn);
     });
 
     // event handler: input( use packet builder to handle input buffer )
-    let tcp_server2 = tcp_server.clone();
+    let ws_server2 = ws_server.clone();
     let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
         // 运行于 srv_net 线程
-        assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
+        assert!(conn.srv_net.is_in_service_thread());
 
-        let builder = get_packet_builder(&packet_builder, &tcp_server2);
-        tcp_server2.on_ll_input(conn, input_buffer, builder);
+        let builder = get_packet_builder(&packet_builder, &ws_server2);
+        ws_server2.on_ll_input(conn, input_buffer, builder);
     });
 
     // event handler: disconnect
-    let tcp_server2 = tcp_server.clone();
+    let ws_server2 = ws_server.clone();
     let connection_lost_fn = Arc::new(move |hd: ConnId| {
         // 运行于 srv_net 线程
-        assert!(tcp_server2.srv_net().is_in_service_thread());
+        assert!(ws_server2.srv_net().is_in_service_thread());
 
-        tcp_server2.on_ll_disconnect(hd);
+        ws_server2.on_ll_disconnect(hd);
     });
 
     //
-    let netctrl = tcp_server.netctrl().clone();
-    let srv_net = tcp_server.srv_net().clone();
+    let netctrl = ws_server.netctrl().clone();
+    let srv_net = ws_server.srv_net().clone();
 
     let conn = Arc::new(TcpConn {
         //
@@ -173,8 +181,8 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
         closed: Atomic::new(false),
 
         //
-        netctrl_opt: Some(netctrl.clone()),
-        srv_net_opt: Some(srv_net.clone()),
+        netctrl: netctrl.clone(),
+        srv_net: srv_net.clone(),
 
         //
         connection_establish_fn,
@@ -191,9 +199,9 @@ pub fn tcp_server_make_new_conn(tcp_server: &Arc<TcpServer>, hd: ConnId, sock_ad
 
 #[inline(always)]
 fn get_packet_builder<'a>(
-    tls_pkt_builder: &'a Arc<ThreadLocal<UnsafeCell<PacketBuilder>>>,
-    tcp_server: &Arc<TcpServer>,
-) -> &'a mut PacketBuilder {
+    tls_pkt_builder: &'a Arc<ThreadLocal<UnsafeCell<WsPacketBuilder>>>,
+    tcp_server: &Arc<WsServer>,
+) -> &'a mut WsPacketBuilder {
     // 运行于 srv_net 线程
     assert!(tcp_server.srv_net().is_in_service_thread());
 
@@ -203,7 +211,7 @@ fn get_packet_builder<'a>(
 
         let build_cb = move |conn: Arc<TcpConn>, pkt: NetPacketGuard| {
             // 运行于 srv_net 线程
-            assert!(conn.srv_net_opt.as_ref().unwrap().is_in_service_thread());
+            assert!(conn.srv_net.is_in_service_thread());
 
             // post 到指定 srv 工作线程中执行
             let pkt_fn2 = pkt_fn.clone();
@@ -211,7 +219,7 @@ fn get_packet_builder<'a>(
                 (*pkt_fn2)(conn, pkt);
             }));
         };
-        UnsafeCell::new(PacketBuilder::new(Box::new(build_cb)))
+        UnsafeCell::new(WsPacketBuilder::new(Box::new(build_cb)))
     });
     unsafe { &mut *(builder.get()) }
 }

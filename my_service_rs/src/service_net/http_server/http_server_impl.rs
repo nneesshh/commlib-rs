@@ -10,12 +10,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
+use commlib::G_THREAD_POOL;
 use net_packet::NetPacketGuard;
 
 use crate::service_net::http_server::http_server_manager::http_server_make_new_conn;
 use crate::service_net::listener::Listener;
 use crate::service_net::low_level_network::MessageIoNetwork;
-use crate::{ConnId, ServerStatus, ServiceNetRs, ServiceRs, TcpConn, G_THREAD_POOL};
+use crate::{ConnId, ServerStatus, ServiceNetRs, ServiceRs, TcpConn};
 
 use super::error;
 use super::request_parser::RequestParser;
@@ -163,71 +164,41 @@ impl HttpServer {
     }
 
     /// Create a http server and listen on [ip:port]
-    pub fn listen(
+    pub fn listen(self: &Arc<Self>) {
+        log::info!(
+            "http server start listen at addr: {} ... status: {}",
+            self.addr,
+            self.status().to_string()
+        );
+
+        let listener = self.create_listener();
+        listener.listen_with_tcp(self.addr.as_str());
+    }
+
+    /// Create a http server and listen on [ip:port]
+    #[cfg(feature = "ssl")]
+    pub fn listen_with_ssl(
         self: &Arc<Self>,
-        with_ssl: bool,
         cert_path_opt: Option<String>,
         private_key_path_opt: Option<String>,
     ) {
-        //
-        self.set_status(ServerStatus::Starting);
-
         log::info!(
-            "http server start listen at addr: {} with_ssl={} ... status: {}",
+            "http server start listen_with_ssl at addr: {} ... status: {}",
             self.addr,
-            with_ssl,
             self.status().to_string()
         );
 
         //
-        let http_server = self.clone();
-        let listen_fn = move |r| {
-            match r {
-                Ok((_listener_id, _sock_addr)) => {
-                    // 状态：Running
-                    http_server.set_status(ServerStatus::Running);
-                }
-                Err(error) => {
-                    //
-                    log::error!(
-                        "http server listen at {:?} failed!!! status:{}!!! error: {}!!!",
-                        http_server.addr,
-                        http_server.status().to_string(),
-                        error
-                    );
-                }
-            }
-        };
+        let listener = self.create_listener();
 
         //
-        let http_server2 = self.clone();
-        let accept_fn = move |_listener_id, hd, sock_addr| {
-            // make new connection
-            http_server_make_new_conn(&http_server2, hd, sock_addr);
-        };
-
-        // start listener
-        let listener = Arc::new(Listener::new(
-            std::format!("listener({})", self.addr).as_str(),
-            listen_fn,
-            accept_fn,
-            &self.netctrl,
-            &self.srv_net,
-        ));
-
-        listener.listen_with_tcp(self.addr.as_str());
-        // if with_ssl {
-        //     let cert_ptah = cert_path_opt.unwrap_or("certificate/myserver.pem".to_owned());
-        //     let pri_key_path =
-        //         private_key_path_opt.unwrap_or("certificate/myserver.key".to_owned());
-        //     listener.listen_with_ssl(
-        //         self.addr.as_str(),
-        //         cert_ptah.as_str(),
-        //         pri_key_path.as_str(),
-        //     );
-        // } else {
-        //     listener.listen_with_tcp(self.addr.as_str());
-        // }
+        let cert_ptah = cert_path_opt.unwrap_or("certificate/myserver.pem".to_owned());
+        let pri_key_path = private_key_path_opt.unwrap_or("certificate/myserver.key".to_owned());
+        listener.listen_with_ssl(
+            self.addr.as_str(),
+            cert_ptah.as_str(),
+            pri_key_path.as_str(),
+        );
     }
 
     ///
@@ -302,6 +273,48 @@ impl HttpServer {
             // 无需检测上限 == 未达到上限
             false
         }
+    }
+
+    fn create_listener(self: &Arc<Self>) -> Arc<Listener> {
+        //
+        self.set_status(ServerStatus::Starting);
+
+        //
+        let http_server = self.clone();
+        let listen_fn = move |r| {
+            match r {
+                Ok((_listener_id, _sock_addr)) => {
+                    // 状态：Running
+                    http_server.set_status(ServerStatus::Running);
+                }
+                Err(error) => {
+                    //
+                    log::error!(
+                        "http server listen at {:?} failed!!! status:{}!!! error: {}!!!",
+                        http_server.addr,
+                        http_server.status().to_string(),
+                        error
+                    );
+                }
+            }
+        };
+
+        //
+        let http_server2 = self.clone();
+        let accept_fn = move |_listener_id, hd, sock_addr| {
+            // make new connection
+            http_server_make_new_conn(&http_server2, hd, sock_addr);
+        };
+
+        // start listener
+        let listener = Arc::new(Listener::new(
+            std::format!("listener({})", self.addr).as_str(),
+            listen_fn,
+            accept_fn,
+            &self.netctrl,
+            &self.srv_net,
+        ));
+        listener
     }
 }
 

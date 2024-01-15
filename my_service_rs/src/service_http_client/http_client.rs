@@ -12,6 +12,8 @@ use std::sync::Arc;
 use curl::easy::{Easy as CurlEasy, List as CurlList};
 use curl::multi::{EasyHandle, Multi as CurlMulti};
 
+use commlib::with_tls_mut;
+
 use crate::{ServiceHttpClientRs, ServiceRs};
 
 use super::{HttpContext, HttpRequest, HttpRequestType};

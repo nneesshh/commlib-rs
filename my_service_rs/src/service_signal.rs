@@ -1,19 +1,20 @@
+use commlib::{Event, EventHandler, EventListener};
 use commlib_sys::ffi_sig::init_signal_handlers;
 use commlib_sys::SignalCallback;
 
-use crate::impl_event_for;
 use crate::G_SERVICE_SIGNAL;
-use crate::{Event, EventHandler, EventListener, NodeState, ServiceHandle, ServiceRs};
+use crate::{NodeState, ServiceHandle, ServiceRs};
+use commlib::impl_event_for;
 
 /// Event
 pub struct EventSignalInt();
-impl_event_for!(ServiceSignalRs, EventSignalInt);
+impl_event_for!("Signal", EventSignalInt);
 
 pub struct EventSignalUsr1();
-impl_event_for!(ServiceSignalRs, EventSignalUsr1);
+impl_event_for!("Signal", EventSignalUsr1);
 
 pub struct EventSignalUsr2();
-impl_event_for!(ServiceSignalRs, EventSignalUsr2);
+impl_event_for!("Signal", EventSignalUsr2);
 
 /// ServiceSignal
 pub struct ServiceSignalRs {

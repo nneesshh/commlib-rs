@@ -5,8 +5,9 @@
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 
+use commlib::G_THREAD_POOL;
+
 use crate::service_net::connector::Connector;
-use crate::G_THREAD_POOL;
 use crate::{ServiceNetRs, ServiceRs};
 
 pub fn dns_resolve(connector: &Arc<Connector>, raddr: &str, srv_net: &Arc<ServiceNetRs>) {

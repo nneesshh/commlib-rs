@@ -5,18 +5,10 @@ use std::sync::Arc;
 pub const SERVICE_ID_SIG: u64 = 1001_u64;
 pub const SERVICE_ID_NET: u64 = 1002_u64;
 pub const SERVICE_ID_HTTP_CLIENT: u64 = 1003_u64;
-pub const SERVICE_ID_DNS_RESOLVER: u64 = 1004_u64;
 
 lazy_static::lazy_static! {
     ///
     pub static ref G_EXIT_CV: Arc<(Mutex<bool>, Condvar)> = Arc::new((Mutex::new(false), Condvar::new()));
-
-    ///
-    pub static ref G_THREAD_POOL: Arc<crate::utils::ThreadPool> = {
-        //
-        let pool = crate::utils::ThreadPoolBuilder::new().num_threads(4).build();
-        Arc::new(pool)
-    };
 
     ///
     pub static ref G_SERVICE_SIGNAL: Arc<crate::ServiceSignalRs> =  Arc::new(crate::ServiceSignalRs::new(SERVICE_ID_SIG));

@@ -99,7 +99,7 @@ where
 /// Impl Event trait for struct
 #[macro_export]
 macro_rules! impl_event_for {
-    ($s:ident, $t:ident) => {
+    ($s:literal, $t:ident) => {
         paste::paste! {
             impl Event for $t {
                 /// Id string
@@ -118,7 +118,7 @@ macro_rules! impl_event_for {
                 }
             }
             thread_local! {
-                static [<G_EVENT_LISTENER_ $s:upper _ $t:upper>]: std::cell::RefCell<EventListener<$s, $t>> = std::cell::RefCell::new(EventListener::<$s, $t>::new());
+                static [<G_EVENT_LISTENER_ $s:upper _ $t:upper>]: std::cell::RefCell<EventListener<$t>> = std::cell::RefCell::new(EventListener::<$t>::new());
             }
         }
     };

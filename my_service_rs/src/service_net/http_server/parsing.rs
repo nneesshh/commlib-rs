@@ -96,7 +96,7 @@ pub fn try_parse_request(buffer: &[u8]) -> Result<ParseResult, httparse::Error> 
             httparse::Status::Complete(n) => {
                 //
                 Some((request, n))
-            },
+            }
         };
 
         request_opt

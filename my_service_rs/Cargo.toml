@@ -1,11 +1,11 @@
 [package]
-name = "commlib"
+name = "my_service"
 version = "1.0.0"
 authors = ["nneesshh <neckshotk@gmail.com>"]
 description = "Common library for Rust projects"
 documentation = ""
 homepage = ""
-keywords = ["service", "signal", "event", "log"]
+keywords = ["service", "signal"]
 categories = ["os"]
 license = "MIT/Apache-2.0"
 repository = ""
@@ -55,16 +55,6 @@ rand = { path = "../rand", features = ["small_rng"] }
 roxmltree = { path = "../roxmltree" }
 serde_json = { path = "../json" }
 thread_local = { path = "../thread_local-rs" }
+commlib = { path = "../commlib" }
 commlib-sys = { path = "../commlib-sys" }
 net_packet = { path = "../net_packet-rs" }
-
-[target.'cfg(windows)'.dev-dependencies]
-windows-sys = { version = "0.48", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO", "Win32_System_Console"] }
-rustix = { version = "0.38", features = ["fs"] }
-
-[dev-dependencies]
-tempfile = "2"
-
-[build-dependencies]
-dunce = "1"
-miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!

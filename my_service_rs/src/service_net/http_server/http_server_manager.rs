@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use thread_local::ThreadLocal;
 
+use commlib::with_tls_mut;
 use net_packet::NetPacketGuard;
 use pinky_swear::PinkySwear;
 
@@ -36,19 +37,14 @@ impl HttpServerStorage {
 }
 
 /// Listen on [ip:port] over service net
-pub fn http_server_listen<F>(
-    addr: &str,
-    request_fn: F,
-    with_ssl: bool,
-    srv_net: &Arc<ServiceNetRs>,
-) -> bool
+pub fn http_server_listen<F>(addr: &str, request_fn: F, srv_net: &Arc<ServiceNetRs>) -> bool
 where
     F: Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
         + Send
         + Sync
         + 'static,
 {
-    log::info!("http_server_listen: {} with_ssl={} ...", addr, with_ssl);
+    log::info!("http_server_listen: {} ...", addr);
 
     let conn_fn = |_conn: Arc<TcpConn>| {
         //let hd = _conn.hd;
@@ -77,7 +73,65 @@ where
         ));
 
         // listen
-        http_server.listen(with_ssl, None, None);
+        http_server.listen();
+
+        // add tcp server to serivce net
+        with_tls_mut!(G_HTTP_SERVER_STORAGE, g, {
+            g.http_server_vec.push(http_server);
+        });
+
+        //
+        pinky.swear(true);
+    };
+    srv_net.run_in_service(Box::new(func));
+
+    //
+    promise.wait()
+}
+
+/// Listen with ssl on [ip:port] over service net
+#[cfg(feature = "ssl")]
+pub fn http_server_listen_with_ssl<F>(
+    addr: &str,
+    request_fn: F,
+    srv_net: &Arc<ServiceNetRs>,
+) -> bool
+where
+    F: Fn(Arc<TcpConn>, http::Request<Vec<u8>>, http::response::Builder) -> ResponseResult
+        + Send
+        + Sync
+        + 'static,
+{
+    log::info!("http_server_listen_with_ssl: {} ...", addr);
+
+    let conn_fn = |_conn: Arc<TcpConn>| {
+        //let hd = _conn.hd;
+        //log::info!("[hd={}] conn_fn", hd);
+    };
+
+    let close_fn = |_hd: ConnId| {
+        //log::info!("[hd={}] close_fn", _hd);
+    };
+
+    let (promise, pinky) = PinkySwear::<bool>::new();
+
+    // 投递到 srv_net 线程
+    let srv_net2 = srv_net.clone();
+    let addr2 = addr.to_owned();
+
+    let func = move || {
+        //
+        let http_server = Arc::new(create_http_server(
+            addr2.as_str(),
+            conn_fn,
+            request_fn,
+            close_fn,
+            CONNECTION_LIMIT,
+            &srv_net2,
+        ));
+
+        // listen
+        http_server.listen_with_ssl();
 
         // add tcp server to serivce net
         with_tls_mut!(G_HTTP_SERVER_STORAGE, g, {

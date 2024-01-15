@@ -5,27 +5,27 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use commlib::with_tls_mut;
 use net_packet::NetPacketGuard;
 use pinky_swear::PinkySwear;
 
-use crate::service_net::PacketType;
-use crate::RedisClient;
-use crate::{ClientStatus, ConnId, TcpConn};
+use crate::service_net::tcp_conn_manager::on_connection_established;
 use crate::{ServiceNetRs, ServiceRs};
 
-use crate::service_net::service_net_impl::create_redis_client;
-use crate::service_net::tcp_conn_manager::{insert_connection, on_connection_established};
+use super::service_net_impl::create_tcp_client;
+use super::tcp_conn_manager::insert_connection;
+use super::{ClientStatus, ConnId, PacketType, TcpClient, TcpConn};
 
 thread_local! {
-     static G_REDIS_CLIENT_STORAGE: UnsafeCell<RedisClientStorage> = UnsafeCell::new(RedisClientStorage::new());
+     static G_TCP_CLIENT_STORAGE: UnsafeCell<TcpClientStorage> = UnsafeCell::new(TcpClientStorage::new());
 }
 
-struct RedisClientStorage {
+struct TcpClientStorage {
     /// tcp client table
-    client_table: hashbrown::HashMap<uuid::Uuid, Arc<RedisClient>>,
+    client_table: hashbrown::HashMap<uuid::Uuid, Arc<TcpClient>>,
 }
 
-impl RedisClientStorage {
+impl TcpClientStorage {
     ///
     pub fn new() -> Self {
         Self {
@@ -35,76 +35,79 @@ impl RedisClientStorage {
 }
 
 ///
-pub fn insert_redis_client(srv_net: &ServiceNetRs, cli_id: Uuid, cli: &Arc<RedisClient>) {
+pub fn insert_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid, cli: &Arc<TcpClient>) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
 
-    with_tls_mut!(G_REDIS_CLIENT_STORAGE, g, {
-        log::info!("add redis client: id<{}>", cli_id);
+    with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
+        log::info!("add client: id<{}>", cli_id);
         g.client_table.insert(cli_id, cli.clone());
     });
 }
 
 ///
 #[allow(dead_code)]
-pub fn remove_redis_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<RedisClient>> {
+pub fn remove_tcp_client(srv_net: &ServiceNetRs, cli_id: Uuid) -> Option<Arc<TcpClient>> {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
 
-    with_tls_mut!(G_REDIS_CLIENT_STORAGE, g, {
+    with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
         if let Some(cli) = g.client_table.remove(&cli_id) {
-            log::info!("remove redis client: id<{}>", cli_id);
+            log::info!("remove client: id<{}>", cli_id);
             Some(cli)
         } else {
-            log::error!("redis client: id<{}> not found!!!", cli_id);
+            log::error!("client: id<{}> not found!!!", cli_id);
             None
         }
     })
 }
 
 ///
-pub fn connect_to_redis(
-    srv: &Arc<dyn ServiceRs>,
+pub fn connect_to_tcp_server<T, C, P, S>(
+    srv: &Arc<T>,
+    name: &str,
     raddr: &str,
-    pass: &str,
-    dbindex: isize,
+    conn_fn: C,
+    pkt_fn: P,
+    close_fn: S,
     srv_net: &Arc<ServiceNetRs>,
-) -> Option<Arc<RedisClient>> {
-    log::info!(
-        "[connect_to_redis] raddr: {} ... pass({}) dbindex({})",
-        raddr,
-        pass,
-        dbindex
-    );
+) -> Option<Arc<TcpClient>>
+where
+    T: ServiceRs + 'static,
+    C: Fn(Arc<TcpConn>) + Send + Sync + 'static,
+    P: Fn(Arc<TcpConn>, NetPacketGuard) + Send + Sync + 'static,
+    S: Fn(ConnId) + Send + Sync + 'static,
+{
+    log::info!("({})[connect_to_tcp_server] raddr: {} ...", name, raddr);
 
-    let (promise, pinky) = PinkySwear::<Option<Arc<RedisClient>>>::new();
+    let (promise, pinky) = PinkySwear::<Option<Arc<TcpClient>>>::new();
 
     // 投递到 srv_net 线程
     let srv_net2 = srv_net.clone();
     let srv2 = srv.clone();
+    let name = name.to_owned();
     let raddr = raddr.to_owned();
-    let pass = pass.to_owned();
 
     let func = move || {
         //
-        let cli = Arc::new(create_redis_client(
+        let cli = Arc::new(create_tcp_client(
             &srv2,
+            name.as_str(),
             raddr.as_str(),
-            pass.as_str(),
-            dbindex,
+            conn_fn,
+            pkt_fn,
+            close_fn,
             &srv_net2,
         ));
         log::info!(
-            "id<{}>({}) start connect to raddr: {} ... pass({}) dbindex({})",
+            "id<{}>({}) start connect to raddr: {} ... ",
             cli.id(),
             cli.name(),
             raddr,
-            pass,
-            dbindex,
         );
 
-        // insert redis client
-        insert_redis_client(&srv_net2, cli.id(), &cli);
+        // insert tcp client
+        insert_tcp_client(&srv_net2, cli.id(), &cli);
 
         //
         let cli2 = cli.clone();
@@ -125,19 +128,20 @@ pub fn connect_to_redis(
             }
         });
     };
+
     srv_net.run_in_service(Box::new(func));
 
     //
     promise.wait()
 }
 
-/// Make new tcp conn with callbacks from redis client
-pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr: SocketAddr) {
+/// Make new tcp conn with callbacks from tcp client
+pub fn tcp_client_make_new_conn(cli: &Arc<TcpClient>, hd: ConnId, sock_addr: SocketAddr) {
     // 运行于 srv_net 线程
     assert!(cli.srv_net().is_in_service_thread());
 
     //
-    let packet_type = Atomic::new(PacketType::Redis);
+    let packet_type = Atomic::new(PacketType::Server);
 
     //
     let cli2 = cli.clone();
@@ -147,7 +151,7 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
         cli2.on_ll_connect(conn);
     });
 
-    // use redis reply builder to handle input buffer
+    // use packet builder to handle input buffer
     let cli2 = cli.clone();
     let connection_read_fn = Box::new(move |conn: Arc<TcpConn>, input_buffer: NetPacketGuard| {
         // 运行于 srv_net 线程
@@ -160,8 +164,6 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
     let connection_lost_fn = Arc::new(move |hd: ConnId| {
         // 运行于 srv_net 线程
         assert!(cli2.srv_net().is_in_service_thread());
-
-        //
         cli2.on_ll_disconnect(hd);
     });
 
@@ -193,21 +195,21 @@ pub fn redis_client_make_new_conn(cli: &Arc<RedisClient>, hd: ConnId, sock_addr:
     // add conn
     insert_connection(srv_net.as_ref(), conn.hd, &conn.clone());
 
-    // update inner hd for RedisClient
+    // update inner hd for TcpClient
     {
         cli.set_inner_hd(hd);
     }
 
-    // redis_connection ok
+    // connection ok
     on_connection_established(conn);
 }
 
 ///
-pub fn redis_client_check_auto_reconnect(hd: ConnId, cli_id: Uuid, srv_net: &Arc<ServiceNetRs>) {
+pub fn tcp_client_check_auto_reconnect(hd: ConnId, cli_id: Uuid, srv_net: &Arc<ServiceNetRs>) {
     // 投递到 srv_net 线程
     let func = move || {
         // close tcp client
-        with_tls_mut!(G_REDIS_CLIENT_STORAGE, g, {
+        with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
             if let Some(cli) = g.client_table.get(&cli_id) {
                 cli.set_status(ClientStatus::Disconnected);
                 log::info!(
@@ -215,7 +217,7 @@ pub fn redis_client_check_auto_reconnect(hd: ConnId, cli_id: Uuid, srv_net: &Arc
                     hd,
                     cli.name(),
                     cli_id,
-                    cli.inner_hd()
+                    cli.inner_hd(),
                 );
 
                 // check auto reconnect
@@ -233,26 +235,26 @@ pub fn redis_client_check_auto_reconnect(hd: ConnId, cli_id: Uuid, srv_net: &Arc
 }
 
 ///
-pub fn redis_client_reconnect(hd: ConnId, name: &str, cli_id: Uuid, srv_net: &ServiceNetRs) {
+pub fn tcp_client_reconnect(hd: ConnId, name: &str, cli_id: Uuid, srv_net: &Arc<ServiceNetRs>) {
     // 运行于 srv_net 线程
     assert!(srv_net.is_in_service_thread());
 
-    with_tls_mut!(G_REDIS_CLIENT_STORAGE, g, {
+    with_tls_mut!(G_TCP_CLIENT_STORAGE, g, {
         let client_opt = g.client_table.get(&cli_id);
         if let Some(cli) = client_opt {
             if cli.status().is_connected() {
                 log::error!(
-                    "[hd={}]({}) redis client reconnect failed!!! id<{}>!!! already connected!!!",
+                    "[hd={}]({}) tcp client reconnect failed!!! id<{}>!!! already connected!!!",
                     hd,
                     name,
-                    cli_id
+                    cli_id,
                 );
             } else {
                 let name = name.to_owned();
                 cli.connect(move |_cli, err_opt| {
                     if let Some(err) = err_opt {
                         log::error!(
-                            "[hd={}]({}) redis client reconnect failed!!! id<{}>!!! error: {}!!!",
+                            "[hd={}]({}) tcp client reconnect failed!!! id<{}>!!! error: {}!!!",
                             hd,
                             name,
                             cli_id,
@@ -260,10 +262,10 @@ pub fn redis_client_reconnect(hd: ConnId, name: &str, cli_id: Uuid, srv_net: &Se
                         );
                     } else {
                         log::info!(
-                            "[hd={}]({}) redis client reconnect success ... id<{}>.",
+                            "[hd={}]({}) tcp client reconnect success ... id<{}>.",
                             hd,
                             name,
-                            cli_id,
+                            cli_id
                         );
                     }
                 });

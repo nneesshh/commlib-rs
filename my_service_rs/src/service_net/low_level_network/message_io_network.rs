@@ -1,10 +1,9 @@
 use parking_lot::RwLock;
 use std::io;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use message_io::network::{Endpoint, ListenConfig, Multiplexor, NetEvent, ResourceId, Transport};
+use message_io::network::{Endpoint, Multiplexor, NetEvent, ResourceId, Transport};
 use message_io::node::{self, NodeHandler, NodeTask};
 
 use net_packet::NetPacketGuard;
