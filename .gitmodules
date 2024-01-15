@@ -10,9 +10,6 @@
 [submodule "parking_lot"]
 	path = parking_lot
 	url = https://github.com/nneesshh/parking_lot
-[submodule "curl-rust"]
-	path = curl-rust
-	url = https://github.com/nneesshh/curl-rust
 [submodule "clap"]
 	path = clap
 	url = https://github.com/nneesshh/clap.git
@@ -91,3 +88,6 @@
 [submodule "db_access-rs"]
 	path = db_access-rs
 	url = https://github.com/nneesshh/db_access-rs
+[submodule "ureq"]
+	path = ureq
+	url = https://github.com/nneesshh/ureq
