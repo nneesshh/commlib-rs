@@ -4,7 +4,7 @@
 //! EventDispatcher use "observer pattern"
 //! Observer is a behavioral design pattern that allows one objects to notify other objects about changes in their state.
 
-use crate::{ServiceRs, StopWatch};
+use crate::StopWatch;
 
 /// Trait to signal that this is an event type.
 pub trait Event {
@@ -55,25 +55,21 @@ where
 }
 
 /// Listener of event
-pub struct EventListener<T, E>
+pub struct EventListener<E>
 where
-    T: ServiceRs,
     E: Event,
 {
     handlers: Vec<EventHandler<E>>,
-    _phantom: std::marker::PhantomData<T>,
 }
 
 /// Impl EventListener
-impl<T, E> EventListener<T, E>
+impl<E> EventListener<E>
 where
-    T: ServiceRs,
     E: Event,
 {
     pub fn new() -> Self {
         Self {
             handlers: Vec::new(),
-            _phantom: std::marker::PhantomData,
         }
     }
 

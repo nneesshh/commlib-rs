@@ -7,7 +7,6 @@ use std::ops::{AddAssign, SubAssign};
 use std::time::SystemTime;
 
 use crate::hash_wheel_timer::{self, ClosureTimer, TimerReturn::Reschedule};
-use crate::ServiceRs;
 
 pub type WheelTimer = hash_wheel_timer::wheel_timer::WheelTimer<
     uuid::Uuid,
@@ -57,70 +56,58 @@ impl Clock {
     }
 
     /// 循环定时器，立即执行一次
-    pub fn set_timer<T, F>(srv: &T, interval: u64, mut f: F)
+    pub fn set_timer<F>(interval: u64, mut f: F)
     where
-        T: ServiceRs + 'static,
         F: FnMut() + Send + Sync + 'static,
     {
-        // post 到指定 srv 工作线程中执行
-        srv.run_in_service(Box::new(move || {
-            with_tls_mut!(G_CLOCK, clock, {
-                let wheel_timer = &mut clock.wheel_timer;
+        with_tls_mut!(G_CLOCK, clock, {
+            let wheel_timer = &mut clock.wheel_timer;
 
-                let id = uuid::Uuid::new_v4();
-                let delay = std::time::Duration::from_millis(0);
-                let period = std::time::Duration::from_millis(interval);
+            let id = uuid::Uuid::new_v4();
+            let delay = std::time::Duration::from_millis(0);
+            let period = std::time::Duration::from_millis(interval);
 
-                wheel_timer.schedule_action_periodic(id.clone(), delay, period, move |_timer_id| {
-                    f();
-                    Reschedule(())
-                });
+            wheel_timer.schedule_action_periodic(id.clone(), delay, period, move |_timer_id| {
+                f();
+                Reschedule(())
             });
-        }));
+        });
     }
 
     /// 循环定时器，延时一段时间之后开始执行
-    pub fn set_timer_delay<T, F>(srv: &T, delay: u64, interval: u64, mut f: F)
+    pub fn set_timer_delay<F>(delay: u64, interval: u64, mut f: F)
     where
-        T: ServiceRs + 'static,
         F: FnMut() + Send + Sync + 'static,
     {
-        // post 到指定 srv 工作线程中执行
-        srv.run_in_service(Box::new(move || {
-            with_tls_mut!(G_CLOCK, clock, {
-                let wheel_timer = &mut clock.wheel_timer;
+        with_tls_mut!(G_CLOCK, clock, {
+            let wheel_timer = &mut clock.wheel_timer;
 
-                let id = uuid::Uuid::new_v4();
-                let delay = std::time::Duration::from_millis(delay);
-                let period = std::time::Duration::from_millis(interval);
+            let id = uuid::Uuid::new_v4();
+            let delay = std::time::Duration::from_millis(delay);
+            let period = std::time::Duration::from_millis(interval);
 
-                wheel_timer.schedule_action_periodic(id, delay, period, move |_timer_id| {
-                    f();
-                    Reschedule(())
-                });
+            wheel_timer.schedule_action_periodic(id, delay, period, move |_timer_id| {
+                f();
+                Reschedule(())
             });
-        }));
+        });
     }
 
     /// One-shot 一次性超时
-    pub fn set_timeout<T, F>(srv: &T, delay: u64, f: F)
+    pub fn set_timeout<F>(delay: u64, f: F)
     where
-        T: ServiceRs + 'static,
         F: FnOnce() + Send + Sync + 'static,
     {
-        // post 到指定 srv 工作线程中执行
-        srv.run_in_service(Box::new(move || {
-            with_tls_mut!(G_CLOCK, clock, {
-                let wheel_timer = &mut clock.wheel_timer;
+        with_tls_mut!(G_CLOCK, clock, {
+            let wheel_timer = &mut clock.wheel_timer;
 
-                let id = uuid::Uuid::new_v4();
-                let delay = std::time::Duration::from_millis(delay);
+            let id = uuid::Uuid::new_v4();
+            let delay = std::time::Duration::from_millis(delay);
 
-                wheel_timer.schedule_action_once(id, delay, move |_timer_id| {
-                    f();
-                });
+            wheel_timer.schedule_action_once(id, delay, move |_timer_id| {
+                f();
             });
-        }));
+        });
     }
 
     /// 更新计时器 tick
