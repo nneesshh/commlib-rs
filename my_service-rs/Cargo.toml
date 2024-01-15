@@ -13,48 +13,31 @@ exclude = ["/.travis.yml", "/appveyor.yml"]
 edition = "2021"
 readme = "README.md"
 
-[features]
-default = ["uuid-extras", "thread-timer"]
-uuid-extras = ["uuid"]
-thread-timer = ["crossbeam-channel"]
-
-[target.'cfg(unix)'.dependencies]
-nix = { version = "0.26", default-features = false, features = ["fs", "signal"] }
-rustix = { version = "0.38", features = ["fs"] }
-
-[target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["minwindef", "windef", "consoleapi", "winuser", "errhandlingapi", "libloaderapi", "winbase", "winsock2", "ws2def", "ws2ipdef", "ws2tcpip"] }
-windows-sys = { version = "0.48", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO", "Win32_System_Threading", "Win32_Security", "Win32_System_Console"] }
-rustix = { version = "0.38", features = ["fs"] }
-
 [dependencies]
-libc = "0.2"
-lazy_static = "1"
-uuid = { version = "1", features = ["v4"] , optional = true}
-num_cpus = "1"
-crossbeam-channel = {version = "0.5", optional = true}
-thiserror = "1"
-paste = "1"
-log = "0.4"
 chrono = "0.4"
+crossbeam-channel = "0.5"
+lazy_static = "1"
+libc = "0.2"
+log = "0.4"
+paste = "1"
 ring = "0.17"
+uuid = { version = "1", features = ["v4"]}
 
 atomic = { path = "../atomic-rs" }
-base64 = { path = "../rust-base64" }
 bytemuck = { path = "../bytemuck", features = ["derive"] }
 curl = { path = "../curl-rust" }
 hashbrown = { path = "../hashbrown" }
-hex = { path = "../rust-hex" }
 http = { path = "../http" }
 httparse = { path = "../httparse" }
 message-io = { path = "../message-io" }
 my_logger = { path = "../my_logger-rs" }
 parking_lot = { path = "../parking_lot" }
 pinky-swear = { path = "../pinky-swear" }
-rand = { path = "../rand", features = ["small_rng"] }
-roxmltree = { path = "../roxmltree" }
-serde_json = { path = "../json" }
 thread_local = { path = "../thread_local-rs" }
+
 commlib = { path = "../commlib" }
 commlib-sys = { path = "../commlib-sys" }
 net_packet = { path = "../net_packet-rs" }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["minwindef", "windef", "consoleapi", "winuser", "errhandlingapi", "libloaderapi", "winbase", "winsock2", "ws2def", "ws2ipdef", "ws2tcpip"] }
