@@ -4,9 +4,6 @@
 [submodule "hashbrown"]
 	path = hashbrown
 	url = https://github.com/nneesshh/hashbrown.git
-[submodule "json"]
-	path = json
-	url = https://github.com/nneesshh/json.git
 [submodule "parking_lot"]
 	path = parking_lot
 	url = https://github.com/nneesshh/parking_lot
